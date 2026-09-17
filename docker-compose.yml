@@ -1,0 +1,242 @@
+# LiveMetric - Orquestacion (microservicios locales + PostgreSQL en Supabase)
+#
+# El servicio "postgres" YA NO corre una base de datos local: es un proxy TCP
+# transparente (socat) que reenvia byte a byte cada conexion en el puerto
+# 5432 hacia el proyecto de Supabase (SUPABASE_DB_HOST/PORT del .env). No
+# termina TLS ni entiende el protocolo Postgres, asi que el handshake TLS de
+# cada microservicio sigue siendo extremo a extremo contra Supabase. Se
+# mantiene como servicio propio (en vez de apuntar cada microservicio
+# directo a Supabase) para que "DB_HOST: postgres" no cambie en el resto
+# del stack.
+#
+# Seguridad de red:
+#   - "app-net" conecta a los microservicios entre si, con el host, y con
+#     Internet (necesario para que "postgres" alcance a Supabase),
+#     unicamente en los puertos que exponen explicitamente.
+#
+# Secretos:
+#   - Ninguna credencial esta hardcodeada en este archivo.
+#   - Todas provienen de variables de entorno cargadas desde un archivo .env
+#     LOCAL (ver .env.example), que NUNCA debe commitearse (ver .gitignore).
+#
+# Servicios:
+#   - postgres: proxy TCP local -> PostgreSQL gestionado en Supabase.
+#   - frontend: SPA en React (nginx), único servicio pensado para el navegador.
+#   - auth-service, voting-service, analytics-service: microservicios A, B, C.
+#   - scrutiny-service: microservicio D, certifica resultados con hash SHA-256
+#     encadenado (append-only en la base de datos).
+#   - scheduler-worker: proceso asincrono (node-cron) que abre/cierra
+#     elecciones segun su ventana de tiempo y dispara la certificacion.
+
+networks:
+  app-net:
+    driver: bridge
+
+services:
+
+  postgres:
+    image: alpine/socat:latest
+    container_name: livemetric-postgres
+    restart: unless-stopped
+    command: ["TCP-LISTEN:5432,fork,reuseaddr", "TCP:${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:-5432}"]
+    networks:
+      - app-net
+    # SIN "ports": no se expone al host, solo es alcanzable por los
+    # microservicios dentro de "app-net" (igual que el Postgres local antes).
+    security_opt:
+      - no-new-privileges:true
+
+  auth-service:
+    build:
+      context: ./services/auth
+    container_name: livemetric-auth
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      VOTER_JWT_EXPIRES_IN: ${VOTER_JWT_EXPIRES_IN:-10m}
+      VOTER_ID_SALT: ${VOTER_ID_SALT}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${SUPABASE_DB_NAME:-postgres}
+      DB_USER: ${SUPABASE_DB_USER:-postgres}
+      DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
+      DB_SSL: ${DB_SSL:-true}
+    depends_on:
+      - postgres
+    networks:
+      - app-net
+    ports:
+      # Solo accesible desde localhost del host anfitrion, nunca 0.0.0.0
+      - "127.0.0.1:3001:3001"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  voting-service:
+    build:
+      context: ./services/voting
+    container_name: livemetric-voting
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      JWT_SECRET: ${JWT_SECRET}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${SUPABASE_DB_NAME:-postgres}
+      DB_USER: ${SUPABASE_DB_USER:-postgres}
+      DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
+      DB_SSL: ${DB_SSL:-true}
+    depends_on:
+      - postgres
+    networks:
+      - app-net
+    ports:
+      - "127.0.0.1:3002:3002"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  analytics-service:
+    build:
+      context: ./services/analytics
+    container_name: livemetric-analytics
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3003
+      JWT_SECRET: ${JWT_SECRET}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${SUPABASE_DB_NAME:-postgres}
+      DB_USER: ${SUPABASE_DB_USER:-postgres}
+      DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
+      DB_SSL: ${DB_SSL:-true}
+    depends_on:
+      postgres:
+        condition: service_started
+      auth-service:
+        condition: service_started
+    networks:
+      - app-net
+    ports:
+      - "127.0.0.1:3003:3003"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  # Microservicio D: certificacion independiente de resultados (cadena de
+  # hashes SHA-256). Expone /certifications y /verify a administradores via
+  # JWT, y /internal/certify SOLO alcanzable dentro de "app-net" mediante un
+  # token de servicio compartido con scheduler-worker (nunca un JWT de usuario).
+  scrutiny-service:
+    build:
+      context: ./services/scrutiny
+    container_name: livemetric-scrutiny
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3004
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${SUPABASE_DB_NAME:-postgres}
+      DB_USER: ${SUPABASE_DB_USER:-postgres}
+      DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
+      DB_SSL: ${DB_SSL:-true}
+    depends_on:
+      - postgres
+    networks:
+      - app-net
+    ports:
+      # Solo para que un admin autenticado consulte /certifications y /verify
+      # desde el host. El endpoint /internal/certify igual exige el token de
+      # servicio aunque esta ruta esté publicada, como defensa en profundidad.
+      - "127.0.0.1:3004:3004"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  # Worker asincrono: abre/cierra elecciones segun su ventana de tiempo y
+  # dispara la certificacion automatica en scrutiny-service. No se publica
+  # ningun puerto al host: solo vive dentro de "app-net".
+  scheduler-worker:
+    build:
+      context: ./services/scheduler
+    container_name: livemetric-scheduler
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3005
+      SCHEDULER_CRON: ${SCHEDULER_CRON:-* * * * *}
+      SCRUTINY_INTERNAL_URL: http://scrutiny-service:3004
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${SUPABASE_DB_NAME:-postgres}
+      DB_USER: ${SUPABASE_DB_USER:-postgres}
+      DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
+      DB_SSL: ${DB_SSL:-true}
+    depends_on:
+      postgres:
+        condition: service_started
+      scrutiny-service:
+        condition: service_started
+    networks:
+      - app-net
+    # Sin "ports": este worker no necesita ser alcanzable desde el host.
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  # SPA en React, servida como archivos estáticos por nginx. Corre en el
+  # navegador del usuario, así que habla con los microservicios directo en
+  # 127.0.0.1 (no atraviesa "app-net"); por eso solo necesita "app-net" para
+  # que el propio contenedor sea alcanzable desde el host.
+  frontend:
+    build:
+      context: ./services/frontend
+    container_name: livemetric-frontend
+    restart: unless-stopped
+    environment:
+      AUTH_URL: http://localhost:3001
+      VOTING_URL: http://localhost:3002
+      ANALYTICS_URL: http://localhost:3003
+      SCRUTINY_URL: http://localhost:3004
+    depends_on:
+      - auth-service
+      - voting-service
+      - analytics-service
+      - scrutiny-service
+    networks:
+      - app-net
+    ports:
+      - "127.0.0.1:3000:80"
+    # "no-new-privileges" sigue aplicando (bloquea escalación vía setuid);
+    # el proceso maestro de nginx corre como root por diseño (ver Dockerfile),
+    # pero los workers que atienden tráfico externo son no-root por defecto.
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run

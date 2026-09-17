@@ -1,0 +1,21 @@
+# LiveMetric - Propietarios de código por área
+# GitHub usará esto para solicitar revisión automáticamente en cada PR hacia main.
+# Reemplaza los usuarios de ejemplo por los integrantes reales del equipo.
+
+# Por defecto, todo el repo requiere revisión del equipo core
+*                           @equipo-livemetric
+
+# Infraestructura y pipeline: revisión obligatoria de quien lleve DevSecOps
+/docker-compose.yml         @equipo-livemetric/devsecops
+/infra/                     @equipo-livemetric/devsecops
+/.github/workflows/         @equipo-livemetric/devsecops
+/.gitleaks.toml              @equipo-livemetric/devsecops
+
+# Autenticación y JWT: área sensible, revisión obligatoria de seguridad
+/services/auth/              @equipo-livemetric/seguridad
+/services/analytics/src/middleware/ @equipo-livemetric/seguridad
+/services/voting/src/middleware/    @equipo-livemetric/seguridad
+/services/scrutiny/src/middleware/  @equipo-livemetric/seguridad
+
+# Frontend
+/services/frontend/          @equipo-livemetric/frontend

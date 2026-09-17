@@ -1,0 +1,23 @@
+{
+  "name": "livemetric-voting-service",
+  "version": "1.0.0",
+  "description": "Microservicio B - Recepcion y validacion segura de votos",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "echo \"no unit tests defined\" && exit 0"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "express-validator": "^7.2.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.12.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

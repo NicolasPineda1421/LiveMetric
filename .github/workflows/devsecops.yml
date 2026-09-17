@@ -1,0 +1,184 @@
+name: LiveMetric DevSecOps Pipeline
+
+on:
+  # GitHub Flow: "main" es la unica rama larga y siempre debe ser desplegable.
+  # El pipeline corre en cada Pull Request hacia main (donde realmente se
+  # bloquean los merges) y tambien en cada push a main (post-merge, como
+  # doble verificacion y para dejar historial de escaneos en la rama principal).
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  security-events: write   # necesario para subir SARIF a la pestaña "Security"
+
+jobs:
+
+  # -------------------------------------------------------------------------
+  # 1) GITLEAKS - Bloquea el pipeline si hay secretos/tokens hardcodeados.
+  #    Se ejecuta PRIMERO y con "needs" en el resto de jobs: si aqui falla,
+  #    nada mas se ejecuta (no tiene sentido escanear codigo comprometido).
+  # -------------------------------------------------------------------------
+  secrets-scan:
+    name: Gitleaks - Escaneo de secretos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout con historial completo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ejecutar Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_CONFIG: .gitleaks.toml
+          GITLEAKS_ENABLE_COMMENTS: "false"
+        # gitleaks-action falla el job (exit != 0) si detecta secretos,
+        # lo que bloquea automaticamente el resto del pipeline.
+
+  # -------------------------------------------------------------------------
+  # 2) NPM AUDIT - Vulnerabilidades de dependencias en los 3 microservicios.
+  # -------------------------------------------------------------------------
+  dependency-audit:
+    name: npm audit - ${{ matrix.service }}
+    needs: secrets-scan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [auth, voting, analytics, scrutiny, scheduler, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: services/${{ matrix.service }}/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: services/${{ matrix.service }}
+        run: npm install --package-lock-only
+
+      - name: npm audit (bloquea en severidad alta/critica)
+        working-directory: services/${{ matrix.service }}
+        run: npm audit --audit-level=high
+
+  # -------------------------------------------------------------------------
+  # 3) SAST - Semgrep enfocado en inyeccion SQL y middleware de autenticacion.
+  # -------------------------------------------------------------------------
+  sast-scan:
+    name: SAST - Semgrep (SQLi / Auth)
+    needs: secrets-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ejecutar Semgrep
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: >-
+            p/owasp-top-ten
+            p/expressjs
+            p/nodejsscan
+            p/jwt
+          generateSarif: "1"
+        env:
+          SEMGREP_RULES: >-
+            p/owasp-top-ten
+            p/expressjs
+            p/nodejsscan
+            p/jwt
+
+      - name: Verificar SARIF generado
+        run: test -f semgrep.sarif && echo "SARIF generado correctamente"
+
+      - name: Subir resultados SARIF a GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+
+  # -------------------------------------------------------------------------
+  # 4) TRIVY - Escaneo de vulnerabilidades en las imagenes Docker construidas.
+  # -------------------------------------------------------------------------
+  container-scan:
+    name: Trivy - ${{ matrix.service }}
+    needs: [dependency-audit, sast-scan]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [auth, voting, analytics, scrutiny, scheduler, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Construir imagen local
+        run: |
+          docker build -t livemetric/${{ matrix.service }}-service:ci \
+            ./services/${{ matrix.service }}
+
+      - name: Escanear imagen con Trivy
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: 'livemetric/${{ matrix.service }}-service:ci'
+          format: 'sarif'
+          output: 'trivy-${{ matrix.service }}.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          ignore-unfixed: true
+
+      - name: Subir resultados SARIF de Trivy
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-${{ matrix.service }}.sarif'
+          category: 'trivy-${{ matrix.service }}'
+
+  # -------------------------------------------------------------------------
+  # 5) CHECKOV - Validacion de seguridad del codigo Terraform (IaC).
+  # -------------------------------------------------------------------------
+  iac-scan:
+    name: Checkov - Terraform
+    needs: secrets-scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ejecutar Checkov sobre infra/terraform
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: infra/terraform
+          framework: terraform
+          output_format: sarif
+          output_file_path: checkov-report.sarif
+          soft_fail: false   # falla el pipeline ante hallazgos de severidad relevante
+
+      - name: Subir resultados SARIF de Checkov
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: checkov-report.sarif
+          category: checkov-terraform
+
+  # -------------------------------------------------------------------------
+  # Gate final: resume el estado de todo el pipeline de seguridad.
+  # Util como "required check" en la proteccion de la rama main.
+  # -------------------------------------------------------------------------
+  security-gate:
+    name: Security Gate (resumen)
+    needs: [secrets-scan, dependency-audit, sast-scan, container-scan, iac-scan]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Verificar que todos los controles pasaron
+        run: |
+          if [ "${{ contains(needs.*.result, 'failure') }}" = "true" ]; then
+            echo "Uno o mas controles de seguridad fallaron. Bloqueando merge."
+            exit 1
+          fi
+          echo "Todos los controles de seguridad pasaron correctamente."

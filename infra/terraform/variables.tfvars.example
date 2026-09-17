@@ -1,0 +1,13 @@
+# Copia a "terraform.tfvars" (ignorado por git) y completa con valores locales.
+# NUNCA commitees el archivo terraform.tfvars real.
+
+postgres_db       = "livemetric"
+postgres_user     = "livemetric_admin"
+postgres_password = "CAMBIA_ESTE_VALOR_LOCALMENTE"
+jwt_secret        = "CAMBIA_ESTE_VALOR_LOCALMENTE"
+jwt_expires_in    = "1h"
+voter_jwt_expires_in = "10m"
+voter_id_salt     = "CAMBIA_ESTE_VALOR_LOCALMENTE"
+internal_service_token = "CAMBIA_ESTE_VALOR_LOCALMENTE"
+scheduler_cron    = "* * * * *"
+frontend_origin   = "http://localhost:3000"

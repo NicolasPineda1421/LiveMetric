@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LiveMetric — Elecciones y Votación en Tiempo Real</title>
+    <!-- config.js se genera en el arranque del contenedor (entrypoint.sh) a
+         partir de variables de entorno, para no tener que reconstruir la
+         imagen si cambian los puertos de los microservicios. -->
+    <script src="/config.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

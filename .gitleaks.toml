@@ -1,0 +1,19 @@
+title = "LiveMetric Gitleaks Config"
+
+[extend]
+useDefault = true
+
+# Reglas propias por si se filtra el patron especifico de JWT_SECRET
+[[rules]]
+id = "livemetric-jwt-secret-assignment"
+description = "Posible JWT_SECRET hardcodeado en codigo o configuracion"
+regex = '''(?i)jwt_secret\s*[:=]\s*['"][a-zA-Z0-9_\-\/+=]{16,}['"]'''
+tags = ["secret", "jwt"]
+
+[allowlist]
+description = "Ignorar plantillas de ejemplo sin secretos reales"
+paths = [
+  '''\.env\.example$''',
+  '''variables\.tfvars\.example$''',
+  '''README\.md$'''
+]
