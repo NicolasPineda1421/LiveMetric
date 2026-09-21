@@ -24,6 +24,11 @@ RUN npm run build
 # sin privilegios en los workers.
 FROM nginx:1.27-alpine
 
+# Parchea paquetes de SO (zlib, libxml2, musl, etc.) del snapshot de Alpine
+# de la imagen base oficial, que suele quedar unos dias detras de los
+# ultimos parches de seguridad de Alpine entre una republicacion y otra.
+RUN apk upgrade --no-cache
+
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker-entrypoint.sh /docker-entrypoint.sh
