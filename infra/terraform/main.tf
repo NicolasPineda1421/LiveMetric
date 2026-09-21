@@ -66,6 +66,15 @@ variable "voter_id_salt" {
   # Salt privado, conocido SOLO por auth-service, para SHA-256(cedula+salt).
 }
 
+variable "voters_encryption_key" {
+  type      = string
+  sensitive = true
+  # Clave AES-256 (32 bytes) en base64 para cifrar cedula/puesto/mesa de
+  # "voters" en reposo. La usan auth-service y analytics-service
+  # (services/*/src/voterCrypto.js), que fallan al arrancar si falta o no
+  # tiene el largo correcto.
+}
+
 variable "internal_service_token" {
   type      = string
   sensitive = true
@@ -160,6 +169,7 @@ resource "docker_container" "auth" {
     "JWT_EXPIRES_IN=${var.jwt_expires_in}",
     "VOTER_JWT_EXPIRES_IN=${var.voter_jwt_expires_in}",
     "VOTER_ID_SALT=${var.voter_id_salt}",
+    "VOTERS_ENCRYPTION_KEY=${var.voters_encryption_key}",
     "FRONTEND_ORIGIN=${var.frontend_origin}",
     "DB_HOST=livemetric-postgres",
     "DB_PORT=5432",
@@ -251,6 +261,7 @@ resource "docker_container" "analytics" {
     "NODE_ENV=production",
     "PORT=3003",
     "JWT_SECRET=${var.jwt_secret}",
+    "VOTERS_ENCRYPTION_KEY=${var.voters_encryption_key}",
     "FRONTEND_ORIGIN=${var.frontend_origin}",
     "DB_HOST=livemetric-postgres",
     "DB_PORT=5432",

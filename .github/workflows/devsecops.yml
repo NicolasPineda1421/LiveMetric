@@ -287,6 +287,10 @@ jobs:
       TF_VAR_jwt_secret: 'ci-throwaway-jwt-secret-not-real-0123456789' # gitleaks:allow
       TF_VAR_voter_id_salt: 'ci-throwaway-voter-salt-0123456789'
       TF_VAR_internal_service_token: 'ci-throwaway-internal-token-0123456789'
+      # Clave AES-256 (32 bytes) en base64 desechable, generada solo para
+      # este Postgres local efimero - auth-service y analytics-service
+      # fallan al arrancar sin una clave con este formato exacto.
+      TF_VAR_voters_encryption_key: 'a2Y6b/DIA3UvA2Ojx4plUy8J3uiOUZzku7tMnf81mnc=' # gitleaks:allow
     steps:
       - uses: actions/checkout@v4
 
