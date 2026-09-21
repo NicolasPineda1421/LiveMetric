@@ -1,0 +1,14 @@
+# LiveMetric - Fingerprints de hallazgos de Gitleaks ya revisados y
+# confirmados como falsos positivos (nunca secretos reales), documentados
+# aquí para no tener que reescribir el historial de git ya publicado. Cada
+# línea es el fingerprint exacto que reportó "gitleaks detect --verbose".
+#
+# 823f53d (commit inicial de este pipeline):
+#   - .github/workflows/devsecops.yml linea 279: valor de prueba desechable
+#     para el Postgres LOCAL efimero de Terraform en CI ("ci-throwaway-jwt-
+#     secret-not-real..."), nunca una credencial real.
+#   - services/auth/src/__tests__/app.test.js linea 54: password de prueba
+#     deliberadamente incorrecta usada para probar el caso de login fallido,
+#     no un secreto.
+823f53dbf3098508cd1ab44b3c41f4c91ab0b533:.github/workflows/devsecops.yml:livemetric-jwt-secret-assignment:279
+823f53dbf3098508cd1ab44b3c41f4c91ab0b533:services/auth/src/__tests__/app.test.js:generic-api-key:54

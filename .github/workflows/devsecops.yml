@@ -31,13 +31,19 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Ejecutar Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITLEAKS_CONFIG: .gitleaks.toml
-          GITLEAKS_ENABLE_COMMENTS: "false"
-        # gitleaks-action falla el job (exit != 0) si detecta secretos,
-        # lo que bloquea automaticamente el resto del pipeline.
+      # Se invoca el CLI de Gitleaks directamente (imagen oficial del propio
+      # proyecto open source), en vez del Marketplace Action
+      # "gitleaks/gitleaks-action@v2": ese wrapper cambio su modelo y ahora
+      # exige una GITLEAKS_LICENSE de pago para poder correr, lo cual
+      # rompe la restriccion de "solo herramientas FOSS" del pipeline. La
+      # herramienta Gitleaks en si (el binario/imagen que se usa aqui) sigue
+      # siendo 100% gratuita; el costo era unicamente del wrapper de Action.
+      - name: Ejecutar Gitleaks (CLI, sin licencia)
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/repo" zricethezav/gitleaks:latest \
+            detect --source /repo --config /repo/.gitleaks.toml --redact --verbose
+        # "gitleaks detect" termina con exit code != 0 si encuentra secretos,
+        # lo que falla este step y bloquea automaticamente el resto del pipeline.
 
   # -------------------------------------------------------------------------
   # 2) NPM AUDIT - Vulnerabilidades de dependencias en los 3 microservicios.
@@ -276,7 +282,7 @@ jobs:
       # Valores desechables SOLO para este Postgres local efimero, que se
       # destruye al final del job - nunca son las credenciales reales.
       TF_VAR_postgres_password: 'ci-throwaway-password-123'
-      TF_VAR_jwt_secret: 'ci-throwaway-jwt-secret-not-real-0123456789'
+      TF_VAR_jwt_secret: 'ci-throwaway-jwt-secret-not-real-0123456789' # gitleaks:allow
       TF_VAR_voter_id_salt: 'ci-throwaway-voter-salt-0123456789'
       TF_VAR_internal_service_token: 'ci-throwaway-internal-token-0123456789'
     steps:

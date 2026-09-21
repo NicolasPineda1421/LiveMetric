@@ -51,7 +51,7 @@ describe('POST /login/admin', () => {
   it('rechaza credenciales inválidas con un mensaje genérico', async () => {
     const res = await request(app)
       .post('/login/admin')
-      .send({ username: 'admin', password: 'clave-incorrecta-123' });
+      .send({ username: 'admin', password: 'clave-incorrecta-123' }); // gitleaks:allow (password de prueba deliberadamente incorrecta, no un secreto)
     expect(res.status).toBe(401);
     expect(res.body.error).toBe('Credenciales inválidas');
   });
