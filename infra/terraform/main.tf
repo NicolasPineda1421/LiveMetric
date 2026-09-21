@@ -175,7 +175,15 @@ resource "docker_container" "auth" {
   }
 
   networks_advanced { name = docker_network.db_net.name }
-  networks_advanced { name = docker_network.app_net.name }
+  # El alias "auth-service" es el mismo nombre de servicio que usa
+  # docker-compose.yml (que Compose alia automaticamente en su red); el
+  # nginx.conf del frontend tiene ese hostname fijo en sus proxy_pass, y
+  # Terraform no crea ese alias por si solo (solo alia por el "name" del
+  # contenedor), asi que hay que declararlo explicitamente aqui.
+  networks_advanced {
+    name    = docker_network.app_net.name
+    aliases = ["auth-service"]
+  }
 
   depends_on = [docker_container.postgres]
 }
@@ -215,7 +223,10 @@ resource "docker_container" "voting" {
   }
 
   networks_advanced { name = docker_network.db_net.name }
-  networks_advanced { name = docker_network.app_net.name }
+  networks_advanced {
+    name    = docker_network.app_net.name
+    aliases = ["voting-service"]
+  }
 
   depends_on = [docker_container.postgres]
 }
@@ -255,7 +266,10 @@ resource "docker_container" "analytics" {
   }
 
   networks_advanced { name = docker_network.db_net.name }
-  networks_advanced { name = docker_network.app_net.name }
+  networks_advanced {
+    name    = docker_network.app_net.name
+    aliases = ["analytics-service"]
+  }
 
   depends_on = [docker_container.postgres, docker_container.auth]
 }
@@ -296,7 +310,10 @@ resource "docker_container" "scrutiny" {
   }
 
   networks_advanced { name = docker_network.db_net.name }
-  networks_advanced { name = docker_network.app_net.name }
+  networks_advanced {
+    name    = docker_network.app_net.name
+    aliases = ["scrutiny-service"]
+  }
 
   depends_on = [docker_container.postgres]
 }
