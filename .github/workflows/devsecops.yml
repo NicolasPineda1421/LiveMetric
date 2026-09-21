@@ -104,6 +104,53 @@ jobs:
           sarif_file: semgrep.sarif
 
   # -------------------------------------------------------------------------
+  # 3b) SCA - Trivy en modo "filesystem" sobre las dependencias declaradas
+  #     (package.json/package-lock.json) de cada microservicio. Distinto del
+  #     escaneo de imagenes (container-scan, mas abajo): esto mira solo las
+  #     dependencias de codigo, antes de construir ninguna imagen.
+  # -------------------------------------------------------------------------
+  sca-scan:
+    name: SCA - Trivy fs - ${{ matrix.service }}
+    needs: secrets-scan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [auth, voting, analytics, scrutiny, scheduler, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: services/${{ matrix.service }}/package-lock.json
+
+      - name: Generar package-lock.json (para que Trivy resuelva versiones exactas)
+        working-directory: services/${{ matrix.service }}
+        run: npm install --package-lock-only
+
+      - name: Escanear dependencias con Trivy (fs)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: 'fs'
+          scan-ref: 'services/${{ matrix.service }}'
+          format: 'sarif'
+          output: 'trivy-sca-${{ matrix.service }}.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          ignore-unfixed: true
+          trivyignores: '.trivyignore'
+
+      - name: Subir resultados SARIF de Trivy SCA
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-sca-${{ matrix.service }}.sarif'
+          category: 'trivy-sca-${{ matrix.service }}'
+
+  # -------------------------------------------------------------------------
   # 4) TRIVY - Escaneo de vulnerabilidades en las imagenes Docker construidas.
   # -------------------------------------------------------------------------
   container-scan:
@@ -131,6 +178,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
           exit-code: '1'
           ignore-unfixed: true
+          trivyignores: '.trivyignore'
 
       - name: Subir resultados SARIF de Trivy
         uses: github/codeql-action/upload-sarif@v3
@@ -166,19 +214,203 @@ jobs:
           category: checkov-terraform
 
   # -------------------------------------------------------------------------
+  # 6) PRUEBAS UNITARIAS/INTEGRACION - Jest + Supertest, contra la app de
+  #    Express en memoria (sin desplegar nada) pero usando la Supabase REAL
+  #    (decision explicita del proyecto: no hay base de staging separada).
+  #    Todo dato que las pruebas crean usa el prefijo CITEST-<servicio> y se
+  #    borra en un afterAll (ver services/*/src/__tests__/*.test.js).
+  # -------------------------------------------------------------------------
+  unit-tests:
+    name: Pruebas unitarias - ${{ matrix.service }}
+    needs: secrets-scan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [auth, voting, analytics, scrutiny, scheduler]
+    env:
+      SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+      SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+      SUPABASE_DB_NAME: ${{ secrets.SUPABASE_DB_NAME }}
+      SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      DB_SSL: 'true'
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      JWT_EXPIRES_IN: '1h'
+      VOTER_JWT_EXPIRES_IN: '10m'
+      VOTER_ID_SALT: ${{ secrets.VOTER_ID_SALT }}
+      VOTERS_ENCRYPTION_KEY: ${{ secrets.VOTERS_ENCRYPTION_KEY }}
+      INTERNAL_SERVICE_TOKEN: ${{ secrets.INTERNAL_SERVICE_TOKEN }}
+      SCRUTINY_INTERNAL_URL: 'http://localhost:3004'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: services/${{ matrix.service }}/package-lock.json
+
+      - name: Instalar dependencias (incluye Jest/Supertest)
+        working-directory: services/${{ matrix.service }}
+        run: npm install
+
+      - name: Correr pruebas
+        working-directory: services/${{ matrix.service }}
+        run: npm test
+
+  # -------------------------------------------------------------------------
+  # 7) IaC DEPLOY - Despliegue automatizado con Terraform (Fase 5). Usa el
+  #    Postgres LOCAL efimero que el propio infra/terraform/main.tf provee
+  #    (documentado como alternativa Local-First a docker compose) - nunca
+  #    toca la Supabase real. Es la demostracion de "despliegue automatizado
+  #    con IaC"; el staging que de verdad escanea DAST (mas abajo) usa
+  #    docker compose con la Supabase real, por decision explicita del proyecto.
+  # -------------------------------------------------------------------------
+  iac-deploy:
+    name: Despliegue automatizado - Terraform
+    needs: [iac-scan, container-scan]
+    runs-on: ubuntu-latest
+    env:
+      # Valores desechables SOLO para este Postgres local efimero, que se
+      # destruye al final del job - nunca son las credenciales reales.
+      TF_VAR_postgres_password: 'ci-throwaway-password-123'
+      TF_VAR_jwt_secret: 'ci-throwaway-jwt-secret-not-real-0123456789'
+      TF_VAR_voter_id_salt: 'ci-throwaway-voter-salt-0123456789'
+      TF_VAR_internal_service_token: 'ci-throwaway-internal-token-0123456789'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.0'
+
+      - name: Terraform init
+        working-directory: infra/terraform
+        run: terraform init
+
+      - name: Terraform apply
+        working-directory: infra/terraform
+        run: terraform apply -auto-approve
+
+      - name: Esperar a que el stack responda
+        run: timeout 90 bash -c 'until curl -sf http://127.0.0.1:3000 >/dev/null; do sleep 3; done'
+
+      - name: Smoke test de los 4 microservicios
+        run: |
+          curl -sf http://127.0.0.1:3001/health
+          curl -sf http://127.0.0.1:3002/health
+          curl -sf http://127.0.0.1:3003/health
+          curl -sf http://127.0.0.1:3004/health
+          echo "Los 4 microservicios responden correctamente tras el despliegue con Terraform."
+
+      - name: Terraform destroy (limpieza, siempre corre)
+        if: always()
+        working-directory: infra/terraform
+        run: terraform destroy -auto-approve
+
+  # -------------------------------------------------------------------------
+  # 8) DAST - Levanta el stack completo (docker compose, Supabase real) y
+  #    corre OWASP ZAP Baseline Scan contra el frontend (que ya pasa por el
+  #    proxy reverso de nginx hacia los 4 microservicios). Va en un solo job
+  #    porque los contenedores de un job no sobreviven para el siguiente.
+  #    "continue-on-error" en el paso de ZAP: por ahora es un gate de
+  #    REPORTE, no bloqueante (evita que hallazgos INFO/LOW de una primera
+  #    pasada tumben todo el pipeline); revisar el artifact subido.
+  # -------------------------------------------------------------------------
+  staging-deploy-and-dast:
+    name: Despliegue de staging + DAST (OWASP ZAP)
+    needs: [container-scan, unit-tests, iac-scan]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Crear .env con los secretos reales (solo vive en el runner, nunca se imprime ni se commitea)
+        run: |
+          cat > .env <<EOF
+          SUPABASE_DB_HOST=${{ secrets.SUPABASE_DB_HOST }}
+          SUPABASE_DB_PORT=${{ secrets.SUPABASE_DB_PORT }}
+          SUPABASE_DB_NAME=${{ secrets.SUPABASE_DB_NAME }}
+          SUPABASE_DB_USER=${{ secrets.SUPABASE_DB_USER }}
+          SUPABASE_DB_PASSWORD=${{ secrets.SUPABASE_DB_PASSWORD }}
+          DB_SSL=true
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          JWT_EXPIRES_IN=1h
+          VOTER_JWT_EXPIRES_IN=10m
+          VOTER_ID_SALT=${{ secrets.VOTER_ID_SALT }}
+          VOTERS_ENCRYPTION_KEY=${{ secrets.VOTERS_ENCRYPTION_KEY }}
+          INTERNAL_SERVICE_TOKEN=${{ secrets.INTERNAL_SERVICE_TOKEN }}
+          SCHEDULER_CRON=*/5 * * * *
+          FRONTEND_ORIGIN=http://localhost:3000
+          EOF
+
+      - name: Levantar el stack completo
+        run: docker compose up -d --build
+
+      - name: Esperar a que el frontend responda
+        run: timeout 120 bash -c 'until curl -sf http://localhost:3000 >/dev/null; do sleep 3; done'
+
+      - name: OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.12.0
+        continue-on-error: true
+        with:
+          target: 'http://localhost:3000'
+          cmd_options: '-a'
+
+      - name: Subir reporte de ZAP como artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-baseline-report
+          path: report_html.html
+          if-no-files-found: warn
+
+      - name: Apagar el stack (limpieza, siempre corre)
+        if: always()
+        run: docker compose down -v
+
+  # -------------------------------------------------------------------------
   # Gate final: resume el estado de todo el pipeline de seguridad.
   # Util como "required check" en la proteccion de la rama main.
   # -------------------------------------------------------------------------
   security-gate:
     name: Security Gate (resumen)
-    needs: [secrets-scan, dependency-audit, sast-scan, container-scan, iac-scan]
+    needs: [secrets-scan, dependency-audit, sast-scan, sca-scan, container-scan, iac-scan, unit-tests, iac-deploy, staging-deploy-and-dast]
     runs-on: ubuntu-latest
     if: always()
     steps:
+      # Resumen legible del pipeline, en el mismo espiritu que un dashboard
+      # de DevSecOps: pero con el resultado REAL de needs.<job>.result de
+      # ESTA corrida y las herramientas que de verdad usa este pipeline
+      # (Gitleaks/Semgrep/Trivy/Checkov/Jest/Terraform/OWASP ZAP) - nunca un
+      # numero inventado ni una herramienta que no corrimos.
+      - name: Resumen del Runner DevSecOps
+        if: always()
+        run: |
+          check() {
+            if [ "$1" = "success" ]; then echo "✅ $2"; else echo "❌ $2 (resultado real: $1)"; fi
+          }
+
+          echo "🚀 Commit ${GITHUB_SHA:0:7} en rama ${GITHUB_REF_NAME}. Resumen del Runner DevSecOps:"
+          echo ""
+          check "${{ needs.secrets-scan.result }}" "🔑 Secret Scanning (Gitleaks) — sin secretos expuestos"
+          check "${{ needs.sast-scan.result }}" "🔍 SAST (Semgrep: OWASP Top 10 / Express / JWT)"
+          check "${{ needs.dependency-audit.result }}" "📦 SCA (npm audit) — sin CVEs de severidad alta o mayor"
+          check "${{ needs.sca-scan.result }}" "📦 SCA (Trivy fs, sobre package.json) — sin CVEs de severidad alta o mayor"
+          check "${{ needs.container-scan.result }}" "🐳 Container Scan (Trivy, imagenes reales) — sin CVEs critical/high sin excepcion"
+          check "${{ needs.iac-scan.result }}" "☁️ IaC Guard (Checkov sobre Terraform)"
+          check "${{ needs.unit-tests.result }}" "🧪 Pruebas unitarias (Jest + Supertest, 5 microservicios)"
+          check "${{ needs.iac-deploy.result }}" "🏗️ Despliegue automatizado (Terraform apply + smoke test + destroy)"
+          check "${{ needs.staging-deploy-and-dast.result }}" "🕷️ DAST (OWASP ZAP Baseline Scan)"
+          echo ""
+
       - name: Verificar que todos los controles pasaron
         run: |
           if [ "${{ contains(needs.*.result, 'failure') }}" = "true" ]; then
-            echo "Uno o mas controles de seguridad fallaron. Bloqueando merge."
+            echo "❌ QUALITY GATE NO SUPERADO. Uno o mas controles de seguridad fallaron. Bloqueando merge."
             exit 1
           fi
+          echo "✅ QUALITY GATE SUPERADO. Todos los controles de seguridad pasaron correctamente."
           echo "Todos los controles de seguridad pasaron correctamente."

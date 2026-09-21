@@ -1,0 +1,18 @@
+# LiveMetric - excepciones documentadas y justificadas a los escaneos de
+# Trivy (container-scan y sca-scan en .github/workflows/devsecops.yml).
+#
+# Por defecto el pipeline FALLA ante cualquier CVE CRITICAL o HIGH sin
+# excepción explícita — este archivo es el ÚNICO lugar donde se puede abrir
+# una excepción, y solo debe usarse cuando el hallazgo ya fue evaluado y
+# aceptado conscientemente (nunca para "hacer pasar el pipeline" sin
+# análisis).
+#
+# Formato (una línea por excepción), documentando SIEMPRE el motivo:
+#   CVE-YYYY-NNNNN  # <por qué se acepta, y desde cuándo/hasta cuándo>
+#
+# Ejemplo (comentado a propósito — no es una excepción real, es la plantilla):
+# CVE-2023-12345  # Falso positivo en libx: la función vulnerable no se usa
+#                 # en este proyecto (confirmado leyendo el changelog). Revisar
+#                 # en la próxima actualización de la imagen base.
+
+# (sin excepciones activas todavía)

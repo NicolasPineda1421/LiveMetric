@@ -10,7 +10,7 @@ export default function LoginScreen({ onLogin }) {
   const [adminPass, setAdminPass] = useState('');
 
   const [cedulaUser, setCedulaUser] = useState('');
-  const [cedulaPass, setCedulaPass] = useState('');
+  const [pin, setPin] = useState('');
 
   async function submitAdmin(e) {
     e.preventDefault();
@@ -18,7 +18,7 @@ export default function LoginScreen({ onLogin }) {
     setLoading(true);
     try {
       const data = await api.loginAdmin(adminUser, adminPass);
-      onLogin({ role: 'admin', token: data.token, username: adminUser });
+      onLogin({ role: data.role, token: data.token, username: adminUser });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -29,13 +29,9 @@ export default function LoginScreen({ onLogin }) {
   async function submitVoter(e) {
     e.preventDefault();
     setError('');
-    if (cedulaUser !== cedulaPass) {
-      setError('La cédula debe ingresarse igual en ambos campos.');
-      return;
-    }
     setLoading(true);
     try {
-      const data = await api.loginVoter(cedulaUser, cedulaPass);
+      const data = await api.loginVoter(cedulaUser, pin);
       onLogin({
         role: 'voter',
         token: data.token,
@@ -71,7 +67,7 @@ export default function LoginScreen({ onLogin }) {
         <div className="login-card">
           <div className="login-tabs">
             <button className={`login-tab ${tab === 'admin' ? 'active' : ''}`} onClick={() => { setTab('admin'); setError(''); }}>
-              Administrador
+              Administrador / Auditor
             </button>
             <button className={`login-tab ${tab === 'voter' ? 'active' : ''}`} onClick={() => { setTab('voter'); setError(''); }}>
               Votante
@@ -100,18 +96,18 @@ export default function LoginScreen({ onLogin }) {
           ) : (
             <form onSubmit={submitVoter}>
               <div className="field">
-                <label htmlFor="cedula-user">Cédula (usuario)</label>
+                <label htmlFor="cedula-user">Cédula</label>
                 <input id="cedula-user" value={cedulaUser} onChange={(e) => setCedulaUser(e.target.value)} required autoFocus inputMode="numeric" />
               </div>
               <div className="field">
-                <label htmlFor="cedula-pass">Cédula (contraseña)</label>
-                <input id="cedula-pass" value={cedulaPass} onChange={(e) => setCedulaPass(e.target.value)} required inputMode="numeric" />
-                <div className="field-hint">Repite el mismo número de cédula en ambos campos.</div>
+                <label htmlFor="voter-pin">PIN de acceso</label>
+                <input id="voter-pin" value={pin} onChange={(e) => setPin(e.target.value)} required inputMode="numeric" maxLength={10} />
+                <div className="field-hint">El PIN te lo entrega el encargado de tu puesto de votación.</div>
               </div>
               <button className="btn btn-primary" disabled={loading}>{loading ? 'Verificando…' : 'Ingresar a votar'}</button>
 
               <div className="default-creds">
-                Cédulas de demostración precargadas: <code>1000000001</code> a <code>1000000005</code>.
+                Cédulas de demostración precargadas: <code>1000000001</code> a <code>1000000005</code>, PIN <code>123456</code>.
               </div>
             </form>
           )}

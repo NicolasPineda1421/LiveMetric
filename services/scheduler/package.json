@@ -5,7 +5,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "test": "echo \"no unit tests defined\" && exit 0"
+    "test": "jest --runInBand"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
@@ -14,7 +14,14 @@
     "node-fetch": "^2.7.0",
     "pg": "^8.12.0"
   },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "jest": {
+    "setupFiles": ["<rootDir>/jest.setup.js"],
+    "testEnvironment": "node"
   }
 }

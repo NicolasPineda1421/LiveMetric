@@ -1,6 +1,9 @@
 # Entorno y secretos
 .env
 *.env.local
+# ".env.gpg" NO va aquí a propósito: es el .env cifrado que sí está pensado
+# para compartirse/commitearse (ver scripts/deploy.sh) — el secreto real es
+# la passphrase de gpg, que nunca vive en este repo.
 
 # Node
 node_modules/

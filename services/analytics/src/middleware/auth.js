@@ -7,27 +7,32 @@ if (!JWT_SECRET) {
   process.exit(1);
 }
 
-// Middleware de autenticación: exige un Bearer token válido, firmado con el
-// mismo secreto compartido que usa el servicio de Auth, y fuerza el algoritmo
-// esperado (HS256) para evitar ataques de "algorithm confusion" (alg: none).
-function requireAuth(req, res, next) {
-  const authHeader = req.headers.authorization || '';
-  const [scheme, token] = authHeader.split(' ');
+// Verifica el JWT (mismo secreto compartido que Auth, algoritmo forzado a
+// HS256 para evitar "algorithm confusion") y exige que el rol esté dentro
+// de los permitidos. `admin` puede todo; `auditor` es de solo lectura y se
+// usa únicamente en las rutas que explícitamente lo permiten.
+function requireRole(...allowedRoles) {
+  return function (req, res, next) {
+    const authHeader = req.headers.authorization || '';
+    const [scheme, token] = authHeader.split(' ');
 
-  if (scheme !== 'Bearer' || !token) {
-    return res.status(401).json({ error: 'Token de autenticación requerido' });
-  }
-
-  try {
-    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
-    if (payload.role !== 'admin') {
-      return res.status(403).json({ error: 'Permisos insuficientes' });
+    if (scheme !== 'Bearer' || !token) {
+      return res.status(401).json({ error: 'Token de autenticación requerido' });
     }
-    req.user = payload;
-    return next();
-  } catch (err) {
-    return res.status(401).json({ error: 'Token inválido o expirado' });
-  }
+
+    try {
+      const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+      if (!allowedRoles.includes(payload.role)) {
+        return res.status(403).json({ error: 'Permisos insuficientes' });
+      }
+      req.user = payload;
+      return next();
+    } catch (err) {
+      return res.status(401).json({ error: 'Token inválido o expirado' });
+    }
+  };
 }
 
-module.exports = { requireAuth };
+const requireAuth = requireRole('admin');
+
+module.exports = { requireAuth, requireRole };

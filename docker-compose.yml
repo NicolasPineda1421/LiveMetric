@@ -58,6 +58,7 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
       VOTER_JWT_EXPIRES_IN: ${VOTER_JWT_EXPIRES_IN:-10m}
       VOTER_ID_SALT: ${VOTER_ID_SALT}
+      VOTERS_ENCRYPTION_KEY: ${VOTERS_ENCRYPTION_KEY}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       DB_HOST: postgres
       DB_PORT: 5432
@@ -115,6 +116,7 @@ services:
       NODE_ENV: production
       PORT: 3003
       JWT_SECRET: ${JWT_SECRET}
+      VOTERS_ENCRYPTION_KEY: ${VOTERS_ENCRYPTION_KEY}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       DB_HOST: postgres
       DB_PORT: 5432
@@ -217,10 +219,15 @@ services:
     container_name: livemetric-frontend
     restart: unless-stopped
     environment:
-      AUTH_URL: http://localhost:3001
-      VOTING_URL: http://localhost:3002
-      ANALYTICS_URL: http://localhost:3003
-      SCRUTINY_URL: http://localhost:3004
+      # Rutas relativas: el navegador solo habla con el origen del frontend;
+      # nginx las reenvía server-a-server a cada microservicio (ver
+      # services/frontend/nginx.conf). Así, exponer el sistema hacia afuera
+      # (LAN, Tailscale Funnel, etc.) es cuestión de un solo puerto/origen,
+      # no de cuatro.
+      AUTH_URL: /auth
+      VOTING_URL: /voting
+      ANALYTICS_URL: /analytics
+      SCRUTINY_URL: /scrutiny
     depends_on:
       - auth-service
       - voting-service
@@ -229,7 +236,12 @@ services:
     networks:
       - app-net
     ports:
-      - "127.0.0.1:3000:80"
+      # Expuesto a toda la red local (no solo localhost) para compartir el
+      # panel/votación dentro de la misma red. El resto de servicios
+      # (auth/voting/analytics/scrutiny) siguen en 127.0.0.1: el navegador
+      # solo necesita llegar a este puerto, todo lo demás pasa por el
+      # proxy reverso de nginx (ver nginx.conf).
+      - "0.0.0.0:3000:80"
     # "no-new-privileges" sigue aplicando (bloquea escalación vía setuid);
     # el proceso maestro de nginx corre como root por diseño (ver Dockerfile),
     # pero los workers que atienden tráfico externo son no-root por defecto.

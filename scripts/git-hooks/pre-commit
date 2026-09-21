@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# LiveMetric - Hook de pre-commit: bloquea el commit si hay un secreto en lo
+# que se va a commitear. Es la misma herramienta (Gitleaks) que ya corre en
+# el pipeline de CI (.github/workflows/devsecops.yml, job "secrets-scan"),
+# pero corriendo ANTES de que el secreto llegue siquiera a un commit local —
+# "shift left": detectarlo aquí es más barato que detectarlo en CI o, peor,
+# después de un push.
+#
+# Instalación: ./scripts/install-hooks.sh (copia este archivo a .git/hooks/).
+
+set -euo pipefail
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "⚠️  Gitleaks no está instalado — no se pudo revisar el commit en busca de secretos." >&2
+  echo "    Instálalo con: https://github.com/gitleaks/gitleaks#installing" >&2
+  echo "    (el commit continúa; CI igual lo revisará al hacer push)." >&2
+  exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+if ! gitleaks protect --staged --redact --config "${REPO_ROOT}/.gitleaks.toml"; then
+  echo "" >&2
+  echo "❌ Gitleaks detectó un posible secreto en los cambios preparados (staged)." >&2
+  echo "   Revisa el hallazgo de arriba, quítalo del código y vuelve a intentar el commit." >&2
+  echo "   Si es un falso positivo, agrégalo al allowlist de .gitleaks.toml con justificación." >&2
+  exit 1
+fi

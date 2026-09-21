@@ -3,17 +3,22 @@ import { api } from '../api.js';
 
 export default function VoterDashboard({ session, onLogout }) {
   const [elections, setElections] = useState([]);
+  const [myVotes, setMyVotes] = useState([]); // [{ electionId, createdAt }] — nunca la opción elegida
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selection, setSelection] = useState({}); // { [electionId]: optionId }
-  const [votedElectionId, setVotedElectionId] = useState(null);
+  const [votedElectionId, setVotedElectionId] = useState(null); // solo para la pantalla de confirmación inmediata
 
-  async function loadElections() {
+  async function refresh() {
     setLoading(true);
     setError('');
     try {
-      const data = await api.listActiveElections();
-      setElections(data);
+      const [activeElections, votes] = await Promise.all([
+        api.listActiveElections(),
+        api.listMyVotes(session.token).catch(() => ({ votes: [] })), // no bloquea la lista si falla
+      ]);
+      setElections(activeElections);
+      setMyVotes(votes.votes);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -22,10 +27,19 @@ export default function VoterDashboard({ session, onLogout }) {
   }
 
   useEffect(() => {
-    loadElections();
-    const interval = setInterval(loadElections, 15000); // refresco periódico: elecciones pueden cerrar en cualquier momento
+    refresh();
+    const interval = setInterval(refresh, 15000); // refresco periódico: elecciones pueden cerrar en cualquier momento
     return () => clearInterval(interval);
   }, []);
+
+  // De dónde sale "ya votaste en esta elección": del historial del servidor
+  // (persiste entre sesiones) más la que se acaba de emitir en esta misma
+  // pantalla (por si el refresco periódico todavía no llegó). Antes esto no
+  // se consultaba y la papeleta de una elección ya votada volvía a
+  // aparecer; el backend rechazaba el segundo voto, pero la interfaz no lo
+  // anticipaba.
+  const votedElectionIds = new Set(myVotes.map((v) => v.electionId));
+  if (votedElectionId) votedElectionIds.add(votedElectionId);
 
   async function submitVote(electionId) {
     const optionId = selection[electionId];
@@ -34,6 +48,7 @@ export default function VoterDashboard({ session, onLogout }) {
     try {
       await api.castVote(session.token, electionId, optionId);
       setVotedElectionId(electionId);
+      setMyVotes((v) => [{ electionId, createdAt: new Date().toISOString() }, ...v]);
     } catch (err) {
       setError(err.message);
     }
@@ -94,43 +109,74 @@ export default function VoterDashboard({ session, onLogout }) {
                   Cierra: {new Date(election.scheduled_end).toLocaleString()}
                 </div>
 
-                {election.options.map((opt, idx) => (
-                  <div
-                    key={opt.id}
-                    className={`ballot-option ${selection[election.id] === opt.id ? 'selected' : ''}`}
-                    onClick={() => setSelection((s) => ({ ...s, [election.id]: opt.id }))}
-                  >
-                    {opt.candidate_number ? (
-                      <div className="ballot-option-candidate">
-                        <span className="candidate-number-chip">{opt.candidate_number}</span>
-                        {opt.logo ? (
-                          <img className="candidate-photo" src={opt.logo} alt={opt.label} />
+                {votedElectionIds.has(election.id) ? (
+                  <div className="already-voted-note">Ya emitiste tu voto en esta elección.</div>
+                ) : (
+                  <>
+                    {election.options.map((opt, idx) => (
+                      <div
+                        key={opt.id}
+                        className={`ballot-option ${selection[election.id] === opt.id ? 'selected' : ''}`}
+                        onClick={() => setSelection((s) => ({ ...s, [election.id]: opt.id }))}
+                      >
+                        {opt.candidate_number ? (
+                          <div className="ballot-option-candidate">
+                            <span className="candidate-number-chip">{opt.candidate_number}</span>
+                            {opt.logo ? (
+                              <img className="candidate-photo" src={opt.logo} alt={opt.label} />
+                            ) : (
+                              <span className="candidate-photo-placeholder">S/F</span>
+                            )}
+                            <span>{opt.label}</span>
+                          </div>
                         ) : (
-                          <span className="candidate-photo-placeholder">S/F</span>
+                          <>
+                            <span className="ballot-option-number">{idx + 1}</span>
+                            <span>{opt.label}</span>
+                          </>
                         )}
-                        <span>{opt.label}</span>
                       </div>
-                    ) : (
-                      <>
-                        <span className="ballot-option-number">{idx + 1}</span>
-                        <span>{opt.label}</span>
-                      </>
-                    )}
-                  </div>
-                ))}
+                    ))}
 
-                <button
-                  className="btn btn-gold"
-                  style={{ marginTop: '0.75rem' }}
-                  disabled={!selection[election.id]}
-                  onClick={() => submitVote(election.id)}
-                >
-                  Emitir voto
-                </button>
+                    <button
+                      className="btn btn-gold"
+                      style={{ marginTop: '0.75rem' }}
+                      disabled={!selection[election.id]}
+                      onClick={() => submitVote(election.id)}
+                    >
+                      Emitir voto
+                    </button>
+                  </>
+                )}
               </div>
             ))}
           </div>
         )}
+
+        <VoteHistory votes={myVotes} />
+      </div>
+    </div>
+  );
+}
+
+// Historial de la propia persona votante: demuestra que votó y cuándo, pero
+// nunca en qué elección ni por qué opción — ni siquiera el backend conserva
+// esa asociación en la respuesta (ver GET /my-votes en voting-service).
+function VoteHistory({ votes }) {
+  if (votes.length === 0) return null;
+  return (
+    <div className="panel" style={{ marginTop: '1.5rem' }}>
+      <h3 style={{ marginTop: 0, fontSize: '0.95rem' }}>Historial de tus votos</h3>
+      <p className="section-desc" style={{ marginBottom: '0.9rem' }}>
+        Solo confirma que votaste y cuándo; nunca muestra en qué elección ni qué opción elegiste.
+      </p>
+      <div className="tally">
+        {votes.map((v, i) => (
+          <div className="tally-row" key={i}>
+            <span className="tally-label">Voto emitido</span>
+            <span className="tally-votes mono">{new Date(v.createdAt).toLocaleString()}</span>
+          </div>
+        ))}
       </div>
     </div>
   );

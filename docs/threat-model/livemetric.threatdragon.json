@@ -1,0 +1,329 @@
+{
+  "version": "2.4.0",
+  "summary": {
+    "title": "LiveMetric — Sistema de votación",
+    "owner": "Equipo LiveMetric",
+    "description": "Modelo de amenazas de LiveMetric: microservicios de votación (auth, voting, analytics, scrutiny, scheduler-worker) sobre Postgres/Supabase. Ver docs/threat-model/STRIDE-analysis.md para la versión en tabla legible con las mismas amenazas.",
+    "id": 0
+  },
+  "detail": {
+    "contributors": [],
+    "diagrams": [
+      {
+        "id": 0,
+        "title": "DFD Nivel 0 — Contexto",
+        "diagramType": "STRIDE",
+        "placeholder": "Vista de contexto: quién interactúa con el sistema y con qué se persiste.",
+        "thumbnail": "./public/content/images/thumbnail.stride.jpg",
+        "version": "2.4.0",
+        "cells": [
+          {
+            "id": "actor-votante",
+            "shape": "actor",
+            "position": { "x": 40, "y": 60 },
+            "size": { "width": 100, "height": 60 },
+            "attrs": { "text": { "text": "Votante" } },
+            "data": { "type": "tm.Actor", "name": "Votante", "description": "Persona que ingresa con cédula + PIN de acceso para emitir un voto.", "outOfScope": false, "threats": [] }
+          },
+          {
+            "id": "actor-admin",
+            "shape": "actor",
+            "position": { "x": 40, "y": 220 },
+            "size": { "width": 100, "height": 60 },
+            "attrs": { "text": { "text": "Administrador" } },
+            "data": { "type": "tm.Actor", "name": "Administrador", "description": "Gestiona padrón, plantillas, elecciones, usuarios y ve reportes.", "outOfScope": false, "threats": [] }
+          },
+          {
+            "id": "actor-auditor",
+            "shape": "actor",
+            "position": { "x": 40, "y": 380 },
+            "size": { "width": 100, "height": 60 },
+            "attrs": { "text": { "text": "Auditor" } },
+            "data": { "type": "tm.Actor", "name": "Auditor", "description": "Rol de solo lectura: ve resultados y reportes, no puede gestionar nada.", "outOfScope": false, "threats": [] }
+          },
+          {
+            "id": "boundary-system",
+            "shape": "trust-boundary-box",
+            "position": { "x": 260, "y": 40 },
+            "size": { "width": 260, "height": 420 },
+            "attrs": { "text": { "text": "Sistema LiveMetric" } },
+            "data": { "type": "tm.TrustBoundary", "name": "Sistema LiveMetric", "description": "Todos los microservicios, corriendo en la misma red Docker interna.", "isTrustBoundary": true }
+          },
+          {
+            "id": "process-system",
+            "shape": "process",
+            "position": { "x": 300, "y": 210 },
+            "size": { "width": 180, "height": 80 },
+            "attrs": { "text": { "text": "Sistema LiveMetric" } },
+            "data": {
+              "type": "tm.Process",
+              "name": "Sistema LiveMetric",
+              "description": "Vista agregada de los 5 microservicios (ver DFD Nivel 1).",
+              "outOfScope": false,
+              "threats": []
+            }
+          },
+          {
+            "id": "store-postgres",
+            "shape": "store",
+            "position": { "x": 620, "y": 220 },
+            "size": { "width": 160, "height": 60 },
+            "attrs": { "text": { "text": "Postgres (Supabase)" } },
+            "data": {
+              "type": "tm.Store",
+              "name": "Postgres (Supabase)",
+              "description": "Base de datos gestionada por Supabase; el padrón se guarda cifrado (ver DFD Nivel 1).",
+              "outOfScope": false,
+              "threats": []
+            }
+          },
+          {
+            "id": "flow-votante-login",
+            "shape": "flow",
+            "source": { "cell": "actor-votante" },
+            "target": { "cell": "process-system" },
+            "attrs": { "text": { "text": "Login (cédula+PIN) y voto" } },
+            "data": {
+              "type": "tm.Flow",
+              "name": "Login (cédula+PIN) y voto",
+              "description": "El votante se autentica y emite su voto.",
+              "outOfScope": false,
+              "threats": [
+                {
+                  "id": "T1",
+                  "title": "Suplantación de un votante conociendo su cédula",
+                  "type": "Spoofing",
+                  "status": "Mitigated",
+                  "severity": "High",
+                  "description": "La cédula es información semipública; antes del PIN, usuario y contraseña eran ambos la cédula.",
+                  "mitigation": "Login exige cédula + PIN de 6 dígitos generado por el admin, no derivable de la cédula (migración 003_voter_access_codes.sql)."
+                },
+                {
+                  "id": "T2",
+                  "title": "Fuerza bruta del PIN de votante",
+                  "type": "Denial of Service",
+                  "status": "Mitigated",
+                  "severity": "Medium",
+                  "description": "Intentar muchos PIN distintos hasta acertar.",
+                  "mitigation": "Rate limiting: 8 intentos / 15 min por IP (voterLoginLimiter en services/auth/src/index.js)."
+                }
+              ]
+            }
+          },
+          {
+            "id": "flow-votante-confirmacion",
+            "shape": "flow",
+            "source": { "cell": "process-system" },
+            "target": { "cell": "actor-votante" },
+            "attrs": { "text": { "text": "Confirmación / historial (sin detalle)" } },
+            "data": {
+              "type": "tm.Flow",
+              "name": "Confirmación / historial (sin detalle)",
+              "description": "El historial de votos del propio votante nunca expone en qué elección ni qué opción eligió.",
+              "outOfScope": false,
+              "threats": []
+            }
+          },
+          {
+            "id": "flow-admin-gestion",
+            "shape": "flow",
+            "source": { "cell": "actor-admin" },
+            "target": { "cell": "process-system" },
+            "attrs": { "text": { "text": "Gestión (padrón, plantillas, elecciones, usuarios)" } },
+            "data": { "type": "tm.Flow", "name": "Gestión (padrón, plantillas, elecciones, usuarios)", "description": "Operaciones administrativas de escritura.", "outOfScope": false, "threats": [] }
+          },
+          {
+            "id": "flow-admin-reportes",
+            "shape": "flow",
+            "source": { "cell": "process-system" },
+            "target": { "cell": "actor-admin" },
+            "attrs": { "text": { "text": "Resultados, reportes, auditoría" } },
+            "data": { "type": "tm.Flow", "name": "Resultados, reportes, auditoría", "description": "Lectura de resultados y del registro de auditoría.", "outOfScope": false, "threats": [] }
+          },
+          {
+            "id": "flow-auditor-lectura",
+            "shape": "flow",
+            "source": { "cell": "actor-auditor" },
+            "target": { "cell": "process-system" },
+            "attrs": { "text": { "text": "Consulta de solo lectura" } },
+            "data": {
+              "type": "tm.Flow",
+              "name": "Consulta de solo lectura (resultados, reportes)",
+              "description": "El auditor solo puede leer, nunca escribir.",
+              "outOfScope": false,
+              "threats": [
+                {
+                  "id": "T11",
+                  "title": "Un auditor intenta crear/editar/borrar un tablero de reportes",
+                  "type": "Elevation of Privilege",
+                  "status": "Mitigated",
+                  "severity": "Medium",
+                  "description": "El rol auditor debería ser estrictamente de solo lectura.",
+                  "mitigation": "requireRole('admin','auditor') para lectura vs. requireRole('admin') exclusivo para escritura en cada endpoint de report_dashboards."
+                }
+              ]
+            }
+          },
+          {
+            "id": "flow-system-db",
+            "shape": "flow",
+            "source": { "cell": "process-system" },
+            "target": { "cell": "store-postgres" },
+            "attrs": { "text": { "text": "Lectura/escritura cifrada del padrón" } },
+            "data": {
+              "type": "tm.Flow",
+              "name": "Lectura/escritura cifrada del padrón",
+              "description": "cedula, polling_place y voting_table viajan y se guardan cifrados (AES-256-GCM).",
+              "outOfScope": false,
+              "threats": [
+                {
+                  "id": "T5",
+                  "title": "Fuga de la base de datos expone identidades del padrón",
+                  "type": "Information Disclosure",
+                  "status": "Mitigated",
+                  "severity": "High",
+                  "description": "Si alguien obtiene acceso directo a Postgres.",
+                  "mitigation": "cedula/polling_place/voting_table cifrados (services/auth/src/voterCrypto.js); solo full_name queda en texto plano a propósito."
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": 1,
+        "title": "DFD Nivel 1 — Microservicios",
+        "diagramType": "STRIDE",
+        "placeholder": "Vista desagregada: cada microservicio real y los almacenes de datos que usa.",
+        "thumbnail": "./public/content/images/thumbnail.stride.jpg",
+        "version": "2.4.0",
+        "cells": [
+          { "id": "l1-actor-votante", "shape": "actor", "position": { "x": 20, "y": 40 }, "size": { "width": 100, "height": 60 }, "attrs": { "text": { "text": "Votante" } }, "data": { "type": "tm.Actor", "name": "Votante", "outOfScope": false, "threats": [] } },
+          { "id": "l1-actor-admin", "shape": "actor", "position": { "x": 20, "y": 260 }, "size": { "width": 100, "height": 60 }, "attrs": { "text": { "text": "Administrador" } }, "data": { "type": "tm.Actor", "name": "Administrador", "outOfScope": false, "threats": [] } },
+          { "id": "l1-actor-auditor", "shape": "actor", "position": { "x": 20, "y": 460 }, "size": { "width": 100, "height": 60 }, "attrs": { "text": { "text": "Auditor" } }, "data": { "type": "tm.Actor", "name": "Auditor", "outOfScope": false, "threats": [] } },
+
+          { "id": "l1-proc-auth", "shape": "process", "position": { "x": 220, "y": 40 }, "size": { "width": 150, "height": 70 }, "attrs": { "text": { "text": "auth-service" } }, "data": { "type": "tm.Process", "name": "auth-service", "description": "Login dual, gestión de identidad, auditoría.", "outOfScope": false, "threats": [] } },
+          { "id": "l1-proc-voting", "shape": "process", "position": { "x": 220, "y": 160 }, "size": { "width": 150, "height": 70 }, "attrs": { "text": { "text": "voting-service" } }, "data": {
+            "type": "tm.Process", "name": "voting-service", "description": "Recibe votos, plantillas y elecciones.", "outOfScope": false,
+            "threats": [
+              {
+                "id": "T6",
+                "title": "Un votante emite más de un voto en la misma elección",
+                "type": "Elevation of Privilege",
+                "status": "Mitigated",
+                "severity": "Critical",
+                "description": "Doble voto rompería la integridad del resultado.",
+                "mitigation": "Restricción UNIQUE(election_id, voter_id_hash) a nivel de base de datos."
+              },
+              {
+                "id": "T7",
+                "title": "Votar fuera de la ventana de tiempo programada",
+                "type": "Tampering",
+                "status": "Mitigated",
+                "severity": "High",
+                "description": "Votar antes de abrir o después de cerrar una elección.",
+                "mitigation": "Se valida status='active' AND now() BETWEEN scheduled_start AND scheduled_end en cada voto, no solo al abrir."
+              }
+            ]
+          } },
+          { "id": "l1-proc-analytics", "shape": "process", "position": { "x": 220, "y": 280 }, "size": { "width": 150, "height": 70 }, "attrs": { "text": { "text": "analytics-service" } }, "data": { "type": "tm.Process", "name": "analytics-service", "description": "Resultados, métricas y tableros de reportes.", "outOfScope": false, "threats": [] } },
+          { "id": "l1-proc-scrutiny", "shape": "process", "position": { "x": 220, "y": 400 }, "size": { "width": 150, "height": 70 }, "attrs": { "text": { "text": "scrutiny-service" } }, "data": { "type": "tm.Process", "name": "scrutiny-service", "description": "Certifica resultados con hash encadenado.", "outOfScope": false, "threats": [] } },
+          { "id": "l1-proc-scheduler", "shape": "process", "position": { "x": 220, "y": 520 }, "size": { "width": 150, "height": 70 }, "attrs": { "text": { "text": "scheduler-worker" } }, "data": { "type": "tm.Process", "name": "scheduler-worker", "description": "Abre/cierra elecciones según su ventana de tiempo y dispara la certificación.", "outOfScope": false, "threats": [] } },
+
+          { "id": "l1-store-voters", "shape": "store", "position": { "x": 500, "y": 40 }, "size": { "width": 170, "height": 60 }, "attrs": { "text": { "text": "Padrón (voters)" } }, "data": {
+            "type": "tm.Store", "name": "Padrón (voters)", "description": "cedula/polling_place/voting_table cifrados; full_name en texto plano; access_code_hash (bcrypt del PIN).", "outOfScope": false,
+            "threats": [
+              {
+                "id": "T4",
+                "title": "Alguien con acceso directo a Postgres altera cédula/puesto/mesa",
+                "type": "Tampering",
+                "status": "Mitigated",
+                "severity": "Medium",
+                "description": "Modificación directa de filas cifradas.",
+                "mitigation": "Cifrado AES-256-GCM en reposo. Residual: nonce determinístico permite notar si dos filas cifran igual, no leer el valor."
+              }
+            ]
+          } },
+          { "id": "l1-store-elections", "shape": "store", "position": { "x": 500, "y": 160 }, "size": { "width": 170, "height": 60 }, "attrs": { "text": { "text": "Elecciones y votos" } }, "data": { "type": "tm.Store", "name": "Elecciones y votos", "description": "elections, election_options, votes (voter_id_hash, nunca la cédula).", "outOfScope": false, "threats": [] } },
+          { "id": "l1-store-ledger", "shape": "store", "position": { "x": 500, "y": 280 }, "size": { "width": 170, "height": 60 }, "attrs": { "text": { "text": "Acta de escrutinio" } }, "data": {
+            "type": "tm.Store", "name": "Acta de escrutinio (scrutiny_ledger)", "description": "Append-only, hash SHA-256 encadenado.", "outOfScope": false,
+            "threats": [
+              {
+                "id": "T9",
+                "title": "Alterar el resultado de un acta ya certificada",
+                "type": "Tampering",
+                "status": "Mitigated",
+                "severity": "Critical",
+                "description": "Modificar un resultado oficial después de certificado.",
+                "mitigation": "Tabla append-only (trigger prevent_row_mutation) + cadena de hashes; alterar una rompe la cadena hacia adelante, detectable vía /verify."
+              }
+            ]
+          } },
+          { "id": "l1-store-audit", "shape": "store", "position": { "x": 500, "y": 400 }, "size": { "width": 170, "height": 60 }, "attrs": { "text": { "text": "Audit log" } }, "data": {
+            "type": "tm.Store", "name": "Audit log", "description": "Append-only (trigger trg_audit_no_update).", "outOfScope": false,
+            "threats": [
+              {
+                "id": "T10",
+                "title": "Borrar/modificar un evento para ocultar un incidente",
+                "type": "Repudiation",
+                "status": "Mitigated",
+                "severity": "High",
+                "description": "Un actor malicioso con acceso a la base intenta cubrir sus huellas.",
+                "mitigation": "Trigger trg_audit_no_update, append-only igual que el acta de escrutinio."
+              }
+            ]
+          } },
+
+          { "id": "l1-flow-1", "shape": "flow", "source": { "cell": "l1-actor-votante" }, "target": { "cell": "l1-proc-auth" }, "attrs": { "text": { "text": "login (cédula+PIN)" } }, "data": { "type": "tm.Flow", "name": "login (cédula+PIN)", "outOfScope": false, "threats": [] } },
+          { "id": "l1-flow-2", "shape": "flow", "source": { "cell": "l1-proc-auth" }, "target": { "cell": "l1-actor-votante" }, "attrs": { "text": { "text": "JWT votante (10 min)" } }, "data": { "type": "tm.Flow", "name": "JWT votante (10 min)", "outOfScope": false, "threats": [] } },
+          { "id": "l1-flow-3", "shape": "flow", "source": { "cell": "l1-actor-votante" }, "target": { "cell": "l1-proc-voting" }, "attrs": { "text": { "text": "emitir voto (JWT)" } }, "data": { "type": "tm.Flow", "name": "emitir voto (JWT)", "outOfScope": false, "threats": [] } },
+          { "id": "l1-flow-4", "shape": "flow", "source": { "cell": "l1-proc-voting" }, "target": { "cell": "l1-store-elections" }, "attrs": { "text": { "text": "INSERT voto" } }, "data": { "type": "tm.Flow", "name": "INSERT voto", "outOfScope": false, "threats": [] } },
+          { "id": "l1-flow-5", "shape": "flow", "source": { "cell": "l1-actor-votante" }, "target": { "cell": "l1-proc-voting" }, "attrs": { "text": { "text": "/my-votes (sin election/option)" } }, "data": { "type": "tm.Flow", "name": "/my-votes (sin election/option)", "outOfScope": false, "threats": [] } },
+
+          { "id": "l1-flow-6", "shape": "flow", "source": { "cell": "l1-actor-admin" }, "target": { "cell": "l1-proc-auth" }, "attrs": { "text": { "text": "login / gestión padrón y usuarios" } }, "data": { "type": "tm.Flow", "name": "login / gestión padrón y usuarios", "outOfScope": false, "threats": [] } },
+          { "id": "l1-flow-7", "shape": "flow", "source": { "cell": "l1-proc-auth" }, "target": { "cell": "l1-store-voters" }, "attrs": { "text": { "text": "R/W cifrado" } }, "data": { "type": "tm.Flow", "name": "R/W cifrado", "outOfScope": false, "threats": [] } },
+          { "id": "l1-flow-8", "shape": "flow", "source": { "cell": "l1-proc-auth" }, "target": { "cell": "l1-store-audit" }, "attrs": { "text": { "text": "escribe evento" } }, "data": { "type": "tm.Flow", "name": "escribe evento", "outOfScope": false, "threats": [] } },
+          { "id": "l1-flow-9", "shape": "flow", "source": { "cell": "l1-actor-admin" }, "target": { "cell": "l1-proc-voting" }, "attrs": { "text": { "text": "crear plantillas/elecciones" } }, "data": { "type": "tm.Flow", "name": "crear plantillas/elecciones", "outOfScope": false, "threats": [] } },
+
+          { "id": "l1-flow-10", "shape": "flow", "source": { "cell": "l1-actor-admin" }, "target": { "cell": "l1-proc-analytics" }, "attrs": { "text": { "text": "resultados/métricas/reportes" } }, "data": { "type": "tm.Flow", "name": "resultados/métricas/reportes (admin)", "outOfScope": false, "threats": [] } },
+          { "id": "l1-flow-11", "shape": "flow", "source": { "cell": "l1-actor-auditor" }, "target": { "cell": "l1-proc-analytics" }, "attrs": { "text": { "text": "resultados/reportes (solo lectura)" } }, "data": {
+            "type": "tm.Flow", "name": "resultados/reportes (solo lectura)", "outOfScope": false,
+            "threats": [
+              {
+                "id": "T11b",
+                "title": "Un auditor intenta crear/editar/borrar un tablero de reportes",
+                "type": "Elevation of Privilege",
+                "status": "Mitigated",
+                "severity": "Medium",
+                "description": "El rol auditor debería ser estrictamente de solo lectura.",
+                "mitigation": "requireRole('admin','auditor') para lectura vs. requireRole('admin') exclusivo para escritura en cada endpoint de report_dashboards."
+              }
+            ]
+          } },
+          { "id": "l1-flow-12", "shape": "flow", "source": { "cell": "l1-proc-analytics" }, "target": { "cell": "l1-store-elections" }, "attrs": { "text": { "text": "lectura (resultados en vivo)" } }, "data": { "type": "tm.Flow", "name": "lectura (resultados en vivo)", "outOfScope": false, "threats": [] } },
+          { "id": "l1-flow-13", "shape": "flow", "source": { "cell": "l1-proc-analytics" }, "target": { "cell": "l1-store-voters" }, "attrs": { "text": { "text": "lectura (participación)" } }, "data": { "type": "tm.Flow", "name": "lectura (participación)", "outOfScope": false, "threats": [] } },
+          { "id": "l1-flow-14", "shape": "flow", "source": { "cell": "l1-proc-analytics" }, "target": { "cell": "l1-store-ledger" }, "attrs": { "text": { "text": "lectura (si cerrada/certificada)" } }, "data": { "type": "tm.Flow", "name": "lectura (si cerrada/certificada)", "outOfScope": false, "threats": [] } },
+
+          { "id": "l1-flow-15", "shape": "flow", "source": { "cell": "l1-proc-scheduler" }, "target": { "cell": "l1-store-elections" }, "attrs": { "text": { "text": "cambia status" } }, "data": { "type": "tm.Flow", "name": "cambia status", "outOfScope": false, "threats": [] } },
+          { "id": "l1-flow-16", "shape": "flow", "source": { "cell": "l1-proc-scheduler" }, "target": { "cell": "l1-proc-scrutiny" }, "attrs": { "text": { "text": "dispara certificación (INTERNAL_SERVICE_TOKEN)" } }, "data": {
+            "type": "tm.Flow", "name": "dispara certificación (INTERNAL_SERVICE_TOKEN)", "outOfScope": false,
+            "threats": [
+              {
+                "id": "T8",
+                "title": "Un servicio no autorizado dispara una certificación falsa",
+                "type": "Spoofing",
+                "status": "Mitigated",
+                "severity": "Critical",
+                "description": "Cualquiera que alcance el endpoint interno de certificación podría forzar una certificación fuera de tiempo.",
+                "mitigation": "INTERNAL_SERVICE_TOKEN compartido solo entre scheduler-worker y scrutiny-service, nunca expuesto al navegador."
+              }
+            ]
+          } },
+          { "id": "l1-flow-17", "shape": "flow", "source": { "cell": "l1-proc-scrutiny" }, "target": { "cell": "l1-store-elections" }, "attrs": { "text": { "text": "lee votos" } }, "data": { "type": "tm.Flow", "name": "lee votos", "outOfScope": false, "threats": [] } },
+          { "id": "l1-flow-18", "shape": "flow", "source": { "cell": "l1-proc-scrutiny" }, "target": { "cell": "l1-store-ledger" }, "attrs": { "text": { "text": "escribe acta (hash encadenado)" } }, "data": { "type": "tm.Flow", "name": "escribe acta (hash encadenado)", "outOfScope": false, "threats": [] } },
+          { "id": "l1-flow-19", "shape": "flow", "source": { "cell": "l1-actor-admin" }, "target": { "cell": "l1-proc-scrutiny" }, "attrs": { "text": { "text": "descarga acta PDF / verificar cadena" } }, "data": { "type": "tm.Flow", "name": "descarga acta PDF / verificar cadena", "outOfScope": false, "threats": [] } }
+        ]
+      }
+    ]
+  }
+}

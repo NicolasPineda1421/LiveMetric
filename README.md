@@ -161,9 +161,9 @@ cd LiveMetric
 
 # 1. Crear el archivo de variables de entorno local
 cp .env.example .env
-# Editar .env y reemplazar los tres valores "CAMBIA_ESTE_VALOR_LOCALMENTE"
-# (JWT_SECRET, VOTER_ID_SALT, INTERNAL_SERVICE_TOKEN) por secretos generados
-# localmente. Usa el comando que corresponda a tu sistema:
+# Editar .env y reemplazar los cuatro valores "CAMBIA_ESTE_VALOR_LOCALMENTE"
+# (JWT_SECRET, VOTER_ID_SALT, INTERNAL_SERVICE_TOKEN, VOTERS_ENCRYPTION_KEY)
+# por secretos generados localmente. Usa el comando que corresponda a tu sistema:
 ```
 
 | Sistema | Comando para generar un secreto |
@@ -172,13 +172,25 @@ cp .env.example .env
 | Windows PowerShell (sin instalar nada) | `$b=New-Object byte[] 48; [System.Security.Cryptography.RNGCryptoServiceProvider]::new().GetBytes($b); [Convert]::ToBase64String($b)` |
 | Cualquier sistema con Node.js | `node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"` |
 
-Genera un valor **distinto** para cada uno de los tres secretos (no reutilices el mismo).
+Genera un valor **distinto** para cada uno de esos tres secretos (no reutilices el mismo).
+
+`VOTERS_ENCRYPTION_KEY` es distinto: tiene que decodificar a **exactamente 32 bytes** (es una clave AES-256), no cualquier longitud sirve. Genéralo así:
+
+```bash
+openssl rand -base64 32
+# o, con Node.js: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
 
 ```bash
 # 2. Levantar todo el stack (backend + worker + frontend)
 docker compose up --build
 
-# 3. Abrir el frontend
+# 3. Cifrar el padrón de demostración sembrado por db/init.sql (cedula,
+#    puesto y mesa quedan en texto plano hasta correr esto una vez —
+#    ver comentario en db/init.sql):
+docker compose run --rm auth-service node src/scripts/backfillVoterEncryption.js
+
+# 4. Abrir el frontend
 #    http://localhost:3000
 ```
 
@@ -187,7 +199,7 @@ docker compose up --build
 | Elemento | Valor |
 |---|---|
 | Usuario administrador | `admin` / `Admin123!` |
-| Padrón de votantes demo | cédulas `1000000001` a `1000000005`, repartidas en "Puesto Central" (Mesa 1 y Mesa 2) y "Puesto Norte" (Mesa 1) |
+| Padrón de votantes demo | cédulas `1000000001` a `1000000005`, PIN `123456`, repartidas en "Puesto Central" (Mesa 1 y Mesa 2) y "Puesto Norte" (Mesa 1) |
 | Plantilla genérica de ejemplo | "Elección de ejemplo" (3 opciones de texto libre) |
 | Plantilla presidencial de ejemplo | "Elección Presidencial de Ejemplo" (3 candidatos numerados, sin foto precargada) |
 
@@ -226,7 +238,7 @@ terraform destroy -var-file="terraform.tfvars"
 2. En **Usuarios**, crea tu propio administrador (contraseña ≥10 caracteres) — así dejas de depender de la credencial de arranque.
 3. En **Plantillas**, usa "Elección Presidencial de Ejemplo" ya cargada, o crea una nueva de tipo "Elección presidencial" agregando candidatos con número, nombre y logo (una foto).
 4. En **Elecciones**, instancia una elección con una ventana corta (2–3 minutos) para ver el ciclo completo rápido.
-5. Abre una segunda pestaña/ventana en modo incógnito → pestaña "Votante" → cédula `1000000001` en ambos campos (Puesto Central, Mesa 1) → vota en la elección activa. Repite en una tercera ventana con la cédula `1000000003` (Puesto Central, Mesa 2) para tener votos en más de una mesa.
+5. Abre una segunda pestaña/ventana en modo incógnito → pestaña "Votante" → cédula `1000000001`, PIN `123456` (Puesto Central, Mesa 1) → vota en la elección activa. Repite en una tercera ventana con la cédula `1000000003` (mismo PIN de demo) (Puesto Central, Mesa 2) para tener votos en más de una mesa.
 6. De vuelta en el panel de admin, en **Elecciones** puedes pulsar "Detener" en cualquier momento para cerrar la elección antes de su hora programada — no hace falta esperar a `scheduledEnd`.
 7. En **Resultados**: mientras la elección sigue activa verás "En vivo"; tras cerrarla (por tiempo o manualmente), el mismo panel mostrará "✓ Certificado", el candidato/opción **ganador**, y el desglose del acta **por mesa de votación**.
 8. En **Escrutinio**, pulsa "Verificar cadena de escrutinio" para confirmar que ningún acta fue alterada.
@@ -241,10 +253,10 @@ curl -X POST http://127.0.0.1:3001/login/admin \
   -d '{"username":"admin","password":"Admin123!"}'
 # → { "token": "...", "role": "admin" }
 
-# Login de votante (cédula igual en ambos campos)
+# Login de votante (cédula + PIN de acceso asignado por el admin)
 curl -X POST http://127.0.0.1:3001/login/voter \
   -H "Content-Type: application/json" \
-  -d '{"cedula":"1000000001","password":"1000000001"}'
+  -d '{"cedula":"1000000001","pin":"123456"}'
 # → { "token": "...", "role": "voter" }
 
 # Crear una elección a partir de la plantilla de ejemplo (id=1)
@@ -318,18 +330,48 @@ Esto aplica sobre `main`:
 
 ## 5. Pipeline DevSecOps — `.github/workflows/devsecops.yml`
 
-El pipeline sigue el enfoque **shift-left**: los controles de seguridad se ejecutan en cada `push` y `pull_request`, antes de que el código llegue a producción.
+El pipeline sigue el enfoque **shift-left**: los controles de seguridad se ejecutan en cada `push` y `pull_request`, antes de que el código llegue a producción. Cubre las 6 fases de un pipeline DevSecOps (Fase 6 — observabilidad — queda fuera de este alcance, es la única marcada como opcional en el enunciado):
+
+**Fase 1 — Planificación.** Modelado de amenazas en `docs/threat-model/` (no es un job de CI, es un artefacto versionado): `livemetric.threatdragon.json` (abrir en [OWASP Threat Dragon](https://www.threatdragon.com/)) con DFD nivel 0 y nivel 1, y `STRIDE-analysis.md` con la misma información en tabla legible. Cada amenaza está anclada a un flujo/proceso real del sistema, no es un ejemplo genérico.
+
+**Fase 2 — Codificación.**
 
 | Job | Herramienta | Qué detiene |
 |---|---|---|
-| `secrets-scan` | **Gitleaks** | Commits con secretos, tokens o credenciales hardcodeadas. Se ejecuta primero: si falla, ningún otro job corre. |
-| `dependency-audit` | **npm audit** | Vulnerabilidades conocidas (CVE) en dependencias de los 3 microservicios, el servicio de escrutinio, el worker y el frontend; falla ante severidad `high` o superior. |
+| `secrets-scan` | **Gitleaks** | Commits con secretos, tokens o credenciales hardcodeadas. Se ejecuta primero: si falla, ningún otro job corre. También corre **localmente antes de cada commit** vía `scripts/git-hooks/pre-commit` (instalar una vez con `./scripts/install-hooks.sh`) — el mismo control, pero "shift-left" hasta el commit, no solo hasta el push. |
+| `dependency-audit` | **npm audit** | Vulnerabilidades conocidas (CVE) en dependencias de los 6 servicios; falla ante severidad `high` o superior. |
 | `sast-scan` | **Semgrep** (reglas OWASP Top 10, Express, JWT) | Patrones de inyección SQL (queries no parametrizadas) y debilidades en el middleware de autenticación (verificación de JWT, uso de `alg: none`, secretos débiles). |
-| `container-scan` | **Trivy** | Vulnerabilidades `CRITICAL`/`HIGH` en las imágenes Docker construidas (SO base + dependencias). |
-| `iac-scan` | **Checkov** | Malas prácticas en Terraform: redes no aisladas, contenedores privilegiados, falta de límites de recursos, secretos en `.tf`, etc. |
-| `security-gate` | — | Job resumen que falla si **cualquiera** de los controles anteriores falla; se recomienda marcarlo como *required check* en la protección de la rama `main`. |
+| `sca-scan` | **Trivy** (modo `fs`, sobre cada `package.json`) | Igual que `dependency-audit` pero con la herramienta que pide explícitamente el enunciado ("OWASP Dependency-Check o Trivy sobre archivos de dependencias"); mismo umbral `CRITICAL`/`HIGH`. |
+
+**Fase 3 — Integración/Build.**
+
+| Job | Herramienta | Qué detiene |
+|---|---|---|
+| `container-scan` | **Trivy** (modo imagen) | Construye las 6 imágenes Docker reales y escanea vulnerabilidades `CRITICAL`/`HIGH` (SO base + dependencias). Cualquier excepción documentada y justificada va en `.trivyignore` (por defecto, vacío: nada está exceptuado). |
+
+**Fase 4 — Pruebas.**
+
+| Job | Herramienta | Qué cubre |
+|---|---|---|
+| `unit-tests` | **Jest + Supertest** | Pruebas de integración reales contra la app de Express en memoria de cada servicio (`services/*/src/__tests__/*.test.js`), usando la Supabase real (sin base de staging separada — decisión explícita del proyecto). Todo dato de prueba usa el prefijo `CITEST-<servicio>` y se borra en un `afterAll`; ver la nota sobre `scrutiny_ledger` más abajo. Correr localmente: `cd services/<nombre> && npm test`. |
+| `staging-deploy-and-dast` | **OWASP ZAP** (baseline scan) | Levanta el stack completo (`docker compose`, Supabase real) y ataca `http://localhost:3000` como caja negra. El reporte se sube como artifact del job; por ahora es un gate de **reporte** (`continue-on-error`), no bloqueante — revisar el artifact `zap-baseline-report` en cada corrida. |
+
+**Fase 5 — Despliegue.**
+
+| Job | Herramienta | Qué cubre |
+|---|---|---|
+| `iac-scan` | **Checkov** | Malas prácticas en `infra/terraform/main.tf`: redes no aisladas, contenedores privilegiados, falta de límites de recursos, secretos en `.tf`, etc. |
+| `iac-deploy` | **Terraform** | Despliegue automatizado real: `terraform apply` levanta el stack completo (con su propio Postgres local efímero, nunca la Supabase real — ver nota abajo), un smoke test confirma que los 4 microservicios responden, y `terraform destroy` limpia todo al final. |
+
+| Job final | — |
+|---|---|
+| `security-gate` | Resume el estado de **todos** los jobs anteriores (incluidos los nuevos); falla si cualquiera falló. Recomendado como *required check* en la protección de `main`. |
 
 Todos los hallazgos de SAST, Trivy y Checkov se suben en formato **SARIF** a la pestaña **Security → Code scanning alerts** de GitHub para trazabilidad.
+
+> **Nota sobre `iac-deploy` vs. Supabase real**: `infra/terraform/main.tf` aprovisiona su propio Postgres local efímero (documentado en la sección 3 como alternativa Local-First a `docker compose`), nunca la Supabase real — así que `iac-deploy` es una demostración segura de "IaC puede desplegar todo el sistema" que no puede tocar datos reales por diseño. El staging que sí usa Supabase real (`unit-tests`, `staging-deploy-and-dast`) usa `docker compose`, no Terraform, porque así lo pidió explícitamente el equipo del proyecto — implica que cada corrida del pipeline escribe y borra datos de prueba en la base real (siempre con el prefijo `CITEST-`).
+>
+> **Nota sobre `scrutiny_ledger`**: es una tabla append-only (trigger `prevent_row_mutation`, ver sección 6) — las pruebas de `scrutiny-service` que certifican una elección de prueba dejan esa acta **permanentemente** en la base (no se puede ni se debe borrar; sería subvertir la misma garantía de integridad que el sistema existe para dar). Es un costo pequeño y esperado, no un olvido de limpieza.
 
 ### Cómo validar que el pipeline detiene vulnerabilidades reales
 
@@ -355,7 +397,7 @@ Estas pruebas verifican que la lógica de negocio nueva es correcta, además de 
 
 ### Cómo validar el login dual y el módulo de auditoría
 
-1. **Cédula no coincide en ambos campos** — Intentar `POST /login/voter` con `cedula` y `password` distintos: debe responder `401` sin distinguir si el problema es la cédula o el padrón (evita dar pistas a quien intenta adivinar).
+1. **PIN incorrecto** — Intentar `POST /login/voter` con la `cedula` correcta y un `pin` equivocado: debe responder `401` genérico ("Cédula o PIN incorrectos"), igual que si la cédula no existiera (evita dar pistas a quien intenta adivinar). Un votante sin PIN asignado (`access_code_hash` nulo, p. ej. cargado antes de esta migración) debe fallar igual, nunca aceptar la cédula como contraseña.
 2. **Cédula fuera del padrón** — Intentar con una cédula que no exista en `voters`: `401` genérico, y debe quedar un evento `LOGIN_FAILURE_VOTER` en `GET /admin/audit-log` (pestaña "Auditoría" en el frontend), identificado solo por `voter_id_hash`, nunca por la cédula real.
 3. **Token de rol equivocado** — Intentar votar (`POST /vote`) usando un JWT de **administrador** en vez de uno de **votante**: debe responder `403` ("Este token no es válido para votar"). Intentar usar un token de **votante** contra una ruta `/admin/*` de Voting o Auth: debe responder `403` también.
 4. **Expiración corta del token de votante** — Iniciar sesión como votante, esperar a que pase `VOTER_JWT_EXPIRES_IN` (10 minutos por defecto) y luego intentar votar: debe responder `401` ("expirada, inicia sesión de nuevo").
@@ -384,12 +426,13 @@ Estas pruebas verifican que la lógica de negocio nueva es correcta, además de 
 - **Escrutinio como servicio separado, no como función de Analytics**: certificar resultados es una responsabilidad distinta a *servir* resultados. Si estuvieran en el mismo servicio, un bug o compromiso en el código que sirve el dashboard también podría alterar el conteo certificado. Al separarlos, Scrutiny hace su propio recuento desde cero, sin confiar en nada que haya calculado Analytics.
 - **Cadena de hashes en vez de solo un registro plano**: encadenar cada acta con la anterior (`previous_hash`) significa que alterar un resultado certificado antiguo rompe visiblemente la cadena hacia adelante — no basta con corregir una sola fila para ocultar la manipulación, como sí pasaría con un simple campo `checksum` por registro.
 - **El worker nunca certifica directamente en la base de datos**: `scheduler-worker` cambia el `status` de la elección, pero delega la certificación a `scrutiny-service` vía HTTP interno. Esto mantiene una única fuente de verdad para el algoritmo de conteo y de hash (vive solo en Scrutiny), en vez de duplicar esa lógica en dos servicios distintos.
+- **Cifrado en reposo del padrón (`voters.cedula`, `polling_place`, `voting_table`)**: AES-256-GCM a nivel de aplicación (`services/auth/src/voterCrypto.js`), con la clave (`VOTERS_ENCRYPTION_KEY`) conocida solo por `auth-service` y `analytics-service` (los dos únicos que leen esa tabla). `full_name` queda en texto plano a propósito, para que el padrón siga siendo legible/gestionable por nombre en el panel de admin. El nonce de GCM es **determinístico** (HMAC-SHA256 del texto plano, no aleatorio): mismo valor cifra siempre igual, lo que permite seguir haciendo `WHERE cedula = ...` y mantener la restricción `UNIQUE` sin descifrar toda la tabla para buscar. Trade-off consciente: quien tenga acceso directo a Postgres (pero no a la clave) puede notar que dos filas comparten el mismo puesto/mesa/cédula, aunque no puede leer cuál es — con un IV aleatorio esa búsqueda por igualdad no sería posible en absoluto. `votes.polling_place`/`voting_table` (el snapshot tomado al votar, usado por Scrutiny para consolidar el acta) queda **fuera** de este cifrado a propósito: cifrarlo obligaría a descifrar fila por fila para poder agrupar por mesa, justo en el código de certificación que más debe poder auditarse en texto plano.
 
 ### Riesgos aceptados y documentados (para la sección "Resultados de Seguridad" del informe)
 
 | Hallazgo | Severidad | Estado | Justificación / control compensatorio |
 |---|---|---|---|
-| El login de votante usa la cédula como usuario **y** contraseña: no hay secreto real, solo verificación contra el padrón. Cualquiera que conozca una cédula ajena podría intentar votar en su nombre. | Alta (si no se compensa) | **Aceptado, con controles compensatorios** | Requisito funcional explícito del proyecto. Se compensa con: (1) rate limiting agresivo por IP en `/login/voter` (8 intentos / 15 min), (2) JWT de votante con vida de solo 10 minutos, (3) el anti-doble-voto se ancla a la identidad real (`voter_id_hash`) y no a un fingerprint débil, (4) todo intento queda en `audit_log` para detección posterior de patrones anómalos (muchos intentos fallidos sobre la misma cédula, o logins desde IPs muy dispersas en poco tiempo). |
+| ~~El login de votante usaba la cédula como usuario y contraseña~~ (corregido). Ahora es cédula + un PIN numérico de 6 dígitos, generado por el admin al cargar el padrón (`access_code_hash`, bcrypt) y nunca derivable de la cédula. | — | **Corregido** (antes: Alta, aceptada con controles compensatorios) | Sigue sin haber registro de cuentas self-service (el admin es la única fuente de identidad), pero ahora sí hay un secreto real que el votante debe conocer aparte de su cédula. Residual: el PIN debe distribuirse fuera de banda (impreso/entregado en el puesto de votación) — un paso logístico que antes no existía. El PIN generado se muestra en texto plano una única vez en el panel de admin y nunca vuelve a mostrarse (solo puede regenerarse, invalidando el anterior); los controles previos (rate limiting, JWT de vida corta, anti-doble-voto por `voter_id_hash`, auditoría) se mantienen como defensa en profundidad. |
 | El sistema arranca con un usuario administrador (`admin` / `Admin123!`) y un padrón de demostración con credenciales conocidas públicamente (este mismo README). | Media | **Aceptado, mitigado por diseño** | Es un valor por defecto documentado, no un secreto filtrado. Existe una ruta clara para reemplazarlo (`POST /admin/users` vía la pestaña "Usuarios") y se advierte explícitamente en la pantalla de login y en la sección 3. Nunca debe usarse así en un entorno con datos reales. |
 | El frontend habla directo con cada microservicio desde el navegador (sin un API Gateway intermedio), por lo que cada backend debe validar CORS por separado. | Baja | **Mitigado** | Cada servicio usa `cors({ origin: FRONTEND_ORIGIN })` con un origen exacto (nunca `*`), configurable por variable de entorno y no hardcodeado. |
 | La sesión del frontend vive en memoria de React (no en `localStorage`/`sessionStorage`). | N/A (decisión de diseño, no hallazgo) | — | Recargar la página cierra la sesión. Es una compensación razonable para un puesto de votación físico compartido por varias personas, a costa de conveniencia (no hay "recordarme"). |

@@ -44,14 +44,16 @@ export const api = {
   // Auth
   loginAdmin: (username, password) =>
     request('auth', '/login/admin', { method: 'POST', body: { username, password } }),
-  loginVoter: (cedula, password) =>
-    request('auth', '/login/voter', { method: 'POST', body: { cedula, password } }),
-  createAdminUser: (token, username, password) =>
-    request('auth', '/admin/users', { method: 'POST', token, body: { username, password } }),
+  loginVoter: (cedula, pin) =>
+    request('auth', '/login/voter', { method: 'POST', body: { cedula, pin } }),
+  createAdminUser: (token, username, password, role = 'admin') =>
+    request('auth', '/admin/users', { method: 'POST', token, body: { username, password, role } }),
   uploadVoters: (token, voters) =>
     request('auth', '/admin/voters/bulk', { method: 'POST', token, body: { voters } }),
   listVoters: (token, limit = 100, offset = 0) =>
     request('auth', `/admin/voters?limit=${limit}&offset=${offset}`, { token }),
+  resetVoterPin: (token, voterId) =>
+    request('auth', `/admin/voters/${voterId}/reset-pin`, { method: 'POST', token }),
   listAuditLog: (token, limit = 50, offset = 0) =>
     request('auth', `/admin/audit-log?limit=${limit}&offset=${offset}`, { token }),
 
@@ -70,9 +72,29 @@ export const api = {
   listActiveElections: () => request('voting', '/elections/active'),
   castVote: (token, electionId, optionId) =>
     request('voting', '/vote', { method: 'POST', token, body: { electionId, optionId } }),
+  listMyVotes: (token) => request('voting', '/my-votes', { token }),
 
-  // Analytics
+  // Analytics — resultados y métricas (fuentes de datos del builder de reportes)
   getResults: (token, electionId) => request('analytics', `/api/elections/${electionId}/results`, { token }),
+  getTimeseries: (token, electionId, interval = 'hour') =>
+    request('analytics', `/api/elections/${electionId}/metrics/timeseries?interval=${interval}`, { token }),
+  getParticipation: (token, electionId, groupBy = 'polling_place') =>
+    request('analytics', `/api/elections/${electionId}/metrics/participation?groupBy=${groupBy}`, { token }),
+  getOperationalMetrics: (token, electionId) =>
+    request('analytics', `/api/elections/${electionId}/metrics/operational`, { token }),
+  getAuditMetrics: (token, electionId) =>
+    request('analytics', `/api/elections/${electionId}/metrics/audit`, { token }),
+
+  // Analytics — tableros de reportes (builder tipo Power BI)
+  listDashboards: (token, electionId) =>
+    request('analytics', `/api/elections/${electionId}/dashboards`, { token }),
+  getDashboard: (token, dashboardId) => request('analytics', `/api/dashboards/${dashboardId}`, { token }),
+  createDashboard: (token, electionId, name, layout) =>
+    request('analytics', `/api/elections/${electionId}/dashboards`, { method: 'POST', token, body: { name, layout } }),
+  updateDashboard: (token, dashboardId, name, layout) =>
+    request('analytics', `/api/dashboards/${dashboardId}`, { method: 'PUT', token, body: { name, layout } }),
+  deleteDashboard: (token, dashboardId) =>
+    request('analytics', `/api/dashboards/${dashboardId}`, { method: 'DELETE', token }),
 
   // Scrutiny
   getCertification: (token, electionId) => request('scrutiny', `/certifications/${electionId}`, { token }),

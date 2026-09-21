@@ -5,14 +5,16 @@ CREATE TABLE IF NOT EXISTS admins (
     id            SERIAL PRIMARY KEY,
     username      VARCHAR(50)  UNIQUE NOT NULL,
     password_hash TEXT         NOT NULL,          -- bcrypt hash, nunca texto plano
+    role          VARCHAR(20)  NOT NULL DEFAULT 'admin' CHECK (role IN ('admin', 'auditor')),
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
 -- ---------------------------------------------------------------------------
--- Padrón electoral: votantes pre-cargados por un administrador. El acceso de
--- un votante NO es "contraseña secreta" en el sentido tradicional: usuario y
--- contraseña son ambos la cédula. Es, en esencia, una VERIFICACIÓN DE
--- IDENTIDAD contra este padrón, no una autenticación con secreto. Ver
+-- Padrón electoral: votantes pre-cargados por un administrador. El login es
+-- cédula + un PIN de acceso (columna "access_code_hash", ver migración
+-- 003_voter_access_codes.sql): el admin lo genera al cargar el padrón y lo
+-- distribuye en el puesto de votación. No hay registro de cuentas
+-- self-service; la cédula solo identifica, el PIN es el secreto real. Ver
 -- Manual de Seguridad (README) para el análisis de riesgo y los controles
 -- compensatorios (rate limiting agresivo, JWT de vida muy corta, y que el
 -- anti-doble-voto se ancle a la identidad real en vez de a un fingerprint).
@@ -24,15 +26,22 @@ CREATE TABLE IF NOT EXISTS admins (
 -- por mesa sin necesitar jamás la cédula del votante.
 -- ---------------------------------------------------------------------------
 
+-- "cedula", "polling_place" y "voting_table" se guardan CIFRADOS (AES-256-GCM,
+-- ver services/auth/src/voterCrypto.js) con una clave que solo conocen
+-- auth-service y analytics-service (VOTERS_ENCRYPTION_KEY). "full_name" es
+-- la única columna de datos del votante que queda en texto plano. Por eso
+-- son TEXT y no VARCHAR corto: el texto cifrado en base64 ocupa más que el
+-- original.
 CREATE TABLE IF NOT EXISTS voters (
-    id             SERIAL PRIMARY KEY,
-    cedula         VARCHAR(20) UNIQUE NOT NULL,
-    full_name      VARCHAR(200) NOT NULL,
-    polling_place  VARCHAR(150) NOT NULL,
-    voting_table   VARCHAR(50) NOT NULL,
-    is_active      BOOLEAN NOT NULL DEFAULT true,
-    created_by     INTEGER REFERENCES admins(id),
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                SERIAL PRIMARY KEY,
+    cedula            TEXT UNIQUE NOT NULL,
+    full_name         VARCHAR(200) NOT NULL,
+    polling_place     TEXT NOT NULL,
+    voting_table      TEXT NOT NULL,
+    is_active         BOOLEAN NOT NULL DEFAULT true,
+    access_code_hash  TEXT,                          -- bcrypt del PIN; NULL hasta que un admin lo genere
+    created_by        INTEGER REFERENCES admins(id),
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_voters_cedula ON voters(cedula);
@@ -132,6 +141,24 @@ CREATE INDEX IF NOT EXISTS idx_votes_election_id ON votes(election_id);
 CREATE INDEX IF NOT EXISTS idx_votes_option_id ON votes(option_id);
 CREATE INDEX IF NOT EXISTS idx_votes_table ON votes(election_id, voting_table);
 CREATE INDEX IF NOT EXISTS idx_polls_status_window ON elections(status, scheduled_start, scheduled_end);
+
+-- ---------------------------------------------------------------------------
+-- Tableros de reportes: builder tipo Power BI, por elección. "layout" es el
+-- arreglo de widgets (tipo, fuente de datos, posición en la grilla) que arma
+-- el admin; ver services/analytics para las fuentes de datos disponibles.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS report_dashboards (
+    id           SERIAL PRIMARY KEY,
+    election_id  INTEGER NOT NULL REFERENCES elections(id) ON DELETE CASCADE,
+    name         VARCHAR(120) NOT NULL,
+    layout       JSONB NOT NULL DEFAULT '{"widgets": []}'::jsonb,
+    created_by   INTEGER REFERENCES admins(id),
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_report_dashboards_election ON report_dashboards(election_id);
 
 -- ---------------------------------------------------------------------------
 -- Escrutinio: libro de actas append-only. Cada fila certifica el resultado
@@ -235,9 +262,21 @@ ON CONFLICT (username) DO NOTHING;
 
 -- Padrón de demostración: 5 cédulas ficticias, repartidas en 2 mesas de un
 -- mismo puesto, para que el acta de escrutinio tenga algo real que
--- consolidar entre mesas al certificar una elección de prueba.
-INSERT INTO voters (cedula, full_name, polling_place, voting_table, created_by)
-SELECT v.cedula, v.full_name, v.polling_place, v.voting_table, (SELECT id FROM admins WHERE username = 'admin')
+-- consolidar entre mesas al certificar una elección de prueba. Mismo riesgo
+-- aceptado que el admin de arriba: PIN fijo "123456", solo para demo local.
+--
+-- IMPORTANTE en una instalación NUEVA: este INSERT no puede cifrar
+-- "cedula"/"polling_place"/"voting_table" (ese SQL no conoce
+-- VOTERS_ENCRYPTION_KEY, que se genera por instalación). Quedan en texto
+-- plano hasta que se corra, una vez levantado el stack:
+--   docker compose run --rm auth-service node src/scripts/backfillVoterEncryption.js
+-- Ese script detecta cualquier valor sin cifrar (de este seed, o de datos
+-- previos a esta migración) y lo cifra en el sitio; es seguro correrlo
+-- más de una vez.
+INSERT INTO voters (cedula, full_name, polling_place, voting_table, access_code_hash, created_by)
+SELECT v.cedula, v.full_name, v.polling_place, v.voting_table,
+       '$2a$12$Ggbitu7PTzh/kWQEfrN77O6Dpx.3ZaXnIJen37XVNuLYOTSQU0Yru', -- bcrypt('123456')
+       (SELECT id FROM admins WHERE username = 'admin')
 FROM (VALUES
     ('1000000001', 'Votante Demo Uno',     'Puesto Central', 'Mesa 1'),
     ('1000000002', 'Votante Demo Dos',     'Puesto Central', 'Mesa 1'),

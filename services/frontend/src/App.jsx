@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import LoginScreen from './pages/LoginScreen.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
+import AuditorDashboard from './pages/AuditorDashboard.jsx';
 import VoterDashboard from './pages/VoterDashboard.jsx';
 
 // Sesión guardada SOLO en memoria (estado de React), nunca en localStorage:
@@ -16,6 +17,10 @@ export default function App() {
 
   if (session.role === 'admin') {
     return <AdminDashboard session={session} onLogout={() => setSession(null)} />;
+  }
+
+  if (session.role === 'auditor') {
+    return <AuditorDashboard session={session} onLogout={() => setSession(null)} />;
   }
 
   return <VoterDashboard session={session} onLogout={() => setSession(null)} />;

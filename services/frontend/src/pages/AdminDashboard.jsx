@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import ReportsTab from './ReportsTab.jsx';
 
 const TABS = [
   { id: 'overview', label: 'Resumen' },
   { id: 'templates', label: 'Plantillas' },
   { id: 'elections', label: 'Elecciones' },
   { id: 'results', label: 'Resultados' },
+  { id: 'reports', label: 'Reportes' },
   { id: 'scrutiny', label: 'Escrutinio' },
   { id: 'users', label: 'Usuarios' },
   { id: 'voters', label: 'Padrón' },
@@ -38,6 +40,7 @@ export default function AdminDashboard({ session, onLogout }) {
         {tab === 'templates' && <TemplatesTab session={session} />}
         {tab === 'elections' && <ElectionsTab session={session} />}
         {tab === 'results' && <ResultsTab session={session} />}
+        {tab === 'reports' && <ReportsTab session={session} />}
         {tab === 'scrutiny' && <ScrutinyTab session={session} />}
         {tab === 'users' && <UsersTab session={session} />}
         {tab === 'voters' && <VotersTab session={session} />}
@@ -406,7 +409,7 @@ function ElectionsTab({ session }) {
 
 /* ============================================================ Resultados */
 
-function ResultsTab({ session }) {
+export function ResultsTab({ session }) {
   const [elections, setElections] = useState([]);
   const [electionId, setElectionId] = useState('');
   const [result, setResult] = useState(null);
@@ -462,7 +465,7 @@ function ResultsTab({ session }) {
               <span><span className="live-dot" />En vivo</span>
             )}
 
-            {result.certified && (
+            {result.certified && session.role === 'admin' && (
               <button
                 className="btn btn-gold"
                 style={{ marginLeft: '0.75rem' }}
@@ -594,6 +597,7 @@ function ScrutinyTab({ session }) {
 function UsersTab({ session }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState('admin');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -601,8 +605,8 @@ function UsersTab({ session }) {
     e.preventDefault();
     setError(''); setSuccess('');
     try {
-      await api.createAdminUser(session.token, username, password);
-      setSuccess(`Administrador "${username}" creado correctamente.`);
+      await api.createAdminUser(session.token, username, password, role);
+      setSuccess(`Usuario "${username}" (${role === 'auditor' ? 'auditor' : 'administrador'}) creado correctamente.`);
       setUsername(''); setPassword('');
     } catch (err) {
       setError(err.message);
@@ -613,8 +617,10 @@ function UsersTab({ session }) {
     <div>
       <h2 className="section-title">Usuarios administradores</h2>
       <p className="section-desc">
-        Crea otras cuentas de administrador. Úsalo para reemplazar la credencial de
-        arranque (<code>admin</code> / <code>Admin123!</code>) apenas configures el sistema.
+        Crea otras cuentas de administrador o de auditor (solo lectura: puede ver
+        resultados y reportes, nunca gestionar el sistema). Úsalo para reemplazar la
+        credencial de arranque (<code>admin</code> / <code>Admin123!</code>) apenas
+        configures el sistema.
       </p>
 
       <div className="panel">
@@ -629,7 +635,14 @@ function UsersTab({ session }) {
             <label>Contraseña (mínimo 10 caracteres)</label>
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={10} />
           </div>
-          <button className="btn btn-gold">Crear administrador</button>
+          <div className="field-dark">
+            <label>Rol</label>
+            <select value={role} onChange={(e) => setRole(e.target.value)}>
+              <option value="admin">Administrador</option>
+              <option value="auditor">Auditor (solo lectura)</option>
+            </select>
+          </div>
+          <button className="btn btn-gold">Crear usuario</button>
         </form>
       </div>
     </div>
@@ -645,6 +658,8 @@ function VotersTab({ session }) {
   const [voters, setVoters] = useState([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [newAccessCodes, setNewAccessCodes] = useState([]);
+  const [resettingId, setResettingId] = useState(null);
 
   function load() {
     api.listVoters(session.token, 100, 0).then((d) => setVoters(d.voters)).catch((e) => setError(e.message));
@@ -653,7 +668,7 @@ function VotersTab({ session }) {
 
   async function submit(e) {
     e.preventDefault();
-    setError(''); setSuccess('');
+    setError(''); setSuccess(''); setNewAccessCodes([]);
     const parsed = rows
       .split('\n')
       .map((line) => line.trim())
@@ -672,9 +687,25 @@ function VotersTab({ session }) {
     try {
       const result = await api.uploadVoters(session.token, parsed);
       setSuccess(`Padrón actualizado: ${result.inserted} nuevos, ${result.updated} actualizados.`);
+      setNewAccessCodes(result.accessCodes || []);
       load();
     } catch (err) {
       setError(err.message);
+    }
+  }
+
+  async function resetPin(voterId) {
+    if (!window.confirm('¿Generar un PIN nuevo para este votante? El PIN anterior (si tenía) dejará de funcionar.')) return;
+    setResettingId(voterId);
+    setError(''); setSuccess(''); setNewAccessCodes([]);
+    try {
+      const result = await api.resetVoterPin(session.token, voterId);
+      setNewAccessCodes([{ cedula: result.cedula, pin: result.pin }]);
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setResettingId(null);
     }
   }
 
@@ -684,7 +715,8 @@ function VotersTab({ session }) {
       <p className="section-desc">
         Carga masiva de votantes. Una fila por votante, formato <code>cedula, nombre completo, puesto de votación, mesa</code>.
         El puesto y la mesa identifican dónde está habilitado cada votante y quedan asociados a cada voto que emita, para
-        poder consolidar el escrutinio por mesa.
+        poder consolidar el escrutinio por mesa. A cada votante nuevo se le genera un PIN de acceso: es lo que usa para
+        entrar a votar (junto a su cédula), no una contraseña que él mismo elige.
       </p>
 
       <div className="panel">
@@ -699,13 +731,34 @@ function VotersTab({ session }) {
         </form>
       </div>
 
+      {newAccessCodes.length > 0 && (
+        <div className="panel access-codes-panel">
+          <h3>PIN de acceso generados</h3>
+          <p className="section-desc" style={{ marginBottom: '0.8rem' }}>
+            Se muestran solo esta vez: cópialos o impímelos ahora para entregarlos en el puesto de votación.
+            LiveMetric no vuelve a mostrar un PIN ya generado (solo puede regenerarse, invalidando el anterior).
+          </p>
+          <table className="table">
+            <thead><tr><th>Cédula</th><th>PIN</th></tr></thead>
+            <tbody>
+              {newAccessCodes.map((a) => (
+                <tr key={a.cedula}>
+                  <td className="mono">{a.cedula}</td>
+                  <td className="mono">{a.pin}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="panel">
         <h3>Padrón actual ({voters.length} mostrados)</h3>
         {voters.length === 0 ? (
           <div className="empty-state">Sin votantes cargados todavía.</div>
         ) : (
           <table className="table">
-            <thead><tr><th>Cédula</th><th>Nombre</th><th>Puesto</th><th>Mesa</th><th>Activo</th></tr></thead>
+            <thead><tr><th>Cédula</th><th>Nombre</th><th>Puesto</th><th>Mesa</th><th>Activo</th><th>PIN</th><th></th></tr></thead>
             <tbody>
               {voters.map((v) => (
                 <tr key={v.id}>
@@ -714,6 +767,12 @@ function VotersTab({ session }) {
                   <td>{v.polling_place}</td>
                   <td>{v.voting_table}</td>
                   <td>{v.is_active ? 'Sí' : 'No'}</td>
+                  <td>{v.has_pin ? 'Asignado' : 'Sin asignar'}</td>
+                  <td>
+                    <button className="btn btn-outline" disabled={resettingId === v.id} onClick={() => resetPin(v.id)}>
+                      {resettingId === v.id ? 'Generando…' : v.has_pin ? 'Regenerar PIN' : 'Generar PIN'}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -726,13 +785,24 @@ function VotersTab({ session }) {
 
 /* ============================================================ Auditoría */
 
+const AUDIT_PAGE_SIZE = 25;
+
 function AuditTab({ session }) {
   const [events, setEvents] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0); // 0-indexado
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api.listAuditLog(session.token, 100, 0).then((d) => setEvents(d.events)).catch((e) => setError(e.message));
-  }, [session.token]);
+    setLoading(true);
+    api.listAuditLog(session.token, AUDIT_PAGE_SIZE, page * AUDIT_PAGE_SIZE)
+      .then((d) => { setEvents(d.events); setTotal(d.total); })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [session.token, page]);
+
+  const totalPages = Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE));
 
   return (
     <div>
@@ -745,23 +815,39 @@ function AuditTab({ session }) {
       {error && <div className="error-banner">{error}</div>}
 
       <div className="panel">
-        {events.length === 0 ? (
+        {loading ? (
+          <div className="empty-state">Cargando…</div>
+        ) : events.length === 0 ? (
           <div className="empty-state">Sin eventos registrados.</div>
         ) : (
-          <table className="table">
-            <thead><tr><th>Evento</th><th>Actor</th><th>Referencia</th><th>IP</th><th>Fecha</th></tr></thead>
-            <tbody>
-              {events.map((e) => (
-                <tr key={e.id}>
-                  <td>{e.event_type}</td>
-                  <td>{e.actor_type}</td>
-                  <td className="mono" style={{ maxWidth: '220px' }}>{e.actor_ref}</td>
-                  <td>{e.ip_address}</td>
-                  <td>{new Date(e.created_at).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <>
+            <table className="table">
+              <thead><tr><th>Evento</th><th>Actor</th><th>Referencia</th><th>IP</th><th>Fecha</th></tr></thead>
+              <tbody>
+                {events.map((e) => (
+                  <tr key={e.id}>
+                    <td>{e.event_type}</td>
+                    <td>{e.actor_type}</td>
+                    <td className="mono" style={{ maxWidth: '220px' }}>{e.actor_ref}</td>
+                    <td>{e.ip_address}</td>
+                    <td>{new Date(e.created_at).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <div className="pagination">
+              <button className="btn btn-outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+                ← Anterior
+              </button>
+              <span className="pagination-info">
+                Página {page + 1} de {totalPages} · {total} evento{total === 1 ? '' : 's'}
+              </span>
+              <button className="btn btn-outline" disabled={page + 1 >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                Siguiente →
+              </button>
+            </div>
+          </>
         )}
       </div>
     </div>
