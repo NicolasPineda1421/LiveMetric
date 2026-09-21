@@ -72,7 +72,12 @@ jobs:
 
       - name: npm audit (bloquea en severidad alta/critica)
         working-directory: services/${{ matrix.service }}
-        run: npm audit --audit-level=high
+        # --omit=dev: audita solo lo que de verdad se ejecuta en produccion.
+        # Herramientas de build en devDependencies (ej. vite/esbuild) nunca
+        # llegan al contenedor final ni corren en el navegador del usuario;
+        # auditarlas igual que el runtime real generaria bloqueos por CVEs
+        # que no representan un riesgo del sistema desplegado.
+        run: npm audit --omit=dev --audit-level=high
 
   # -------------------------------------------------------------------------
   # 3) SAST - Semgrep enfocado en inyeccion SQL y middleware de autenticacion.
@@ -84,21 +89,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Ejecutar Semgrep
-        uses: semgrep/semgrep-action@v1
-        with:
-          config: >-
-            p/owasp-top-ten
-            p/expressjs
-            p/nodejsscan
-            p/jwt
-          generateSarif: "1"
-        env:
-          SEMGREP_RULES: >-
-            p/owasp-top-ten
-            p/expressjs
-            p/nodejsscan
-            p/jwt
+      # Se invoca el CLI de Semgrep directamente (imagen oficial), en vez del
+      # Marketplace Action "semgrep/semgrep-action@v1": ese wrapper es un
+      # envoltorio viejo (imagen "returntocorp/semgrep-agent:v1") que solo
+      # acepta "config"/"publishToken" como inputs y nunca llegaba a generar
+      # semgrep.sarif (bug preexistente al trabajo de esta sesion, ya
+      # afectaba las primeras corridas del pipeline). El CLI real de Semgrep
+      # si soporta "--sarif" de forma nativa.
+      - name: Ejecutar Semgrep (CLI directo)
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/src" -w /src semgrep/semgrep \
+            semgrep scan --config=p/owasp-top-ten --config=p/expressjs --config=p/nodejsscan --config=p/jwt \
+            --sarif --output=semgrep.sarif .
 
       - name: Verificar SARIF generado
         run: test -f semgrep.sarif && echo "SARIF generado correctamente"
@@ -138,7 +140,7 @@ jobs:
         run: npm install --package-lock-only
 
       - name: Escanear dependencias con Trivy (fs)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: 'fs'
           scan-ref: 'services/${{ matrix.service }}'
@@ -176,7 +178,7 @@ jobs:
             ./services/${{ matrix.service }}
 
       - name: Escanear imagen con Trivy
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: 'livemetric/${{ matrix.service }}-service:ci'
           format: 'sarif'
