@@ -20,6 +20,22 @@ export function adaptForWidgets(dataSource, raw) {
       };
     }
 
+    // Reutiliza la misma respuesta que "results" (ver fetchDataSource en
+    // Widget.jsx); solo cambia qué campo de esa respuesta se muestra.
+    case 'concentration': {
+      const c = raw.concentration || { hhi: 0, level: 'sin datos' };
+      const items = (raw.results || []).map((r) => ({ name: r.label, value: r.votes }));
+      const total = items.reduce((s, i) => s + i.value, 0);
+      return {
+        kpi: { label: 'Concentración de votos (HHI)', value: `${c.hhi} (${c.level})` },
+        items,
+        table: {
+          columns: ['Opción', 'Votos', '% del total'],
+          rows: items.map((i) => [i.name, i.value, total ? `${((i.value / total) * 100).toFixed(1)}%` : '—']),
+        },
+      };
+    }
+
     case 'timeseries': {
       const items = (raw.points || []).map((p) => ({
         name: new Date(p.bucket).toLocaleString(),
@@ -30,6 +46,22 @@ export function adaptForWidgets(dataSource, raw) {
         kpi: { label: `Votos (por ${raw.interval === 'day' ? 'día' : 'hora'})`, value: total },
         items,
         table: { columns: ['Momento', 'Votos'], rows: items.map((i) => [i.name, i.value]) },
+      };
+    }
+
+    // Reutiliza la misma respuesta que "timeseries" (ver fetchDataSource en
+    // Widget.jsx); solo cambia qué campo de esa respuesta se muestra. Un
+    // punto marcado aquí es una señal para revisar, no una acusación de
+    // fraude — puede ser, por ejemplo, la apertura de la elección.
+    case 'anomalies': {
+      const anomalies = raw.anomalies || [];
+      return {
+        kpi: { label: 'Picos atípicos detectados', value: anomalies.length },
+        items: anomalies.map((a) => ({ name: new Date(a.bucket).toLocaleString(), value: a.votes })),
+        table: {
+          columns: ['Momento', 'Votos', 'Desvíos estándar del promedio (z)'],
+          rows: anomalies.map((a) => [new Date(a.bucket).toLocaleString(), a.votes, a.zScore]),
+        },
       };
     }
 
@@ -69,6 +101,24 @@ export function adaptForWidgets(dataSource, raw) {
             ['Total de votos', raw.totalVotes],
             ['Votos por minuto', raw.votesPerMinute],
             ['Mesas con votos', `${raw.tablesWithVotes} / ${raw.totalTables}`],
+          ],
+        },
+      };
+    }
+
+    // Reutiliza la misma respuesta que "operational" (ver fetchDataSource en
+    // Widget.jsx); solo cambia qué campo de esa respuesta se muestra.
+    case 'participationRate': {
+      const rate = raw.participationRate ?? 0;
+      const ci = raw.participationCi95 || { low: 0, high: 0 };
+      return {
+        kpi: { label: 'Participación (IC 95%)', value: `${rate}% [${ci.low}%–${ci.high}%]` },
+        items: [],
+        table: {
+          columns: ['Métrica', 'Valor'],
+          rows: [
+            ['Tasa de participación', `${rate}%`],
+            ['Intervalo de confianza 95%', `${ci.low}% – ${ci.high}%`],
           ],
         },
       };

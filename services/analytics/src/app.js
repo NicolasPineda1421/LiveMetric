@@ -55,6 +55,68 @@ function validateOr400(req, res, message) {
   return true;
 }
 
+/* ============================================================
+ * ESTADÍSTICA — funciones puras reutilizadas por varios endpoints. Cada
+ * una recibe solo los números que necesita (nunca datos identificables
+ * de un votante) y no toca la base de datos.
+ * ============================================================ */
+
+// Índice de concentración de Herfindahl-Hirschman (escala 0-10000, igual
+// que en su uso estándar en análisis de mercado): qué tan repartidos o
+// concentrados quedan los votos entre las opciones. Umbrales adaptados de
+// los mismos que usa la literatura de concentración de mercado.
+function computeConcentration(results) {
+  const total = results.reduce((sum, r) => sum + (r.votes || 0), 0);
+  if (total === 0) return { hhi: 0, level: 'sin datos' };
+  const hhi = results.reduce((sum, r) => {
+    const share = (r.votes / total) * 100;
+    return sum + share * share;
+  }, 0);
+  const rounded = Math.round(hhi);
+  const level = rounded >= 2500 ? 'alta' : rounded >= 1500 ? 'moderada' : 'baja';
+  return { hhi: rounded, level };
+}
+
+// Intervalo de confianza de Wilson al 95% para una proporción (más robusto
+// que la aproximación normal simple para tamaños de muestra moderados o
+// proporciones cercanas a 0%/100%, que es exactamente el caso de una
+// elección con pocos votantes). Devuelve porcentajes (0-100).
+function wilsonCi95(successes, n) {
+  if (n <= 0) return { low: 0, high: 0 };
+  const z = 1.96;
+  // "p" debe quedar en [0, 1] para que la fórmula tenga sentido. En una
+  // elección real nunca hay más votos que votantes registrados, pero se
+  // acota igual por si esa invariante llegara a romperse (evita NaN por
+  // una raíz cuadrada negativa si "successes" superara a "n").
+  const p = Math.min(1, Math.max(0, successes / n));
+  const denom = 1 + (z * z) / n;
+  const center = p + (z * z) / (2 * n);
+  const margin = z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n));
+  return {
+    low: Number((Math.max(0, (center - margin) / denom) * 100).toFixed(1)),
+    high: Number((Math.min(1, (center + margin) / denom) * 100).toFixed(1)),
+  };
+}
+
+// Marca como "anómalo" un punto de la serie temporal cuyo puntaje Z
+// (desviaciones estándar respecto al promedio de la propia serie) supera
+// 2. Con menos de 4 puntos un desvío estándar no es confiable, así que no
+// se marca nada — mejor no decir nada que decir algo estadísticamente
+// vacío. Una marca aquí es una señal para revisar, no una acusación de
+// fraude: un pico legítimo (ej. apertura de la elección) también puede
+// superar el umbral.
+function detectAnomalies(points) {
+  if (points.length < 4) return [];
+  const values = points.map((p) => p.votes);
+  const mean = values.reduce((s, v) => s + v, 0) / values.length;
+  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;
+  const stdDev = Math.sqrt(variance);
+  if (stdDev === 0) return [];
+  return points
+    .map((p, i) => ({ bucket: p.bucket, votes: p.votes, zScore: Number(((values[i] - mean) / stdDev).toFixed(2)) }))
+    .filter((p) => Math.abs(p.zScore) > 2);
+}
+
 app.get('/api/elections/:id/results', [param('id').isInt({ min: 1 }).toInt()], asyncRoute('/api/elections/:id/results', async (req, res) => {
   if (!validateOr400(req, res, 'id de elección inválido')) return;
 
@@ -98,6 +160,7 @@ app.get('/api/elections/:id/results', [param('id').isInt({ min: 1 }).toInt()], a
       recordHash: cert.record_hash,
       previousHash: cert.previous_hash,
       certifiedAt: cert.certified_at,
+      concentration: computeConcentration(cert.results.overall),
     });
   }
 
@@ -127,6 +190,7 @@ app.get('/api/elections/:id/results', [param('id').isInt({ min: 1 }).toInt()], a
       logo: r.logo,
       votes: r.votes,
     })),
+    concentration: computeConcentration(result.rows),
   });
 }));
 
@@ -153,10 +217,12 @@ app.get(
         ORDER BY bucket ASC`,
       [req.params.id, interval]
     );
+    const points = result.rows.map((r) => ({ bucket: r.bucket, votes: r.votes }));
     return res.status(200).json({
       electionId: req.params.id,
       interval,
-      points: result.rows.map((r) => ({ bucket: r.bucket, votes: r.votes })),
+      points,
+      anomalies: detectAnomalies(points),
     });
   })
 );
@@ -237,6 +303,7 @@ app.get(
           (SELECT COUNT(*) FROM votes WHERE election_id = $1)::int AS total_votes,
           (SELECT COUNT(DISTINCT voting_table) FROM votes WHERE election_id = $1)::int AS tables_with_votes,
           (SELECT COUNT(DISTINCT voting_table) FROM voters WHERE is_active = true)::int AS total_tables,
+          (SELECT COUNT(*) FROM voters WHERE is_active = true)::int AS total_registered,
           GREATEST(
             EXTRACT(EPOCH FROM (LEAST(now(), $3::timestamptz) - $2::timestamptz)) / 60.0,
             1
@@ -254,6 +321,14 @@ app.get(
       votesPerMinute: Number((m.total_votes / m.elapsed_minutes).toFixed(2)),
       tablesWithVotes: m.tables_with_votes,
       totalTables: m.total_tables,
+      // Acotado a 100%: una tasa por encima de eso solo puede significar
+      // que hay más votos que votantes activos registrados (una
+      // inconsistencia de datos, no un valor real de participación que
+      // tenga sentido mostrar tal cual).
+      participationRate: m.total_registered
+        ? Number((Math.min(1, m.total_votes / m.total_registered) * 100).toFixed(1))
+        : 0,
+      participationCi95: wilsonCi95(m.total_votes, m.total_registered),
     });
   })
 );

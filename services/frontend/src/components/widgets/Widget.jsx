@@ -10,12 +10,19 @@ import TableWidget from './TableWidget.jsx';
 function fetchDataSource(token, electionId, dataSource, params = {}) {
   switch (dataSource) {
     case 'results':
+    // "concentration" (HHI) viaja en la misma respuesta que "results", solo
+    // se muestra distinto (ver adaptForWidgets).
+    case 'concentration':
       return api.getResults(token, electionId);
     case 'timeseries':
+    // "anomalies" viaja en la misma respuesta que "timeseries".
+    case 'anomalies':
       return api.getTimeseries(token, electionId, params.interval);
     case 'participation':
       return api.getParticipation(token, electionId, params.groupBy);
     case 'operational':
+    // "participationRate" viaja en la misma respuesta que "operational".
+    case 'participationRate':
       return api.getOperationalMetrics(token, electionId);
     case 'audit':
       return api.getAuditMetrics(token, electionId);

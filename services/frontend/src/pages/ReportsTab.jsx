@@ -5,11 +5,11 @@ import { exportDashboardToPdf, buildIntro, slugify } from '../utils/exportDashbo
 import { WIDGET_TYPE_LABELS, DATA_SOURCE_LABELS } from '../components/widgets/labels.js';
 
 const WIDGET_DATA_SOURCES = {
-  kpi: ['results', 'timeseries', 'participation', 'operational', 'audit'],
+  kpi: ['results', 'timeseries', 'participation', 'operational', 'audit', 'concentration', 'participationRate', 'anomalies'],
   bar: ['results', 'participation'],
   line: ['timeseries'],
   pie: ['results', 'participation'],
-  table: ['results', 'timeseries', 'participation', 'operational', 'audit'],
+  table: ['results', 'timeseries', 'participation', 'operational', 'audit', 'concentration', 'anomalies'],
 };
 
 const DEFAULT_GRID = {
@@ -312,7 +312,7 @@ function WidgetForm({ type, initial, onCancel, onSubmit }) {
   function submit(e) {
     e.preventDefault();
     const params = {};
-    if (dataSource === 'timeseries') params.interval = interval;
+    if (dataSource === 'timeseries' || dataSource === 'anomalies') params.interval = interval;
     if (dataSource === 'participation') params.groupBy = groupBy;
     onSubmit({ title: title.trim() || DATA_SOURCE_LABELS[dataSource], dataSource, params });
   }
@@ -329,7 +329,7 @@ function WidgetForm({ type, initial, onCancel, onSubmit }) {
           {sources.map((s) => <option key={s} value={s}>{DATA_SOURCE_LABELS[s]}</option>)}
         </select>
       </div>
-      {dataSource === 'timeseries' && (
+      {(dataSource === 'timeseries' || dataSource === 'anomalies') && (
         <div className="field-dark">
           <label>Agrupar por</label>
           <select value={interval} onChange={(e) => setInterval_(e.target.value)}>

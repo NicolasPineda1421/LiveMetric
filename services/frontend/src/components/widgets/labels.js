@@ -15,4 +15,7 @@ export const DATA_SOURCE_LABELS = {
   participation: 'Participación por puesto/mesa',
   operational: 'Operación del sistema',
   audit: 'Auditoría',
+  concentration: 'Concentración de votos (HHI)',
+  participationRate: 'Participación con intervalo de confianza',
+  anomalies: 'Anomalías en la evolución de votos',
 };

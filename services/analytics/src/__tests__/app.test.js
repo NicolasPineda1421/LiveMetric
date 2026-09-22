@@ -232,6 +232,93 @@ describe('GET /api/elections/:id/metrics/operational', () => {
   });
 });
 
+describe('Estadística: concentración (HHI), participación con IC 95% y anomalías', () => {
+  // Timestamps historicos fijos (no relativos a "now()") para que los
+  // buckets horarios de date_trunc caigan siempre en el mismo lugar, sin
+  // depender de en qué segundo/minuto real corra la prueba.
+  const crypto = require('crypto');
+  function fakeHash() {
+    return crypto.randomBytes(32).toString('hex');
+  }
+
+  beforeAll(async () => {
+    // 5 votos para la opción A repartidos en 5 horas distintas (1 por
+    // bucket) + 10 votos para la opción B, todos en una sexta hora: un pico
+    // deliberado para que el detector de anomalías tenga algo que marcar,
+    // y una distribución de votos desigual (5 vs 10 de 15) para que el HHI
+    // dé un valor de concentración "alta" verificable a mano.
+    const rows = [];
+    for (let h = 8; h <= 12; h++) {
+      rows.push([electionId, optionIds[0], fakeHash(), 'Puesto Central', 'Mesa 1', `2020-01-01 ${h}:00:00+00`]);
+    }
+    for (let i = 0; i < 10; i++) {
+      rows.push([electionId, optionIds[1], fakeHash(), 'Puesto Central', 'Mesa 1', '2020-01-01 13:00:00+00']);
+    }
+    for (const row of rows) {
+      await pool.query(
+        `INSERT INTO votes (election_id, option_id, voter_id_hash, polling_place, voting_table, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        row
+      );
+    }
+    // No hace falta limpieza propia: "votes.election_id" referencia a
+    // "elections" con ON DELETE CASCADE, así que el afterAll de arriba (que
+    // borra la elección de prueba) se lleva estos votos con ella.
+  });
+
+  it('/results calcula el HHI de concentración (5 votos a A, 10 a B → alta concentración)', async () => {
+    const res = await request(app)
+      .get(`/api/elections/${electionId}/results`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    const totalVotes = res.body.results.reduce((s, r) => s + r.votes, 0);
+    expect(totalVotes).toBe(15);
+    // Reparto real: 33.33%^2 + 66.67%^2 ≈ 5556.
+    expect(res.body.concentration.hhi).toBeGreaterThan(5000);
+    expect(res.body.concentration.hhi).toBeLessThan(6000);
+    expect(res.body.concentration.level).toBe('alta');
+  });
+
+  it('/metrics/operational calcula la tasa de participación con un intervalo de confianza 95% coherente', async () => {
+    const res = await request(app)
+      .get(`/api/elections/${electionId}/metrics/operational`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.totalVotes).toBe(15);
+    expect(res.body.participationRate).toBeGreaterThan(0);
+    expect(res.body.participationCi95.low).toBeGreaterThanOrEqual(0);
+    expect(res.body.participationCi95.high).toBeLessThanOrEqual(100);
+    // El intervalo siempre debe contener a la tasa puntual, y el límite
+    // inferior nunca puede superar al superior.
+    expect(res.body.participationCi95.low).toBeLessThanOrEqual(res.body.participationRate);
+    expect(res.body.participationCi95.high).toBeGreaterThanOrEqual(res.body.participationRate);
+  });
+
+  it('/metrics/timeseries marca como anomalía el bucket con el pico de 10 votos', async () => {
+    const res = await request(app)
+      .get(`/api/elections/${electionId}/metrics/timeseries?interval=hour`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.points).toHaveLength(6);
+    expect(Array.isArray(res.body.anomalies)).toBe(true);
+    expect(res.body.anomalies).toHaveLength(1);
+    expect(res.body.anomalies[0].votes).toBe(10);
+    expect(Math.abs(res.body.anomalies[0].zScore)).toBeGreaterThan(2);
+  });
+
+  it('con menos de 4 buckets no marca anomalías, aunque haya un valor mucho más alto que el resto', async () => {
+    const res = await request(app)
+      .get(`/api/elections/${electionId}/metrics/timeseries?interval=day`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    // Agrupado por día, los 15 votos caen en un único bucket (mismo día
+    // histórico) — con 1 solo punto no hay suficiente muestra para un
+    // z-score confiable, así que debe devolver un arreglo vacío.
+    expect(res.body.points.length).toBeLessThan(4);
+    expect(res.body.anomalies).toEqual([]);
+  });
+});
+
 describe('GET /api/elections/:id/metrics/audit', () => {
   it('devuelve un arreglo de eventos (vacío para una elección recién creada)', async () => {
     const res = await request(app)
