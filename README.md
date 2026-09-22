@@ -217,6 +217,56 @@ docker compose logs -f scheduler-worker   # el worker no expone puerto; se verif
 
 PostgreSQL **no** expone ningún puerto al host (por diseño); solo es accesible desde dentro de la red `db-net` por los microservicios y el worker.
 
+### Windows como servidor central (WSL2 + Docker Desktop)
+
+Para dejar LiveMetric corriendo de forma persistente en una PC con Windows
+(accesible desde el resto de la red local), el camino recomendado es
+**Docker Desktop con el backend WSL2**: los contenedores son Linux y
+corren exactamente igual sin importar el sistema operativo anfitrión, y
+`scripts/start.sh` **no necesita ningún cambio** — se ejecuta tal cual, en
+un entorno bash real.
+
+1. Instalar WSL2 (una sola vez, requiere reiniciar):
+
+   ```powershell
+   wsl --install
+   ```
+
+2. Instalar [Docker Desktop para Windows](https://www.docker.com/products/docker-desktop/)
+   y, en **Settings → General**, confirmar que "Use the WSL 2 based engine"
+   esté activo. En **Settings → Resources → WSL Integration**, activar la
+   integración con la distribución que instaló `wsl --install` (por
+   defecto, Ubuntu).
+3. Abrir una terminal de **WSL** (no PowerShell ni CMD) y clonar el
+   repositorio **dentro del sistema de archivos de Linux** (no en
+   `/mnt/c/...`, que es mucho más lento y puede dar problemas de permisos
+   con los volúmenes de Docker):
+
+   ```bash
+   cd ~
+   git clone <URL_DEL_REPOSITORIO>
+   cd LiveMetric
+   ```
+
+4. Seguir la puesta en marcha normal de la sección anterior (`.env` +
+   `./scripts/start.sh`), exactamente igual que en Linux/macOS.
+
+**Para que otros equipos de la red lo vean:** Windows Firewall bloquea por
+defecto las conexiones entrantes a puertos nuevos. La primera vez que se
+levanta el stack, aceptar el aviso de firewall de Docker Desktop, o
+agregar manualmente una regla de entrada para el puerto **3000/TCP**
+(Panel de control → Firewall de Windows Defender → Configuración
+avanzada → Reglas de entrada → Nueva regla → Puerto → TCP → 3000).
+Verificar la IP de la PC Windows en esa misma red con `ipconfig` (buscar
+"Dirección IPv4") y compartirla: `http://<esa-ip>:3000`.
+
+**Para que sobreviva un reinicio de la PC:** en Docker Desktop →
+**Settings → General**, activar "Start Docker Desktop when you log in".
+Todos los servicios ya tienen `restart: unless-stopped` (ver
+`docker-compose.yml`), así que al volver a estar disponible el motor de
+Docker, el stack completo se levanta solo — `start.sh` solo hace falta
+correrlo la primera vez, o después de un cambio de código.
+
 ### Opción alternativa — Terraform (Infraestructura como Código)
 
 ```bash
