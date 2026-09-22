@@ -217,14 +217,44 @@ docker compose logs -f scheduler-worker   # el worker no expone puerto; se verif
 
 PostgreSQL **no** expone ningún puerto al host (por diseño); solo es accesible desde dentro de la red `db-net` por los microservicios y el worker.
 
-### Windows como servidor central (WSL2 + Docker Desktop)
+### Windows como servidor central
 
 Para dejar LiveMetric corriendo de forma persistente en una PC con Windows
-(accesible desde el resto de la red local), el camino recomendado es
-**Docker Desktop con el backend WSL2**: los contenedores son Linux y
-corren exactamente igual sin importar el sistema operativo anfitrión, y
-`scripts/start.sh` **no necesita ningún cambio** — se ejecuta tal cual, en
-un entorno bash real.
+(accesible desde el resto de la red local), el requisito común a ambos
+caminos es [Docker Desktop para Windows](https://www.docker.com/products/docker-desktop/):
+los contenedores son Linux y corren exactamente igual sin importar el
+sistema operativo anfitrión.
+
+#### Opción A — CMD puro, sin WSL2 (recomendado si no querés instalar WSL2)
+
+`scripts\start.bat` y `scripts\pipeline-local.bat` son el equivalente
+nativo de Windows de `start.sh`/`pipeline-local.sh`: mismo comportamiento
+(preparar el `.env`, correr el análisis de seguridad completo mostrando
+el detalle en pantalla y, solo si todo pasa, levantar el stack), pero
+escritos en batch para correr directo en un `cmd.exe` normal, sin
+necesitar bash ni WSL2.
+
+1. Instalar Docker Desktop y, en **Settings → General**, activar el motor
+   que prefieras (WSL2 o Hyper-V — para este camino no hace falta usar
+   una terminal WSL, solo que el motor de Docker esté corriendo).
+2. Instalar [Gpg4win](https://gpg4win.org/) si vas a descifrar un
+   `.env.gpg` (el `gpg` de Gpg4win queda disponible desde CMD).
+3. Clonar el repositorio y, desde una terminal **CMD** normal en la raíz
+   del repo:
+
+   ```bat
+   scripts\start.bat
+   ```
+
+**Nota:** `pipeline-local.bat` corre `npm audit`/`npm test` directo en
+Windows (no dentro de un contenedor), así que necesitás Node.js instalado
+y en el PATH además de Docker Desktop.
+
+#### Opción B — WSL2 + Docker Desktop (si preferís bash)
+
+Si preferís usar los scripts `.sh` originales tal cual (bash real, no un
+puerto a batch), Docker Desktop con el backend WSL2 permite correrlos sin
+ningún cambio:
 
 1. Instalar WSL2 (una sola vez, requiere reiniciar):
 
@@ -232,11 +262,10 @@ un entorno bash real.
    wsl --install
    ```
 
-2. Instalar [Docker Desktop para Windows](https://www.docker.com/products/docker-desktop/)
-   y, en **Settings → General**, confirmar que "Use the WSL 2 based engine"
-   esté activo. En **Settings → Resources → WSL Integration**, activar la
-   integración con la distribución que instaló `wsl --install` (por
-   defecto, Ubuntu).
+2. En Docker Desktop, **Settings → General**, confirmar que "Use the
+   WSL 2 based engine" esté activo. En **Settings → Resources → WSL
+   Integration**, activar la integración con la distribución que instaló
+   `wsl --install` (por defecto, Ubuntu).
 3. Abrir una terminal de **WSL** (no PowerShell ni CMD) y clonar el
    repositorio **dentro del sistema de archivos de Linux** (no en
    `/mnt/c/...`, que es mucho más lento y puede dar problemas de permisos
@@ -251,6 +280,8 @@ un entorno bash real.
 4. Seguir la puesta en marcha normal de la sección anterior (`.env` +
    `./scripts/start.sh`), exactamente igual que en Linux/macOS.
 
+#### Para ambas opciones
+
 **Para que otros equipos de la red lo vean:** Windows Firewall bloquea por
 defecto las conexiones entrantes a puertos nuevos. La primera vez que se
 levanta el stack, aceptar el aviso de firewall de Docker Desktop, o
@@ -264,8 +295,8 @@ Verificar la IP de la PC Windows en esa misma red con `ipconfig` (buscar
 **Settings → General**, activar "Start Docker Desktop when you log in".
 Todos los servicios ya tienen `restart: unless-stopped` (ver
 `docker-compose.yml`), así que al volver a estar disponible el motor de
-Docker, el stack completo se levanta solo — `start.sh` solo hace falta
-correrlo la primera vez, o después de un cambio de código.
+Docker, el stack completo se levanta solo — `start.bat`/`start.sh` solo
+hace falta correrlo la primera vez, o después de un cambio de código.
 
 ### Opción alternativa — Terraform (Infraestructura como Código)
 
