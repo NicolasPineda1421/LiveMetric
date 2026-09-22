@@ -1,0 +1,20 @@
+# Los scripts de shell terminan DENTRO de contenedores Linux (o corren via
+# bash/WSL2); si Windows los convierte a CRLF al clonar (comportamiento por
+# defecto de Git en Windows si no existe este archivo), el shebang
+# "#!/bin/sh\r" deja de ser un interprete valido y el contenedor falla con
+# "exec ...: no such file or directory". Se fuerza LF sin importar el SO
+# donde se clone o el core.autocrlf de quien clona.
+*.sh              text eol=lf
+scripts/git-hooks/* text eol=lf
+
+# Los scripts .bat/.cmd son para cmd.exe de Windows: al reves, se fuerza
+# CRLF (el formato nativo que espera cmd.exe) sin importar el core.autocrlf
+# de quien clona.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binarios: nunca deben pasar por conversion de fin de linea.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gpg  binary
