@@ -38,16 +38,25 @@ LOG_DIR="$(mktemp -d /tmp/livemetric-pipeline-local.XXXXXX)"
 
 declare -A RESULT
 
+# Colores ANSI: azul para procesos en curso, verde para lo que aprueba,
+# rojo para lo que falla. Si la salida no va a una terminal (por ejemplo,
+# redirigida a un archivo) se dejan vacios para no ensuciar el log con
+# codigos de escape.
+if [ -t 1 ]; then
+  BLUE='\033[0;34m'; GREEN='\033[0;32m'; RED='\033[0;31m'; BOLD='\033[1m'; NC='\033[0m'
+else
+  BLUE=''; GREEN=''; RED=''; BOLD=''; NC=''
+fi
+
 section() {
-  echo ""
-  echo "── $1 ────────────────────────────────────────────────"
+  printf '\n%b── %s ────────────────────────────────────────────────%b\n' "${BLUE}${BOLD}" "$1" "$NC"
 }
 
 result_line() {
   if [ "$2" = "success" ]; then
-    echo "   ✓ $1"
+    printf '   %b✓ %s%b\n' "$GREEN" "$1" "$NC"
   else
-    echo "   ✗ $1"
+    printf '   %b✗ %s%b\n' "$RED" "$1" "$NC"
   fi
 }
 
@@ -56,7 +65,7 @@ if ! command -v docker &> /dev/null; then
   exit 1
 fi
 
-echo "🚀 Corriendo el pipeline DevSecOps localmente (copia de cada log en $LOG_DIR)"
+printf '%b🚀 Corriendo el pipeline DevSecOps localmente (copia de cada log en %s)%b\n' "$BLUE" "$LOG_DIR" "$NC"
 
 # 1. Gitleaks -----------------------------------------------------------
 section "🔑 Secret Scanning (Gitleaks)"
@@ -174,9 +183,9 @@ echo "   completo). Esos tres se validan solo en GitHub Actions."
 # Resumen final -----------------------------------------------------------
 check() {
   case "$1" in
-    success) echo "✅ $2" ;;
-    missing) echo "⚪ $2 (no se corrio)" ;;
-    *)       echo "❌ $2" ;;
+    success) printf '%b✅ %s%b\n' "$GREEN" "$2" "$NC" ;;
+    missing) printf '⚪ %s (no se corrio)\n' "$2" ;;
+    *)       printf '%b❌ %s%b\n' "$RED" "$2" "$NC" ;;
   esac
 }
 
@@ -195,9 +204,9 @@ echo ""
 if [[ "${RESULT[gitleaks]:-}" == "success" && "${RESULT[semgrep]:-}" == "success" && \
       "${RESULT[npm_audit]:-}" == "success" && "${RESULT[trivy_fs]:-}" == "success" && \
       "${RESULT[container]:-}" == "success" && "${RESULT[tests]:-}" != "failure" ]]; then
-  echo "✅ Todo en verde localmente. Es seguro hacer push."
+  printf '%b✅ Todo en verde localmente. Es seguro hacer push.%b\n' "$GREEN" "$NC"
   exit 0
 else
-  echo "❌ Hay controles en rojo. Revisa el detalle de arriba (o los logs en $LOG_DIR) antes de hacer push."
+  printf '%b❌ Hay controles en rojo. Revisa el detalle de arriba (o los logs en %s) antes de hacer push.%b\n' "$RED" "$LOG_DIR" "$NC"
   exit 1
 fi
