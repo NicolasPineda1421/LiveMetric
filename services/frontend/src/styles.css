@@ -276,15 +276,6 @@ input, select, textarea {
   margin-bottom: 1rem;
 }
 
-.default-creds {
-  margin-top: 1.4rem;
-  padding-top: 1rem;
-  border-top: 1px dashed var(--color-paper-dim);
-  font-size: 0.76rem;
-  color: #8a806a;
-}
-.default-creds code { background: #ece4d1; padding: 0.1rem 0.35rem; border-radius: 2px; }
-
 /* ---------- Layout de dashboards ---------- */
 
 .dashboard { flex: 1; display: flex; flex-direction: column; }

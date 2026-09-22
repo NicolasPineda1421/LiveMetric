@@ -77,7 +77,7 @@ Ningún secreto (`JWT_SECRET`, contraseñas de BD, `VOTER_ID_SALT`, `INTERNAL_SE
 
 ```
 0) [SETUP] Admin abre el padrón/plantilla/usuario de arranque (seed en init.sql)
-   → usuario admin: admin / Admin123!  → cambiar de inmediato (ver sección 3)
+   → usuario admin de arranque (credencial fija, ver db/init.sql)  → cambiar de inmediato (ver sección 3)
 
 1) Admin hace login       → POST /login/admin (Auth)         → JWT rol "admin", ~1h
    Votante hace login     → POST /login/voter (Auth)         → JWT rol "voter", ~10min
@@ -198,12 +198,12 @@ docker compose run --rm auth-service node src/scripts/backfillVoterEncryption.js
 
 | Elemento | Valor |
 |---|---|
-| Usuario administrador | `admin` / `Admin123!` |
-| Padrón de votantes demo | cédulas `1000000001` a `1000000005`, PIN `123456`, repartidas en "Puesto Central" (Mesa 1 y Mesa 2) y "Puesto Norte" (Mesa 1) |
+| Usuario administrador de arranque | credencial fija definida en `db/init.sql` (ver ese archivo) |
+| Padrón de votantes demo | cédulas `1000000001` a `1000000005`, repartidas en "Puesto Central" (Mesa 1 y Mesa 2) y "Puesto Norte" (Mesa 1); PIN de acceso definido en `db/init.sql`/`db/migrations/003_voter_access_codes.sql` |
 | Plantilla genérica de ejemplo | "Elección de ejemplo" (3 opciones de texto libre) |
 | Plantilla presidencial de ejemplo | "Elección Presidencial de Ejemplo" (3 candidatos numerados, sin foto precargada) |
 
-> ⚠️ La credencial `admin` / `Admin123!` es pública a propósito (está en este README y en el código fuente). Es solo para el primer uso: entra, ve a la pestaña **Usuarios** del panel y crea tu propio administrador antes de usar el sistema con datos reales. Ver el análisis de riesgo completo en la sección 6.
+> ⚠️ El seed crea una cuenta admin y votantes de demostración con credenciales fijas y conocidas (ver `db/init.sql`), solo para el primer uso: entra, ve a la pestaña **Usuarios** del panel y crea tu propio administrador antes de usar el sistema con datos reales. Ver el análisis de riesgo completo en la sección 6.
 
 Verificación rápida por línea de comandos (opcional, el frontend ya hace esto internamente):
 
@@ -234,11 +234,11 @@ terraform destroy -var-file="terraform.tfvars"
 
 ### Recorrido guiado por la interfaz (recomendado para la sustentación)
 
-1. Entra a **http://localhost:3000** → pestaña "Administrador" → `admin` / `Admin123!`.
+1. Entra a **http://localhost:3000** → pestaña "Administrador" → usuario `admin` con la credencial de arranque (ver `db/init.sql`).
 2. En **Usuarios**, crea tu propio administrador (contraseña ≥10 caracteres) — así dejas de depender de la credencial de arranque.
 3. En **Plantillas**, usa "Elección Presidencial de Ejemplo" ya cargada, o crea una nueva de tipo "Elección presidencial" agregando candidatos con número, nombre y logo (una foto).
 4. En **Elecciones**, instancia una elección con una ventana corta (2–3 minutos) para ver el ciclo completo rápido.
-5. Abre una segunda pestaña/ventana en modo incógnito → pestaña "Votante" → cédula `1000000001`, PIN `123456` (Puesto Central, Mesa 1) → vota en la elección activa. Repite en una tercera ventana con la cédula `1000000003` (mismo PIN de demo) (Puesto Central, Mesa 2) para tener votos en más de una mesa.
+5. Abre una segunda pestaña/ventana en modo incógnito → pestaña "Votante" → cédula `1000000001` con su PIN de demo (ver `db/init.sql`/`db/migrations/003_voter_access_codes.sql`) (Puesto Central, Mesa 1) → vota en la elección activa. Repite en una tercera ventana con la cédula `1000000003` (mismo PIN de demo) (Puesto Central, Mesa 2) para tener votos en más de una mesa.
 6. De vuelta en el panel de admin, en **Elecciones** puedes pulsar "Detener" en cualquier momento para cerrar la elección antes de su hora programada — no hace falta esperar a `scheduledEnd`.
 7. En **Resultados**: mientras la elección sigue activa verás "En vivo"; tras cerrarla (por tiempo o manualmente), el mismo panel mostrará "✓ Certificado", el candidato/opción **ganador**, y el desglose del acta **por mesa de votación**.
 8. En **Escrutinio**, pulsa "Verificar cadena de escrutinio" para confirmar que ningún acta fue alterada.
@@ -247,16 +247,17 @@ terraform destroy -var-file="terraform.tfvars"
 ### Flujo por línea de comandos (equivalente, para pruebas automatizadas)
 
 ```bash
-# Login de admin
+# Login de admin (reemplaza <password> por la credencial de arranque de db/init.sql)
 curl -X POST http://127.0.0.1:3001/login/admin \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"Admin123!"}'
+  -d '{"username":"admin","password":"<password>"}'
 # → { "token": "...", "role": "admin" }
 
-# Login de votante (cédula + PIN de acceso asignado por el admin)
+# Login de votante (cédula + PIN de acceso asignado por el admin; reemplaza
+# <pin> por el PIN de demo de db/init.sql/db/migrations/003_voter_access_codes.sql)
 curl -X POST http://127.0.0.1:3001/login/voter \
   -H "Content-Type: application/json" \
-  -d '{"cedula":"1000000001","pin":"123456"}'
+  -d '{"cedula":"1000000001","pin":"<pin>"}'
 # → { "token": "...", "role": "voter" }
 
 # Crear una elección a partir de la plantilla de ejemplo (id=1)
@@ -433,6 +434,6 @@ Estas pruebas verifican que la lógica de negocio nueva es correcta, además de 
 | Hallazgo | Severidad | Estado | Justificación / control compensatorio |
 |---|---|---|---|
 | ~~El login de votante usaba la cédula como usuario y contraseña~~ (corregido). Ahora es cédula + un PIN numérico de 6 dígitos, generado por el admin al cargar el padrón (`access_code_hash`, bcrypt) y nunca derivable de la cédula. | — | **Corregido** (antes: Alta, aceptada con controles compensatorios) | Sigue sin haber registro de cuentas self-service (el admin es la única fuente de identidad), pero ahora sí hay un secreto real que el votante debe conocer aparte de su cédula. Residual: el PIN debe distribuirse fuera de banda (impreso/entregado en el puesto de votación) — un paso logístico que antes no existía. El PIN generado se muestra en texto plano una única vez en el panel de admin y nunca vuelve a mostrarse (solo puede regenerarse, invalidando el anterior); los controles previos (rate limiting, JWT de vida corta, anti-doble-voto por `voter_id_hash`, auditoría) se mantienen como defensa en profundidad. |
-| El sistema arranca con un usuario administrador (`admin` / `Admin123!`) y un padrón de demostración con credenciales conocidas públicamente (este mismo README). | Media | **Aceptado, mitigado por diseño** | Es un valor por defecto documentado, no un secreto filtrado. Existe una ruta clara para reemplazarlo (`POST /admin/users` vía la pestaña "Usuarios") y se advierte explícitamente en la pantalla de login y en la sección 3. Nunca debe usarse así en un entorno con datos reales. |
+| El sistema arranca con un usuario administrador (`admin`) y un padrón de demostración con credenciales fijas, definidas en `db/init.sql`. | Media | **Aceptado, mitigado por diseño** | Es un valor por defecto necesario para el primer uso (sin él, un despliegue nuevo no tendría forma de entrar), no un secreto filtrado accidentalmente. Ya no se muestra en la pantalla de login ni se documenta en este README —solo queda en el código fuente, para reducir su visibilidad casual— pero sigue siendo un valor fijo y predecible para quien tenga acceso al repositorio. Existe una ruta clara para reemplazarlo (`POST /admin/users` vía la pestaña "Usuarios", ver sección 3) y nunca debe usarse así en un entorno con datos reales. |
 | El frontend habla directo con cada microservicio desde el navegador (sin un API Gateway intermedio), por lo que cada backend debe validar CORS por separado. | Baja | **Mitigado** | Cada servicio usa `cors({ origin: FRONTEND_ORIGIN })` con un origen exacto (nunca `*`), configurable por variable de entorno y no hardcodeado. |
 | La sesión del frontend vive en memoria de React (no en `localStorage`/`sessionStorage`). | N/A (decisión de diseño, no hallazgo) | — | Recargar la página cierra la sesión. Es una compensación razonable para un puesto de votación físico compartido por varias personas, a costa de conveniencia (no hay "recordarme"). |

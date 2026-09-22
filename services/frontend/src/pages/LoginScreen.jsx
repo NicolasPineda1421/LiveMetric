@@ -87,11 +87,6 @@ export default function LoginScreen({ onLogin }) {
                 <input id="admin-pass" type="password" value={adminPass} onChange={(e) => setAdminPass(e.target.value)} required />
               </div>
               <button className="btn btn-primary" disabled={loading}>{loading ? 'Ingresando…' : 'Ingresar como administrador'}</button>
-
-              <div className="default-creds">
-                Credencial de arranque para la primera vez: usuario <code>admin</code>, contraseña <code>Admin123!</code>.
-                Cámbiala apenas entres (pestaña "Usuarios" en el panel).
-              </div>
             </form>
           ) : (
             <form onSubmit={submitVoter}>
@@ -105,10 +100,6 @@ export default function LoginScreen({ onLogin }) {
                 <div className="field-hint">El PIN te lo entrega el encargado de tu puesto de votación.</div>
               </div>
               <button className="btn btn-primary" disabled={loading}>{loading ? 'Verificando…' : 'Ingresar a votar'}</button>
-
-              <div className="default-creds">
-                Cédulas de demostración precargadas: <code>1000000001</code> a <code>1000000005</code>, PIN <code>123456</code>.
-              </div>
             </form>
           )}
         </div>

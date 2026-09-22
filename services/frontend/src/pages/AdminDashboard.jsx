@@ -619,8 +619,7 @@ function UsersTab({ session }) {
       <p className="section-desc">
         Crea otras cuentas de administrador o de auditor (solo lectura: puede ver
         resultados y reportes, nunca gestionar el sistema). Úsalo para reemplazar la
-        credencial de arranque (<code>admin</code> / <code>Admin123!</code>) apenas
-        configures el sistema.
+        credencial de arranque apenas configures el sistema.
       </p>
 
       <div className="panel">
