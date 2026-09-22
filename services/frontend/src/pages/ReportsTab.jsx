@@ -21,7 +21,20 @@ const DEFAULT_GRID = {
 };
 
 function newWidgetId() {
-  return crypto.randomUUID();
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // "crypto.randomUUID" exige un contexto seguro (HTTPS o localhost); esta
+  // app tambien se sirve por HTTP plano en la red local (ver README,
+  // sección "red local"), donde el navegador ni siquiera expone esa
+  // función — ahí este id nunca es un secreto, solo la clave de un widget
+  // dentro del layout del tablero, así que "crypto.getRandomValues" (que sí
+  // funciona en cualquier contexto, seguro o no) alcanza de sobra.
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  return `w-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 const GRID_COLS = 12;
