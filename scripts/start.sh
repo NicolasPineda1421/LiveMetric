@@ -77,6 +77,13 @@ for _ in $(seq 1 30); do
 done
 
 echo ""
+echo "════════════════════════════════════════════════════════════"
+echo " Contenedores (docker ps)"
+echo "════════════════════════════════════════════════════════════"
+docker ps --filter "name=livemetric-" \
+  --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+echo ""
 if $FRONTEND_UP; then
   echo "════════════════════════════════════════════════════════════"
   echo "✅ LiveMetric esta arriba."
@@ -87,6 +94,6 @@ if $FRONTEND_UP; then
   echo "════════════════════════════════════════════════════════════"
 else
   echo "⚠️  El stack se levanto pero el frontend todavia no respondio a"
-  echo "   tiempo. Revisa el estado con: docker compose ps"
+  echo "   tiempo. Revisa el estado con: docker ps"
   echo "   y los logs con:               docker compose logs -f"
 fi
