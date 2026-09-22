@@ -101,7 +101,7 @@ result_line "SAST (Semgrep)" "${RESULT[semgrep]}"
 NPM_AUDIT_OK=true
 TRIVY_FS_OK=true
 for svc in "${SERVICES[@]}"; do
-  (cd "services/$svc" && npm install --package-lock-only --silent) \
+  (cd "services/$svc" && npm install --package-lock-only --silent --ignore-scripts) \
     > "$LOG_DIR/npm-install-$svc.log" 2>&1
 
   section "📦 npm audit - $svc"
@@ -157,7 +157,7 @@ $CONTAINER_OK && RESULT[container]=success || RESULT[container]=failure
 if [ -f .env ]; then
   UNIT_OK=true
   for svc in "${BACKEND_SERVICES[@]}"; do
-    (cd "services/$svc" && npm install --silent) > "$LOG_DIR/npm-install-test-$svc.log" 2>&1
+    (cd "services/$svc" && npm ci --silent --ignore-scripts) > "$LOG_DIR/npm-install-test-$svc.log" 2>&1
 
     section "🧪 Pruebas unitarias - $svc"
     if (cd "services/$svc" && npm test) 2>&1 | tee "$LOG_DIR/test-$svc.log"; then

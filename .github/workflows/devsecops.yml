@@ -11,9 +11,12 @@ on:
     branches: [main]
   workflow_dispatch: {}
 
+# Minimo permiso por defecto para todo el workflow; "security-events: write"
+# (necesario solo para subir SARIF a la pestaña "Security") se otorga por
+# job, unicamente a los 4 jobs que realmente lo usan, en vez de a todo el
+# pipeline.
 permissions:
   contents: read
-  security-events: write   # necesario para subir SARIF a la pestaña "Security"
 
 jobs:
 
@@ -68,7 +71,7 @@ jobs:
 
       - name: Instalar dependencias
         working-directory: services/${{ matrix.service }}
-        run: npm install --package-lock-only
+        run: npm install --package-lock-only --ignore-scripts
 
       - name: npm audit (bloquea en severidad alta/critica)
         working-directory: services/${{ matrix.service }}
@@ -86,6 +89,9 @@ jobs:
     name: SAST - Semgrep (SQLi / Auth)
     needs: secrets-scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -121,6 +127,9 @@ jobs:
     name: SCA - Trivy fs - ${{ matrix.service }}
     needs: secrets-scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     strategy:
       fail-fast: false
       matrix:
@@ -137,10 +146,10 @@ jobs:
 
       - name: Generar package-lock.json (para que Trivy resuelva versiones exactas)
         working-directory: services/${{ matrix.service }}
-        run: npm install --package-lock-only
+        run: npm install --package-lock-only --ignore-scripts
 
       - name: Escanear dependencias con Trivy (fs)
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: 'fs'
           scan-ref: 'services/${{ matrix.service }}'
@@ -165,6 +174,9 @@ jobs:
     name: Trivy - ${{ matrix.service }}
     needs: [dependency-audit, sast-scan]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     strategy:
       fail-fast: false
       matrix:
@@ -178,7 +190,7 @@ jobs:
             ./services/${{ matrix.service }}
 
       - name: Escanear imagen con Trivy
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: 'livemetric/${{ matrix.service }}-service:ci'
           format: 'sarif'
@@ -202,11 +214,14 @@ jobs:
     name: Checkov - Terraform
     needs: secrets-scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Ejecutar Checkov sobre infra/terraform
-        uses: bridgecrewio/checkov-action@v12
+        uses: bridgecrewio/checkov-action@444c9db6fa75e2d9c19ebf1fde7322089be9009e # v12
         with:
           directory: infra/terraform
           framework: terraform
@@ -262,7 +277,7 @@ jobs:
 
       - name: Instalar dependencias (incluye Jest/Supertest)
         working-directory: services/${{ matrix.service }}
-        run: npm install
+        run: npm ci --ignore-scripts
 
       - name: Correr pruebas
         working-directory: services/${{ matrix.service }}
@@ -295,7 +310,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Configurar Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: '1.9.0'
 
@@ -340,20 +355,36 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Crear .env con los secretos reales (solo vive en el runner, nunca se imprime ni se commitea)
+        # Los secretos se pasan por "env:" (variables de entorno del proceso)
+        # en vez de interpolar "${{ secrets.X }}" directamente en el texto del
+        # script: esa sustitucion ocurre ANTES de que bash vea el script, asi
+        # que el valor crudo del secreto queda pegado en el comando textual.
+        # Pasandolo como variable de entorno, bash lo expande de forma segura
+        # con "$VAR" sin que el secreto pase por el parser de shell como texto.
+        env:
+          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+          SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+          SUPABASE_DB_NAME: ${{ secrets.SUPABASE_DB_NAME }}
+          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          VOTER_ID_SALT: ${{ secrets.VOTER_ID_SALT }}
+          VOTERS_ENCRYPTION_KEY: ${{ secrets.VOTERS_ENCRYPTION_KEY }}
+          INTERNAL_SERVICE_TOKEN: ${{ secrets.INTERNAL_SERVICE_TOKEN }}
         run: |
           cat > .env <<EOF
-          SUPABASE_DB_HOST=${{ secrets.SUPABASE_DB_HOST }}
-          SUPABASE_DB_PORT=${{ secrets.SUPABASE_DB_PORT }}
-          SUPABASE_DB_NAME=${{ secrets.SUPABASE_DB_NAME }}
-          SUPABASE_DB_USER=${{ secrets.SUPABASE_DB_USER }}
-          SUPABASE_DB_PASSWORD=${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_DB_HOST=$SUPABASE_DB_HOST
+          SUPABASE_DB_PORT=$SUPABASE_DB_PORT
+          SUPABASE_DB_NAME=$SUPABASE_DB_NAME
+          SUPABASE_DB_USER=$SUPABASE_DB_USER
+          SUPABASE_DB_PASSWORD=$SUPABASE_DB_PASSWORD
           DB_SSL=true
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          JWT_SECRET=$JWT_SECRET
           JWT_EXPIRES_IN=1h
           VOTER_JWT_EXPIRES_IN=10m
-          VOTER_ID_SALT=${{ secrets.VOTER_ID_SALT }}
-          VOTERS_ENCRYPTION_KEY=${{ secrets.VOTERS_ENCRYPTION_KEY }}
-          INTERNAL_SERVICE_TOKEN=${{ secrets.INTERNAL_SERVICE_TOKEN }}
+          VOTER_ID_SALT=$VOTER_ID_SALT
+          VOTERS_ENCRYPTION_KEY=$VOTERS_ENCRYPTION_KEY
+          INTERNAL_SERVICE_TOKEN=$INTERNAL_SERVICE_TOKEN
           SCHEDULER_CRON=*/5 * * * *
           FRONTEND_ORIGIN=http://localhost:3000
           EOF
@@ -365,7 +396,7 @@ jobs:
         run: timeout 120 bash -c 'until curl -sf http://localhost:3000 >/dev/null; do sleep 3; done'
 
       - name: OWASP ZAP Baseline Scan
-        uses: zaproxy/action-baseline@v0.12.0
+        uses: zaproxy/action-baseline@66042c8e7e24680119199a017e5b0e8603bf4dae # v0.12.0
         continue-on-error: true
         with:
           target: 'http://localhost:3000'

@@ -21,7 +21,7 @@ const DEFAULT_GRID = {
 };
 
 function newWidgetId() {
-  return (crypto.randomUUID ? crypto.randomUUID() : `w-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  return crypto.randomUUID();
 }
 
 const GRID_COLS = 12;

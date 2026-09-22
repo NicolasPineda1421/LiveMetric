@@ -9,6 +9,7 @@
 node_modules/
 npm-debug.log*
 services/**/node_modules/
+services/frontend/dist/
 
 # Terraform
 infra/terraform/.terraform/

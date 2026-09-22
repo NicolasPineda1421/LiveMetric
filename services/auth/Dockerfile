@@ -1,8 +1,8 @@
 # --- Etapa de dependencias ---
 FROM node:20-alpine AS deps
 WORKDIR /app
-COPY package.json ./
-RUN npm install --omit=dev && npm cache clean --force
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
 # --- Etapa final (imagen mínima, usuario no-root) ---
 FROM node:20-alpine

@@ -19,6 +19,7 @@ if (!SCRUTINY_URL || !INTERNAL_SERVICE_TOKEN) {
 // que Docker y Kubernetes necesitan para verificar que el worker sigue vivo.
 // -----------------------------------------------------------------------
 const app = express();
+app.disable('x-powered-by');
 let lastRunAt = null;
 let lastRunSummary = null;
 
