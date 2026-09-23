@@ -65,11 +65,66 @@ if ! command -v docker &> /dev/null; then
   exit 1
 fi
 
+# DOCKER_MOUNT_ROOT es la ruta a usar como origen en los "-v X:/repo" que
+# le pasamos a "docker run" para gitleaks/semgrep/trivy. Normalmente es
+# igual a REPO_ROOT. Pero si este script corre DENTRO de un contenedor que
+# solo comparte el socket de Docker con el host (Docker-fuera-de-Docker,
+# sin un demonio realmente anidado - el patron tipico para probar esto en
+# un contenedor "limpio"), cualquier "-v" que pasemos lo resuelve el
+# demonio del HOST, no este contenedor: "REPO_ROOT" (la vista de ESTE
+# contenedor) ya no sirve como origen, hace falta la ruta real del host.
+# Se detecta consultando los propios bind mounts de este mismo contenedor
+# a traves de ese mismo socket compartido, y traduciendo el prefijo. Si la
+# deteccion automatica no alcanza, "DOCKER_MOUNT_ROOT" se puede fijar a
+# mano antes de correr el script (export DOCKER_MOUNT_ROOT=/ruta/del/host).
+DOCKER_MOUNT_ROOT="${DOCKER_MOUNT_ROOT:-$REPO_ROOT}"
+# El chequeo de si hace falta traducir NO puede ser un "[ -f ... ]" comun
+# sobre REPO_ROOT: ese archivo siempre existe desde el punto de vista de
+# ESTE contenedor (esta bind-mounteado tal cual aca), independientemente
+# de si el demonio del HOST podria resolver esa misma ruta. La unica forma
+# real de saber si va a funcionar es probarlo exactamente como lo va a
+# usar gitleaks: pidiendole al demonio compartido que monte esa ruta.
+if [ -f /.dockerenv ] && [ "$DOCKER_MOUNT_ROOT" = "$REPO_ROOT" ] && \
+   ! docker run --rm -v "$REPO_ROOT:/repo" alpine test -f /repo/.gitleaks.toml 2>/dev/null; then
+  SELF_ID="$(cat /etc/hostname 2>/dev/null || true)"
+  TRANSLATED=""
+  if [ -n "$SELF_ID" ]; then
+    TRANSLATED="$(docker inspect "$SELF_ID" \
+      --format '{{range .Mounts}}{{.Destination}}	{{.Source}}
+{{end}}' 2>/dev/null | awk -F'\t' -v cwd="$REPO_ROOT" '
+        index(cwd, $1) == 1 && length($1) > best_len {
+          best_len = length($1); best_src = $2
+        }
+        END { if (best_len > 0) print best_src substr(cwd, best_len + 1) }
+      ')"
+  fi
+  # OJO: "$TRANSLATED" es una ruta del HOST, no de este contenedor - un
+  # "[ -f ... ]" comun aca comprobaria el filesystem de ESTE contenedor
+  # (donde esa ruta del host casi nunca existe tal cual) y siempre daria
+  # falso, aunque la traduccion este perfecta. La unica forma real de
+  # validarla es preguntarle al propio demonio del host, montandola en un
+  # contenedor descartable.
+  if [ -n "$TRANSLATED" ] && \
+     docker run --rm -v "$TRANSLATED:/repo" alpine test -f /repo/.gitleaks.toml 2>/dev/null; then
+    echo "ℹ️  Corriendo dentro de un contenedor con el socket de Docker"
+    echo "   compartido (Docker-fuera-de-Docker). Ruta real del host para"
+    echo "   los montajes de Docker: $TRANSLATED"
+    DOCKER_MOUNT_ROOT="$TRANSLATED"
+  else
+    echo "⚠️  Parece que este script corre dentro de un contenedor con el"
+    echo "   socket de Docker compartido, pero no se pudo traducir la ruta"
+    echo "   real del host automáticamente. Si los pasos de Gitleaks/Semgrep/"
+    echo "   Trivy fallan con \"no such file or directory\", corré este script"
+    echo "   con: DOCKER_MOUNT_ROOT=/ruta/real/del/host ./scripts/pipeline-local.sh"
+    echo "   (la ruta que le pasaste a -v al crear ESTE contenedor)."
+  fi
+fi
+
 printf '%b🚀 Corriendo el pipeline DevSecOps localmente (copia de cada log en %s)%b\n' "$BLUE" "$LOG_DIR" "$NC"
 
 # 1. Gitleaks -----------------------------------------------------------
 section "🔑 Secret Scanning (Gitleaks)"
-if docker run --rm -v "$REPO_ROOT:/repo" zricethezav/gitleaks:latest \
+if docker run --rm -v "$DOCKER_MOUNT_ROOT:/repo" zricethezav/gitleaks:latest \
     detect --source /repo --config /repo/.gitleaks.toml --redact --verbose --no-banner \
     2>&1 | tee "$LOG_DIR/gitleaks.log"; then
   RESULT[gitleaks]=success
@@ -86,7 +141,7 @@ result_line "Secret Scanning (Gitleaks)" "${RESULT[gitleaks]}"
 # que lo veriamos en la terminal si corrieramos semgrep a mano; el gate
 # real es que el escaneo corra sin romperse y genere el SARIF.
 section "🔍 SAST (Semgrep: OWASP Top 10 / Express / JWT)"
-if docker run --rm -v "$REPO_ROOT:/src" -w /src semgrep/semgrep \
+if docker run --rm -v "$DOCKER_MOUNT_ROOT:/src" -w /src semgrep/semgrep \
     semgrep scan --config=p/owasp-top-ten --config=p/expressjs --config=p/nodejsscan --config=p/jwt \
     --sarif --output=/src/semgrep-local.sarif . 2>&1 | tee "$LOG_DIR/semgrep.log" \
     && [ -s "$REPO_ROOT/semgrep-local.sarif" ]; then
@@ -114,7 +169,7 @@ for svc in "${SERVICES[@]}"; do
   fi
 
   section "📦 Trivy fs (SCA) - $svc"
-  if docker run --rm -v "$REPO_ROOT:/repo" -w /repo aquasec/trivy:0.70.0 \
+  if docker run --rm -v "$DOCKER_MOUNT_ROOT:/repo" -w /repo aquasec/trivy:0.70.0 \
       fs "services/$svc" --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed \
       --scanners vuln --ignorefile /repo/.trivyignore --skip-version-check --no-progress \
       2>&1 | tee "$LOG_DIR/trivy-fs-$svc.log"; then
@@ -136,7 +191,7 @@ for svc in "${SERVICES[@]}"; do
     result_line "docker build - $svc" success
 
     section "🐳 Trivy image (Container Scan) - $svc"
-    if docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$REPO_ROOT:/repo" \
+    if docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$DOCKER_MOUNT_ROOT:/repo" \
         aquasec/trivy:0.70.0 image "livemetric-$svc-localcheck" --severity CRITICAL,HIGH \
         --exit-code 1 --ignore-unfixed --scanners vuln --ignorefile /repo/.trivyignore \
         --skip-version-check --no-progress 2>&1 | tee "$LOG_DIR/trivy-image-$svc.log"; then
