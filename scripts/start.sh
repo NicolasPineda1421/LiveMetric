@@ -115,15 +115,61 @@ ensure_docker() {
     fi
   fi
 
-  if ! docker info &> /dev/null; then
-    echo "   ✗ Docker está instalado pero el motor no responde. Probá:"
+  if docker info &> /dev/null; then
+    echo "   ✓ Docker está instalado y el motor responde."
+    return 0
+  fi
+
+  # El motor no responde. Si hay systemd corriendo como PID 1, se puede
+  # arrancar el servicio asi; si no (el caso tipico de estar corriendo este
+  # script DENTRO de un contenedor, donde el propio PID 1 nunca es
+  # systemd), "systemctl" no tiene con que hablar y falla con un error que
+  # no tiene nada que ver con Docker.
+  if [ -d /run/systemd/system ] && command -v systemctl &> /dev/null; then
+    echo "   Docker está instalado pero el motor no responde. Iniciando el servicio..."
+    if $SUDO systemctl start docker 2>/dev/null && sleep 2 && docker info &> /dev/null; then
+      echo "   ✓ Motor de Docker iniciado correctamente."
+      return 0
+    fi
+    echo "   ✗ no se pudo iniciar el servicio de Docker. Probá a mano:"
     echo "     sudo systemctl start docker"
     echo "     (y si el problema es de permisos: sudo usermod -aG docker \$USER,"
     echo "     después cerrá sesión y volvé a entrar para que tome efecto)."
     REQUISITOS_OK=false
     return 1
   fi
-  echo "   ✓ Docker está instalado y el motor responde."
+
+  # Sin systemd: probablemente estamos dentro de un contenedor. Se intenta
+  # arrancar el demonio directamente, sin depender de un sistema de init -
+  # esto SOLO puede funcionar si el contenedor ya tiene los privilegios
+  # necesarios para correr Docker anidado (--privileged o capacidades
+  # equivalentes), algo que este script no puede otorgarse a si mismo.
+  echo "   Docker está instalado pero el motor no responde, y no hay systemd"
+  echo "   para arrancarlo como servicio (parece que este script está"
+  echo "   corriendo dentro de un contenedor). Probando arrancar dockerd"
+  echo "   directamente..."
+  $SUDO dockerd > /tmp/dockerd.log 2>&1 &
+  disown
+  for _ in $(seq 1 10); do
+    sleep 1
+    if docker info &> /dev/null; then
+      echo "   ✓ Motor de Docker iniciado correctamente (dockerd en segundo plano)."
+      return 0
+    fi
+  done
+
+  echo "   ✗ no se pudo iniciar el motor de Docker (detalle en /tmp/dockerd.log)."
+  echo "     Si este script está corriendo DENTRO de un contenedor Docker, hace"
+  echo "     falta que ESE contenedor tenga acceso real a Docker - algo que hay"
+  echo "     que resolver desde afuera, no algo que este script pueda arreglar"
+  echo "     por si solo. Las dos formas correctas son:"
+  echo "       1) Montar el socket del Docker del HOST en vez de instalar Docker"
+  echo "          adentro: agregá al 'docker run' que crea este contenedor"
+  echo "          -v /var/run/docker.sock:/var/run/docker.sock"
+  echo "       2) O crear el contenedor en modo --privileged para que pueda"
+  echo "          correr su propio demonio Docker anidado de verdad."
+  REQUISITOS_OK=false
+  return 1
 }
 
 echo "-- Requisitos --------------------------------------------------------"
