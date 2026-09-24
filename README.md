@@ -217,6 +217,19 @@ docker compose logs -f scheduler-worker   # el worker no expone puerto; se verif
 
 PostgreSQL **no** expone ningún puerto al host (por diseño); solo es accesible desde dentro de la red `db-net` por los microservicios y el worker.
 
+### Arranque verificado: `scripts/start.sh` / `scripts\start.bat`
+
+En vez de `docker compose up` a mano, `./scripts/start.sh` (o `scripts\start.bat` en Windows) hace todo en 4 pasos numerados: **1) Requisitos → 2) Configuración (`.env`) → 3) Análisis de seguridad → 4) Despliegue**. El paso 3 corre `scripts/pipeline-local.sh` (los mismos controles que CI) y, si algo sale en rojo, **no levanta los contenedores**.
+
+Cómo leer la salida:
+
+- **Cada control es una línea** con su resultado ya interpretado: `✓ auth  npm audit  sin vulnerabilidades (3s)`, `✗ voting  Trivy fs  1 CRITICAL, 1 HIGH (5s)`. Debajo de una falla se listan los hallazgos concretos (CVE y versión que lo corrige, archivo y línea del secreto, prueba que falló).
+- **Colores:** verde = aprobado, rojo = falla, amarillo = omitido/aviso, gris = detalle secundario. Semgrep es informativo: muestra los hallazgos más graves pero no bloquea (igual que en CI).
+- **Resumen final:** una línea por control, una matriz servicio × control y una sección **"QUÉ HACER"** con el paso concreto para cada falla y la ruta a su log completo.
+- **Al desplegar**, un panel con el estado de cada contenedor (y si su `/health` responde), el link `http://localhost:3000`, el link para la red local y los comandos útiles.
+
+Opciones: `--verbose` muestra además la salida cruda de cada herramienta (en Windows, al terminar cada paso); `NO_COLOR=1` desactiva los colores. `./scripts/pipeline-local.sh` también se puede correr solo, antes de hacer push. La interpretación de los logs vive en `scripts/lib/report.js`, compartido por las versiones bash y batch.
+
 ### Windows como servidor central
 
 Para dejar LiveMetric corriendo de forma persistente en una PC con Windows
@@ -230,7 +243,7 @@ sistema operativo anfitrión.
 `scripts\start.bat` y `scripts\pipeline-local.bat` son el equivalente
 nativo de Windows de `start.sh`/`pipeline-local.sh`: mismo comportamiento
 (preparar el `.env`, correr el análisis de seguridad completo mostrando
-el detalle en pantalla y, solo si todo pasa, levantar el stack), pero
+un resumen claro en pantalla y, solo si todo pasa, levantar el stack), pero
 escritos en batch para correr directo en un `cmd.exe` normal, sin
 necesitar bash ni WSL2.
 
