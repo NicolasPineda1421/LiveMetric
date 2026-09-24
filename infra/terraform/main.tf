@@ -390,7 +390,7 @@ resource "docker_container" "frontend" {
   ]
 
   ports {
-    internal = 80
+    internal = 8080 # nginx corre sin root, ver services/frontend/Dockerfile
     external = 3000
     ip       = "127.0.0.1"
   }

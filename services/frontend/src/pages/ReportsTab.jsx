@@ -20,6 +20,8 @@ const DEFAULT_GRID = {
   table: { w: 6, h: 4 },
 };
 
+let widgetIdCounter = 0;
+
 function newWidgetId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -34,7 +36,10 @@ function newWidgetId() {
     const bytes = crypto.getRandomValues(new Uint8Array(16));
     return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
   }
-  return `w-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  // Sin Web Crypto (navegadores muy viejos) alcanza con que sea único dentro
+  // de la sesión: un contador, sin recurrir a Math.random().
+  widgetIdCounter += 1;
+  return `w-${Date.now()}-${widgetIdCounter}`;
 }
 
 const GRID_COLS = 12;

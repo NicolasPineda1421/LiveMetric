@@ -17,6 +17,12 @@ if (!KEY || KEY.length !== 32) {
 // con acceso directo a la base (pero sin esta clave) puede notar que dos
 // filas comparten el mismo valor cifrado, aunque no puede leer cuál es. Con
 // un IV aleatorio esa igualdad no se podría buscar en absoluto.
+// La etiqueta de autenticacion de GCM se fija en 16 bytes al cifrar y al
+// descifrar: sin authTagLength, createDecipheriv aceptaria etiquetas mas
+// cortas (hasta 4 bytes), que un atacante puede adivinar por fuerza bruta
+// para hacer pasar un texto cifrado alterado como valido.
+const AUTH_TAG_LENGTH = 16;
+
 function deterministicNonce(plaintext) {
   return crypto.createHmac('sha256', KEY).update(plaintext).digest().subarray(0, 12);
 }
@@ -25,7 +31,7 @@ function encryptField(plaintext) {
   if (plaintext === null || plaintext === undefined) return null;
   const text = String(plaintext);
   const iv = deterministicNonce(text);
-  const cipher = crypto.createCipheriv('aes-256-gcm', KEY, iv);
+  const cipher = crypto.createCipheriv('aes-256-gcm', KEY, iv, { authTagLength: AUTH_TAG_LENGTH });
   const ciphertext = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
   const authTag = cipher.getAuthTag();
   return Buffer.concat([iv, authTag, ciphertext]).toString('base64');
@@ -35,9 +41,9 @@ function decryptField(value) {
   if (value === null || value === undefined) return null;
   const raw = Buffer.from(value, 'base64');
   const iv = raw.subarray(0, 12);
-  const authTag = raw.subarray(12, 28);
-  const ciphertext = raw.subarray(28);
-  const decipher = crypto.createDecipheriv('aes-256-gcm', KEY, iv);
+  const authTag = raw.subarray(12, 12 + AUTH_TAG_LENGTH);
+  const ciphertext = raw.subarray(12 + AUTH_TAG_LENGTH);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', KEY, iv, { authTagLength: AUTH_TAG_LENGTH });
   decipher.setAuthTag(authTag);
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
 }

@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout con historial completo
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
@@ -60,10 +60,10 @@ jobs:
       matrix:
         service: [auth, voting, analytics, scrutiny, scheduler, frontend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Configurar Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
           cache: 'npm'
@@ -93,7 +93,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Se invoca el CLI de Semgrep directamente (imagen oficial), en vez del
       # Marketplace Action "semgrep/semgrep-action@v1": ese wrapper es un
@@ -112,7 +112,7 @@ jobs:
         run: test -f semgrep.sarif && echo "SARIF generado correctamente"
 
       - name: Subir resultados SARIF a GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3.38.2
         if: always()
         with:
           sarif_file: semgrep.sarif
@@ -135,10 +135,10 @@ jobs:
       matrix:
         service: [auth, voting, analytics, scrutiny, scheduler, frontend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Configurar Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
           cache: 'npm'
@@ -161,7 +161,7 @@ jobs:
           trivyignores: '.trivyignore'
 
       - name: Subir resultados SARIF de Trivy SCA
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3.38.2
         if: always()
         with:
           sarif_file: 'trivy-sca-${{ matrix.service }}.sarif'
@@ -182,7 +182,7 @@ jobs:
       matrix:
         service: [auth, voting, analytics, scrutiny, scheduler, frontend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Construir imagen local
         run: |
@@ -201,7 +201,7 @@ jobs:
           trivyignores: '.trivyignore'
 
       - name: Subir resultados SARIF de Trivy
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3.38.2
         if: always()
         with:
           sarif_file: 'trivy-${{ matrix.service }}.sarif'
@@ -218,7 +218,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Ejecutar Checkov sobre infra/terraform
         uses: bridgecrewio/checkov-action@444c9db6fa75e2d9c19ebf1fde7322089be9009e # v12
@@ -230,7 +230,7 @@ jobs:
           soft_fail: false   # falla el pipeline ante hallazgos de severidad relevante
 
       - name: Subir resultados SARIF de Checkov
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3.38.2
         if: always()
         with:
           sarif_file: checkov-report.sarif
@@ -266,10 +266,10 @@ jobs:
       INTERNAL_SERVICE_TOKEN: ${{ secrets.INTERNAL_SERVICE_TOKEN }}
       SCRUTINY_INTERNAL_URL: 'http://localhost:3004'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Configurar Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
           cache: 'npm'
@@ -307,7 +307,7 @@ jobs:
       # fallan al arrancar sin una clave con este formato exacto.
       TF_VAR_voters_encryption_key: 'a2Y6b/DIA3UvA2Ojx4plUy8J3uiOUZzku7tMnf81mnc=' # gitleaks:allow
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Configurar Terraform
         uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
@@ -352,7 +352,7 @@ jobs:
     needs: [container-scan, unit-tests, iac-scan]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Crear .env con los secretos reales (solo vive en el runner, nunca se imprime ni se commitea)
         # Los secretos se pasan por "env:" (variables de entorno del proceso)
@@ -403,7 +403,7 @@ jobs:
           cmd_options: '-a'
 
       - name: Subir reporte de ZAP como artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: zap-baseline-report

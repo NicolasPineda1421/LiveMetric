@@ -3,6 +3,7 @@
 // entorno (Supabase). Todo dato que estas pruebas crean usa el prefijo
 // CITEST_ para poder identificarlo y borrarlo sin riesgo al final
 // (afterAll), sin tocar datos reales del padrón/admins.
+const crypto = require('crypto');
 const request = require('supertest');
 const app = require('../app');
 const pool = require('../db');
@@ -10,7 +11,10 @@ const { encryptField } = require('../voterCrypto');
 
 const RUN_ID = `CITEST_${Date.now()}`;
 const TEST_ADMIN_USER = `${RUN_ID}_admin`;
-const TEST_ADMIN_PASS = 'Ci-Test-Pass-12345';
+// Contraseña aleatoria por corrida (en vez de una fija en el código): las
+// cuentas de prueba se crean contra la base real, así que su contraseña no
+// debe ser conocida ni reutilizable. 19 caracteres, sobre el mínimo de 10.
+const TEST_ADMIN_PASS = `Ci-${crypto.randomBytes(12).toString('base64url')}`;
 const TEST_AUDITOR_USER = `${RUN_ID}_auditor`;
 // La cédula real solo admite [0-9A-Za-z-] y máximo 20 caracteres (ver
 // validación de /admin/voters/bulk) — nada de guion bajo, y corta.

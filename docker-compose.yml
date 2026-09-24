@@ -66,6 +66,9 @@ services:
       DB_USER: ${SUPABASE_DB_USER:-postgres}
       DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
       DB_SSL: ${DB_SSL:-true}
+      # Los servicios llegan a Supabase por el proxy "postgres" (socat), asi que
+      # el certificado TLS se verifica contra el host real (ver src/db.js).
+      DB_SSL_HOST: ${SUPABASE_DB_HOST}
     depends_on:
       - postgres
     networks:
@@ -95,6 +98,9 @@ services:
       DB_USER: ${SUPABASE_DB_USER:-postgres}
       DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
       DB_SSL: ${DB_SSL:-true}
+      # Los servicios llegan a Supabase por el proxy "postgres" (socat), asi que
+      # el certificado TLS se verifica contra el host real (ver src/db.js).
+      DB_SSL_HOST: ${SUPABASE_DB_HOST}
     depends_on:
       - postgres
     networks:
@@ -124,6 +130,9 @@ services:
       DB_USER: ${SUPABASE_DB_USER:-postgres}
       DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
       DB_SSL: ${DB_SSL:-true}
+      # Los servicios llegan a Supabase por el proxy "postgres" (socat), asi que
+      # el certificado TLS se verifica contra el host real (ver src/db.js).
+      DB_SSL_HOST: ${SUPABASE_DB_HOST}
     depends_on:
       postgres:
         condition: service_started
@@ -160,6 +169,9 @@ services:
       DB_USER: ${SUPABASE_DB_USER:-postgres}
       DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
       DB_SSL: ${DB_SSL:-true}
+      # Los servicios llegan a Supabase por el proxy "postgres" (socat), asi que
+      # el certificado TLS se verifica contra el host real (ver src/db.js).
+      DB_SSL_HOST: ${SUPABASE_DB_HOST}
     depends_on:
       - postgres
     networks:
@@ -195,6 +207,9 @@ services:
       DB_USER: ${SUPABASE_DB_USER:-postgres}
       DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
       DB_SSL: ${DB_SSL:-true}
+      # Los servicios llegan a Supabase por el proxy "postgres" (socat), asi que
+      # el certificado TLS se verifica contra el host real (ver src/db.js).
+      DB_SSL_HOST: ${SUPABASE_DB_HOST}
     depends_on:
       postgres:
         condition: service_started
@@ -241,14 +256,17 @@ services:
       # (auth/voting/analytics/scrutiny) siguen en 127.0.0.1: el navegador
       # solo necesita llegar a este puerto, todo lo demás pasa por el
       # proxy reverso de nginx (ver nginx.conf).
-      - "0.0.0.0:3000:80"
-    # "no-new-privileges" sigue aplicando (bloquea escalación vía setuid);
-    # el proceso maestro de nginx corre como root por diseño (ver Dockerfile),
-    # pero los workers que atienden tráfico externo son no-root por defecto.
+      # Adentro nginx escucha en 8080: corre entero sin root (ver Dockerfile).
+      - "0.0.0.0:3000:8080"
+    # "no-new-privileges" bloquea escalación vía setuid; además nginx corre
+    # entero como el usuario "nginx", sin root (ver Dockerfile).
     security_opt:
       - no-new-privileges:true
     read_only: true
     tmpfs:
       - /tmp
-      - /var/cache/nginx
-      - /var/run
+      # Del usuario nginx (uid/gid 101 en la imagen): nginx corre sin root y
+      # escribe acá sus buffers, su pid y el config.js (ver Dockerfile). Sin
+      # uid/gid, un tmpfs montado sobre una carpeta existente queda de root.
+      - /var/cache/nginx:uid=101,gid=101
+      - /var/run:uid=101,gid=101
