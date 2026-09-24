@@ -132,10 +132,14 @@ LiveMetric/
 │   ├── scrutiny/                 # Microservicio D — certificación con cadena de hashes SHA-256
 │   └── scheduler/                # Worker — node-cron, abre/cierra elecciones y dispara certificación
 ├── infra/
-│   └── terraform/
-│       ├── main.tf              # IaC equivalente con provider Docker
-│       └── variables.tfvars.example
+│   ├── terraform/
+│   │   ├── main.tf              # IaC equivalente con provider Docker
+│   │   └── variables.tfvars.example
+│   └── contenedor-global/
+│       └── Dockerfile           # Todo el proyecto dentro de un contenedor (ver scripts/contenedor.sh)
 ├── scripts/
+│   ├── start.sh / start.bat         # Análisis de seguridad + levantar el stack (un solo comando)
+│   ├── contenedor.sh / contenedor.bat  # Lo mismo, pero todo dentro de un contenedor global
 │   └── setup-branch-protection.sh  # Aplica branch protection en "main" vía gh CLI
 └── .github/
     ├── CODEOWNERS                  # Revisores obligatorios por área
@@ -301,6 +305,42 @@ Todos los servicios ya tienen `restart: unless-stopped` (ver
 `docker-compose.yml`), así que al volver a estar disponible el motor de
 Docker, el stack completo se levanta solo — `start.bat`/`start.sh` solo
 hace falta correrlo la primera vez, o después de un cambio de código.
+
+### Opción alternativa — Todo dentro de un contenedor (sin instalar nada más en la PC)
+
+Otra opción de despliegue, además de `start.sh`/`start.bat` (que siguen
+igual): `scripts/contenedor.sh` (o `scripts\contenedor.bat` en Windows)
+mete el proyecto entero en **un solo contenedor** ("contenedor global") que
+tiene su propio motor de Docker adentro (*Docker-in-Docker*). Ahí corre el
+mismo análisis de seguridad y, solo si pasa, el mismo `docker-compose.yml`:
+los 7 contenedores del stack quedan **dentro** del global, no en la PC. En
+la PC solo hace falta Docker; no se instala Node.js, gpg ni nada más.
+
+```bash
+./scripts/contenedor.sh             # construye, analiza y levanta todo adentro
+./scripts/contenedor.sh estado      # estado de cada microservicio
+./scripts/contenedor.sh logs        # logs en vivo (o: logs auth-service)
+./scripts/contenedor.sh shell       # terminal dentro del contenedor global
+./scripts/contenedor.sh detener     # apaga el contenedor global y todo lo de adentro
+./scripts/contenedor.sh borrar      # además borra su imagen y la caché
+```
+
+- El frontend queda en el mismo `http://localhost:3000` (y en la IP de la
+  PC para el resto de la red). Si ese puerto ya está en uso — por ejemplo,
+  por el stack levantado directo con `start.sh` — el script lo avisa; se
+  puede usar otro con `LIVEMETRIC_PUERTO=3100 ./scripts/contenedor.sh`.
+- El `.env` de la carpeta se monta en solo lectura (nunca queda dentro de
+  la imagen); si no existe, se descifra adentro desde `.env.gpg` (pide la
+  passphrase) y no queda en la carpeta.
+- Las imágenes que se construyen adentro quedan en el volumen
+  `livemetric-global-docker`, así que a partir de la segunda vez arranca
+  mucho más rápido.
+- **La contra:** el contenedor global corre con `--privileged`, que es lo
+  que exige un motor de Docker dentro de un contenedor. Tiene acceso amplio
+  al kernel de la PC, así que es un modo para comodidad (no instalar nada),
+  no un aislamiento de seguridad más fuerte que correr `start.sh` directo.
+
+La imagen está en `infra/contenedor-global/Dockerfile`.
 
 ### Opción alternativa — Terraform (Infraestructura como Código)
 
