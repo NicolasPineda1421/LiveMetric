@@ -7,6 +7,7 @@ const { param, query, body, validationResult } = require('express-validator');
 const pool = require('./db');
 const { requireRole } = require('./middleware/auth');
 const { decryptField } = require('./voterCrypto');
+const { projectTurnout, leadTimeline, buildIntegrityReport, detectSuspiciousAccess } = require('./advancedStats');
 
 const app = express();
 
@@ -350,6 +351,204 @@ app.get(
       [String(req.params.id)]
     );
     return res.status(200).json({ electionId: req.params.id, events: result.rows });
+  })
+);
+
+/* ============================================================
+ * ESTADÍSTICA AVANZADA — la lógica vive en advancedStats.js (funciones
+ * puras); estas rutas solo leen los datos ya agregados y se los pasan.
+ * ============================================================ */
+
+async function findElectionOr404(res, id) {
+  const election = await pool.query(
+    `SELECT status, scheduled_start, scheduled_end FROM elections WHERE id = $1`,
+    [id]
+  );
+  if (election.rows.length === 0) {
+    res.status(404).json({ error: 'Elección no encontrada' });
+    return null;
+  }
+  return election.rows[0];
+}
+
+// Proyección de la participación final de una elección en curso, a partir
+// de cómo se repartieron los votos en elecciones anteriores comparables (o
+// del ritmo actual, si no hay historial). Ver projectTurnout.
+app.get(
+  '/api/elections/:id/metrics/turnout-projection',
+  [param('id').isInt({ min: 1 }).toInt()],
+  asyncRoute('/api/elections/:id/metrics/turnout-projection', async (req, res) => {
+    if (!validateOr400(req, res, 'id de elección inválido')) return;
+    const election = await findElectionOr404(res, req.params.id);
+    if (!election) return;
+
+    // Referencias: hasta 20 elecciones cerradas con al menos 20 votos. Las
+    // detenidas a mano quedan afuera: su ventana real fue más corta que la
+    // programada, así que su curva no es comparable.
+    const [registered, current, history] = await Promise.all([
+      pool.query(`SELECT COUNT(*)::int AS n FROM voters WHERE is_active = true`),
+      pool.query(
+        `SELECT date_trunc('minute', created_at) AS minute, COUNT(*)::int AS votes
+           FROM votes WHERE election_id = $1
+          GROUP BY 1 ORDER BY 1`,
+        [req.params.id]
+      ),
+      pool.query(
+        `WITH comparable AS (
+           SELECT e.id, e.scheduled_start, e.scheduled_end
+             FROM elections e
+            WHERE e.status = 'closed' AND NOT e.stopped_manually AND e.id <> $1
+              AND (SELECT COUNT(*) FROM votes v WHERE v.election_id = e.id) >= 20
+            ORDER BY e.scheduled_end DESC
+            LIMIT 20
+         )
+         SELECT c.id, c.scheduled_start, c.scheduled_end,
+                date_trunc('minute', v.created_at) AS minute, COUNT(*)::int AS votes
+           FROM comparable c JOIN votes v ON v.election_id = c.id
+          GROUP BY c.id, c.scheduled_start, c.scheduled_end, 4
+          ORDER BY c.id, 4`,
+        [req.params.id]
+      ),
+    ]);
+
+    const byElection = new Map();
+    for (const row of history.rows) {
+      if (!byElection.has(row.id)) {
+        byElection.set(row.id, { start: row.scheduled_start, end: row.scheduled_end, minuteCounts: [] });
+      }
+      byElection.get(row.id).minuteCounts.push({ minute: row.minute, votes: row.votes });
+    }
+
+    return res.status(200).json({
+      electionId: req.params.id,
+      status: election.status,
+      scheduledStart: election.scheduled_start,
+      scheduledEnd: election.scheduled_end,
+      ...projectTurnout({
+        status: election.status,
+        start: election.scheduled_start,
+        end: election.scheduled_end,
+        now: new Date(),
+        registered: registered.rows[0].n,
+        minuteCounts: current.rows,
+        history: [...byElection.values()],
+      }),
+    });
+  })
+);
+
+// Momento de definición: cuántas veces cambió el primer lugar y desde
+// cuándo lidera el que va primero. Ver leadTimeline.
+app.get(
+  '/api/elections/:id/metrics/lead-timeline',
+  [param('id').isInt({ min: 1 }).toInt()],
+  asyncRoute('/api/elections/:id/metrics/lead-timeline', async (req, res) => {
+    if (!validateOr400(req, res, 'id de elección inválido')) return;
+    const election = await findElectionOr404(res, req.params.id);
+    if (!election) return;
+
+    const [options, counts] = await Promise.all([
+      pool.query(
+        `SELECT id AS "optionId", label FROM election_options WHERE election_id = $1 ORDER BY id`,
+        [req.params.id]
+      ),
+      pool.query(
+        `SELECT date_trunc('minute', created_at) AS minute, option_id AS "optionId", COUNT(*)::int AS votes
+           FROM votes WHERE election_id = $1
+          GROUP BY 1, 2 ORDER BY 1`,
+        [req.params.id]
+      ),
+    ]);
+
+    return res.status(200).json({
+      electionId: req.params.id,
+      status: election.status,
+      ...leadTimeline({
+        options: options.rows,
+        minuteCounts: counts.rows,
+        start: election.scheduled_start,
+        end: election.scheduled_end,
+      }),
+    });
+  })
+);
+
+// Integridad del acta: recalcula la cadena de hashes del libro de
+// escrutinio (independiente de scrutiny-service) y vuelve a contar los
+// votos guardados contra lo que el acta certificó. Ver buildIntegrityReport.
+app.get(
+  '/api/elections/:id/metrics/integrity',
+  [param('id').isInt({ min: 1 }).toInt()],
+  asyncRoute('/api/elections/:id/metrics/integrity', async (req, res) => {
+    if (!validateOr400(req, res, 'id de elección inválido')) return;
+    const election = await findElectionOr404(res, req.params.id);
+    if (!election) return;
+
+    const [ledger, stored] = await Promise.all([
+      pool.query(
+        `SELECT election_id, total_votes, results, previous_hash, record_hash, certified_at
+           FROM scrutiny_ledger ORDER BY id ASC`
+      ),
+      pool.query(
+        `SELECT option_id, polling_place, voting_table, COUNT(*)::int AS votes
+           FROM votes WHERE election_id = $1
+          GROUP BY 1, 2, 3`,
+        [req.params.id]
+      ),
+    ]);
+
+    const byOption = new Map();
+    const byTable = new Map();
+    let totalVotes = 0;
+    for (const row of stored.rows) {
+      byOption.set(row.option_id, (byOption.get(row.option_id) || 0) + row.votes);
+      const key = `${row.polling_place}|${row.voting_table}`;
+      byTable.set(key, (byTable.get(key) || 0) + row.votes);
+      totalVotes += row.votes;
+    }
+
+    return res.status(200).json({
+      electionId: req.params.id,
+      status: election.status,
+      ...buildIntegrityReport({
+        electionId: req.params.id,
+        ledgerRows: ledger.rows,
+        stored: { totalVotes, byOption, byTable },
+      }),
+    });
+  })
+);
+
+// Accesos sospechosos durante la ventana de la elección: patrones de
+// intentos de login fallidos que sugieren adivinar PINs o cédulas. Ver
+// detectSuspiciousAccess (reglas y umbrales).
+app.get(
+  '/api/elections/:id/metrics/suspicious-access',
+  [param('id').isInt({ min: 1 }).toInt()],
+  asyncRoute('/api/elections/:id/metrics/suspicious-access', async (req, res) => {
+    if (!validateOr400(req, res, 'id de elección inválido')) return;
+    const election = await findElectionOr404(res, req.params.id);
+    if (!election) return;
+
+    const from = new Date(election.scheduled_start);
+    const to = new Date(Math.min(Date.now(), new Date(election.scheduled_end).getTime()));
+    const events = await pool.query(
+      `SELECT event_type AS "eventType", actor_ref AS "actorRef", ip_address AS ip,
+              metadata ->> 'reason' AS reason, created_at AS at
+         FROM audit_log
+        WHERE event_type IN ('LOGIN_SUCCESS_VOTER', 'LOGIN_FAILURE_VOTER', 'LOGIN_SUCCESS_ADMIN', 'LOGIN_FAILURE_ADMIN')
+          AND created_at BETWEEN $1 AND $2
+        ORDER BY created_at ASC
+        LIMIT 50000`,
+      [from, to]
+    );
+
+    return res.status(200).json({
+      electionId: req.params.id,
+      status: election.status,
+      window: { from: from.toISOString(), to: to.toISOString() },
+      ...detectSuspiciousAccess(from < to ? events.rows : []),
+    });
   })
 );
 

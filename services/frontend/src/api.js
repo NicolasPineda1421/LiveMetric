@@ -84,6 +84,14 @@ export const api = {
     request('analytics', `/api/elections/${electionId}/metrics/operational`, { token }),
   getAuditMetrics: (token, electionId) =>
     request('analytics', `/api/elections/${electionId}/metrics/audit`, { token }),
+  getTurnoutProjection: (token, electionId) =>
+    request('analytics', `/api/elections/${electionId}/metrics/turnout-projection`, { token }),
+  getLeadTimeline: (token, electionId) =>
+    request('analytics', `/api/elections/${electionId}/metrics/lead-timeline`, { token }),
+  getIntegrity: (token, electionId) =>
+    request('analytics', `/api/elections/${electionId}/metrics/integrity`, { token }),
+  getSuspiciousAccess: (token, electionId) =>
+    request('analytics', `/api/elections/${electionId}/metrics/suspicious-access`, { token }),
 
   // Analytics — tableros de reportes (builder tipo Power BI)
   listDashboards: (token, electionId) =>

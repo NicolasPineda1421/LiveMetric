@@ -2,7 +2,7 @@ import React from 'react';
 
 export default function TableWidget({ table }) {
   if (!table || table.rows.length === 0) {
-    return <div className="widget-empty">Sin datos para mostrar.</div>;
+    return <div className="widget-empty">{table?.emptyMessage || 'Sin datos para mostrar.'}</div>;
   }
   return (
     <div className="widget-table-scroll">

@@ -319,6 +319,82 @@ describe('Estadística: concentración (HHI), participación con IC 95% y anomal
   });
 });
 
+// Estadística avanzada (lógica en advancedStats.js, probada a fondo en
+// advancedStats.test.js). Acá se prueba el cableado de cada ruta contra la
+// base real: validación, 404, permisos y forma de la respuesta. Corre
+// después del bloque anterior, así que la elección de prueba ya tiene los
+// 15 votos (5 a A, 10 a B) que ese bloque sembró.
+describe('Estadística avanzada: proyección, momento de definición, integridad y accesos', () => {
+  const routes = ['turnout-projection', 'lead-timeline', 'integrity', 'suspicious-access'];
+
+  it.each(routes)('/metrics/%s rechaza un id no numérico con 400', async (route) => {
+    const res = await request(app)
+      .get(`/api/elections/abc/metrics/${route}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(400);
+  });
+
+  it.each(routes)('/metrics/%s devuelve 404 para una elección que no existe', async (route) => {
+    const res = await request(app)
+      .get(`/api/elections/999999999/metrics/${route}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(404);
+  });
+
+  it.each(routes)('/metrics/%s rechaza un rol no autorizado (voter) con 403', async (route) => {
+    const res = await request(app)
+      .get(`/api/elections/${electionId}/metrics/${route}`)
+      .set('Authorization', `Bearer ${voterToken}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('/metrics/turnout-projection proyecta la elección activa con sus 15 votos', async () => {
+    const res = await request(app)
+      .get(`/api/elections/${electionId}/metrics/turnout-projection`)
+      .set('Authorization', `Bearer ${auditorToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.votesSoFar).toBe(15);
+    // Ventana de 2 h con 1 h transcurrida y 15 votos: supera los mínimos.
+    expect(res.body.state).toBe('en_curso');
+    expect(['historico', 'ritmo_constante']).toContain(res.body.method);
+    expect(res.body.projectedVotes).toBeGreaterThanOrEqual(15);
+    expect(res.body.interval.lowPct).toBeLessThanOrEqual(res.body.projectedTurnoutPct);
+    expect(res.body.interval.highPct).toBeGreaterThanOrEqual(res.body.projectedTurnoutPct);
+  });
+
+  it('/metrics/lead-timeline: B lidera (10 contra 5) y no hubo cambios de primer lugar', async () => {
+    const res = await request(app)
+      .get(`/api/elections/${electionId}/metrics/lead-timeline`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.state).toBe('ok');
+    expect(res.body.totalVotes).toBe(15);
+    expect(res.body.currentLeader.label).toBe('CITEST Opción B');
+    // Los votos sembrados son anteriores a la ventana, así que caen todos
+    // en el primer tramo: un único punto, sin cambios.
+    expect(res.body.leadChanges).toBe(0);
+  });
+
+  it('/metrics/integrity: una elección activa todavía no tiene acta', async () => {
+    const res = await request(app)
+      .get(`/api/elections/${electionId}/metrics/integrity`)
+      .set('Authorization', `Bearer ${auditorToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.state).toBe('sin_certificar');
+  });
+
+  it('/metrics/suspicious-access devuelve totales, motivos y alertas de la ventana de la elección', async () => {
+    const res = await request(app)
+      .get(`/api/elections/${electionId}/metrics/suspicious-access`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.windowMinutes).toBe(15);
+    expect(res.body.totals.attempts).toBe(res.body.totals.failures + res.body.totals.successes);
+    expect(Array.isArray(res.body.alerts)).toBe(true);
+    expect(new Date(res.body.window.to) >= new Date(res.body.window.from)).toBe(true);
+  });
+});
+
 describe('GET /api/elections/:id/metrics/audit', () => {
   it('devuelve un arreglo de eventos (vacío para una elección recién creada)', async () => {
     const res = await request(app)

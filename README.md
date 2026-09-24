@@ -541,6 +541,19 @@ Estas pruebas verifican que la lógica de negocio nueva es correcta, además de 
 7. **El acta consolida por mesa y determina un ganador** — Con votantes de al menos 2 mesas distintas (el padrón de demostración ya trae "Mesa 1" y "Mesa 2"), vota desde cédulas de ambas mesas en la misma elección presidencial y espera la certificación. `GET /certifications/:electionId` en Scrutiny debe devolver `results.byTable` con una entrada por mesa (y su propio conteo por candidato) y `results.winner` con el candidato de más votos a nivel global.
 8. **Empates se reportan, no se ocultan** — Fuerza un empate exacto entre dos candidatos (mismo número de votos) y certifica la elección: `winner.tie` debe ser `true` y `winner.tiedWith` debe listar al otro candidato empatado, en vez de elegir uno arbitrariamente.
 
+### Cómo validar la estadística avanzada de los reportes
+
+En **Reportes**, al agregar un widget, hay cuatro fuentes de datos que responden preguntas concretas (la lógica está en `services/analytics/src/advancedStats.js`, con pruebas en `advancedStats.test.js`):
+
+| Fuente | Qué responde | Cómo lo calcula |
+|---|---|---|
+| **Proyección de participación** | ¿Con qué participación va a cerrar la jornada? | Con al menos 2 elecciones anteriores comparables: cuánto de sus votos se había emitido a esta misma altura de la ventana (mediana y rango). Sin historial: el ritmo actual, con intervalo de Poisson. No proyecta antes del 10 % de la jornada ni con menos de 10 votos. |
+| **Momento de definición** | ¿Cuántas veces cambió el primer lugar y desde cuándo lidera el que va primero? | Resultado acumulado por tramos de tiempo. Cada punto agrupa al menos 5 votos, para que la evolución no permita deducir votos individuales. |
+| **Integridad del acta** | ¿El acta certificada sigue intacta y coincide con los votos guardados? | Analytics recalcula por su cuenta toda la cadena de hashes (independiente de Scrutiny) y vuelve a contar los votos contra el acta: detecta también votos agregados o borrados después de certificar, que la cadena sola no ve. |
+| **Accesos sospechosos** | ¿Alguien intentó adivinar PINs, cédulas o contraseñas de admin? | Reglas sobre los logins de la auditoría en ventanas de 15 min: 5 PIN incorrectos para una cédula, 5 cédulas inexistentes desde una IP, 8 fallos desde una IP, 3 fallos para un usuario admin, y el caso más serio: varios PIN fallidos seguidos de un ingreso exitoso. |
+
+Para verlas en acción: la integridad de una elección de prueba del escrutinio (`CITEST-SCRUTINY-…`) aparece como **Alterada**, porque esas pruebas borran sus votos después de certificar — el acta dice N votos y en la base quedan 0. Los accesos sospechosos muestran los intentos fallidos que generan las pruebas de login durante la ventana de cada elección.
+
 ---
 
 ## 6. Decisiones de diseño relevantes para el evaluador

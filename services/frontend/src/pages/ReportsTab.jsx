@@ -4,12 +4,14 @@ import DashboardCanvas from '../components/DashboardCanvas.jsx';
 import { exportDashboardToPdf, buildIntro, slugify } from '../utils/exportDashboardPdf.js';
 import { WIDGET_TYPE_LABELS, DATA_SOURCE_LABELS } from '../components/widgets/labels.js';
 
+const ADVANCED_SOURCES = ['turnoutProjection', 'leadTimeline', 'integrity', 'suspiciousAccess'];
+
 const WIDGET_DATA_SOURCES = {
-  kpi: ['results', 'timeseries', 'participation', 'operational', 'audit', 'concentration', 'participationRate', 'anomalies'],
-  bar: ['results', 'participation'],
-  line: ['timeseries'],
-  pie: ['results', 'participation'],
-  table: ['results', 'timeseries', 'participation', 'operational', 'audit', 'concentration', 'anomalies'],
+  kpi: ['results', 'timeseries', 'participation', 'operational', 'audit', 'concentration', 'participationRate', 'anomalies', ...ADVANCED_SOURCES],
+  bar: ['results', 'participation', 'suspiciousAccess'],
+  line: ['timeseries', 'turnoutProjection', 'leadTimeline'],
+  pie: ['results', 'participation', 'suspiciousAccess'],
+  table: ['results', 'timeseries', 'participation', 'operational', 'audit', 'concentration', 'anomalies', ...ADVANCED_SOURCES],
 };
 
 const DEFAULT_GRID = {

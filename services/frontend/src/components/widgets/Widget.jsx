@@ -26,6 +26,14 @@ function fetchDataSource(token, electionId, dataSource, params = {}) {
       return api.getOperationalMetrics(token, electionId);
     case 'audit':
       return api.getAuditMetrics(token, electionId);
+    case 'turnoutProjection':
+      return api.getTurnoutProjection(token, electionId);
+    case 'leadTimeline':
+      return api.getLeadTimeline(token, electionId);
+    case 'integrity':
+      return api.getIntegrity(token, electionId);
+    case 'suspiciousAccess':
+      return api.getSuspiciousAccess(token, electionId);
     default:
       return Promise.resolve(null);
   }
@@ -38,7 +46,7 @@ function renderByType(type, shaped, printMode) {
     case 'bar':
       return <BarChartWidget items={shaped.items} printMode={printMode} />;
     case 'line':
-      return <LineChartWidget items={shaped.items} printMode={printMode} />;
+      return <LineChartWidget items={shaped.items} series={shaped.series} unit={shaped.unit} printMode={printMode} />;
     case 'pie':
       return <PieChartWidget items={shaped.items} printMode={printMode} />;
     case 'table':

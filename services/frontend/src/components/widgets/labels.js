@@ -18,4 +18,8 @@ export const DATA_SOURCE_LABELS = {
   concentration: 'Concentración de votos (HHI)',
   participationRate: 'Participación con intervalo de confianza',
   anomalies: 'Anomalías en la evolución de votos',
+  turnoutProjection: 'Proyección de participación',
+  leadTimeline: 'Momento de definición',
+  integrity: 'Integridad del acta',
+  suspiciousAccess: 'Accesos sospechosos',
 };

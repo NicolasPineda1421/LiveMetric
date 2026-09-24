@@ -2,9 +2,10 @@
 // forma genérica que cualquier widget puede consumir, sin que cada
 // componente de gráfico necesite conocer la forma de cada fuente de datos.
 //
-//   kpi:   { label, value }              -> KpiCard
+//   kpi:   { label, value, tone?, note? } -> KpiCard
 //   items: [{ name, value }]             -> BarChartWidget / PieChartWidget
-//   table: { columns: [...], rows: [...] } -> TableWidget
+//   items + series: [{ key, label }]     -> LineChartWidget con varias series
+//   table: { columns: [...], rows: [...], emptyMessage? } -> TableWidget
 
 export function adaptForWidgets(dataSource, raw) {
   if (!raw) return emptyShape(dataSource);
@@ -141,9 +142,191 @@ export function adaptForWidgets(dataSource, raw) {
       };
     }
 
+    case 'turnoutProjection': {
+      const curve = raw.curve || [];
+      const moment = momentFormatter(curve.map((p) => p.at));
+      const inProgress = raw.state === 'en_curso';
+      const current = `${raw.currentTurnoutPct}% (${raw.votesSoFar} de ${raw.registered} habilitados)`;
+      const method =
+        raw.method === 'historico'
+          ? `Según cómo se repartieron los votos en ${plural(raw.basedOnElections, 'elección anterior', 'elecciones anteriores')}`
+          : 'Si el ritmo actual se mantiene. No hay elecciones anteriores comparables, y en una jornada real el ritmo suele bajar al final: tiende a sobrestimar';
+      const kpiByState = {
+        sin_iniciar: { value: 'Aún no empezó', note: 'La proyección aparece cuando la votación esté en curso.' },
+        insuficiente: {
+          value: 'Muy pronto',
+          note: `Para proyectar hace falta el ${raw.minimums?.elapsedPct}% de la jornada y ${raw.minimums?.votes} votos. Por ahora: ${raw.currentTurnoutPct}%.`,
+        },
+        final: { value: `${raw.currentTurnoutPct}%`, note: 'Participación final: la votación ya cerró.' },
+        en_curso: {
+          value: `${raw.projectedTurnoutPct}%`,
+          note: `Rango probable ${raw.interval?.lowPct}%–${raw.interval?.highPct}% · ahora ${raw.currentTurnoutPct}%`,
+        },
+      };
+      return {
+        kpi: { label: inProgress ? 'Participación proyectada al cierre' : 'Participación', ...kpiByState[raw.state] },
+        unit: '%',
+        items: curve.map((p) => ({ name: moment(p.at), actual: p.actualPct, projected: p.projectedPct })),
+        series: [
+          { key: 'actual', label: 'Participación real', color: 'accent' },
+          ...(inProgress ? [{ key: 'projected', label: 'Proyección al cierre', color: 'accent', dashed: true }] : []),
+        ],
+        table: {
+          columns: ['Métrica', 'Valor'],
+          rows: [
+            [raw.state === 'final' ? 'Participación final' : 'Participación hasta ahora', current],
+            // En una elección cerrada (incluso detenida antes de tiempo) el
+            // % de jornada transcurrida ya no dice nada.
+            ...(raw.state === 'final' ? [] : [['Jornada transcurrida', `${raw.elapsedPct}%`]]),
+            ...(inProgress
+              ? [
+                  ['Proyección al cierre', `${raw.projectedTurnoutPct}% (${raw.projectedVotes} votos)`],
+                  ['Rango probable', `${raw.interval.lowPct}% – ${raw.interval.highPct}%`],
+                  ['Cómo se calcula', method],
+                ]
+              : [['Estado', kpiByState[raw.state].note]]),
+          ],
+        },
+      };
+    }
+
+    case 'leadTimeline': {
+      const points = raw.checkpoints || [];
+      const moment = momentFormatter(points.map((p) => p.at));
+      // Una serie por opción (hasta 8, las de mayor % al final: una por
+      // color de la paleta). La clave es el id y no la etiqueta, porque
+      // recharts lee "Lic. Pérez" como una ruta anidada por el punto.
+      const shown = (points.length ? points[points.length - 1].shares : []).slice(0, 8);
+      const changedAt = new Set((raw.changes || []).map((c) => c.at));
+      const leader = raw.currentLeader?.label;
+
+      let kpi;
+      if (raw.state === 'sin_votos') kpi = { value: 'Sin votos todavía' };
+      else if (raw.state === 'insuficiente') {
+        kpi = { value: 'Menos de 5 votos', note: 'Con tan pocos votos, mostrar la evolución revelaría votos individuales.' };
+      } else if (!leader) kpi = { value: 'Empate', note: `${plural(raw.leadChanges, 'cambio', 'cambios')} de primer lugar hasta ahora.` };
+      else if (raw.leadChanges === 0) kpi = { value: 'Sin cambios', note: `${leader} lideró de principio a fin.` };
+      else {
+        kpi = {
+          value: plural(raw.leadChanges, 'cambio', 'cambios'),
+          note: `${leader} lidera sin interrupciones desde las ${moment(raw.stableSince.at)}, con el ${raw.stableSince.votesCountedPct}% de los votos contados.`,
+        };
+      }
+
+      return {
+        kpi: { label: 'Cambios de primer lugar', ...kpi },
+        unit: '%',
+        items: points.map((p) => {
+          const row = { name: moment(p.at) };
+          for (const share of p.shares) row[`op${share.optionId}`] = share.pct;
+          return row;
+        }),
+        series: shown.map((s) => ({ key: `op${s.optionId}`, label: s.label })),
+        table: {
+          columns: ['Momento', 'Votos contados', 'Primer lugar', 'Ventaja'],
+          rows: points.map((p) => [
+            moment(p.at),
+            p.votesCounted,
+            p.leader ? `${p.leader.label}${changedAt.has(p.at) ? ' ← pasa a liderar' : ''}` : 'Empate',
+            `${p.marginPp} pp`,
+          ]),
+          emptyMessage: kpi.note || kpi.value,
+        },
+      };
+    }
+
+    case 'integrity': {
+      if (raw.state === 'sin_certificar') {
+        const why =
+          raw.status === 'closed'
+            ? 'La elección cerró pero todavía no se certificó.'
+            : 'El acta se certifica automáticamente cuando cierra la elección.';
+        return {
+          kpi: { label: 'Integridad del acta', value: 'Sin acta aún', note: why },
+          items: [],
+          table: { columns: ['Verificación', 'Resultado'], rows: [], emptyMessage: why },
+        };
+      }
+      const intact = raw.state === 'integra';
+      const votes = raw.votes;
+      const check = (passed, okText, badText) => (passed ? `✔ ${okText}` : `✘ ${badText}`);
+      return {
+        kpi: {
+          label: 'Integridad del acta',
+          value: intact ? '✔ Íntegra' : '✘ Alterada',
+          tone: intact ? 'ok' : 'bad',
+          note: intact ? 'El acta no cambió y los votos guardados coinciden con lo certificado.' : raw.problems[0],
+        },
+        items: [],
+        table: {
+          columns: ['Verificación', 'Resultado'],
+          rows: [
+            ['Contenido del acta contra su hash', check(raw.record.hashOk, 'Coincide', 'No coincide: el acta fue modificada')],
+            ['Enlace con el acta anterior', check(raw.record.linkOk, 'Correcto', 'Roto')],
+            [
+              'Cadena completa de actas',
+              check(
+                raw.chain.valid,
+                `Íntegra (${plural(raw.chain.totalRecords, 'acta', 'actas')})`,
+                `Rota en ${raw.chain.brokenElectionIds.map((id) => `#${id}`).join(', ')}`,
+              ),
+            ],
+            [
+              'Votos guardados contra certificados',
+              check(votes.totalMatches, `${votes.storedTotal} = ${votes.certifiedTotal}`, `${votes.storedTotal} guardados, ${votes.certifiedTotal} certificados`),
+            ],
+            ...votes.optionDiffs.map((d) => [`Opción "${d.label}"`, `✘ Acta: ${d.certified} · guardados: ${d.stored}`]),
+            ...votes.tableDiffs.map((d) => [`Mesa ${d.table}`, `✘ Acta: ${d.certified} · guardados: ${d.stored}`]),
+            ['Hash del acta', `${raw.recordHash.slice(0, 16)}…`],
+            ['Certificada', new Date(raw.certifiedAt).toLocaleString()],
+          ],
+        },
+      };
+    }
+
+    case 'suspiciousAccess': {
+      const alerts = raw.alerts || [];
+      const totals = raw.totals || { attempts: 0, failures: 0, failureRatePct: 0 };
+      const hasHigh = alerts.some((a) => a.severity === 'alta');
+      const moment = momentFormatter(alerts.flatMap((a) => [a.from, a.to]));
+      return {
+        kpi: {
+          label: 'Alertas de acceso',
+          value: alerts.length ? plural(alerts.length, 'alerta', 'alertas') : 'Sin alertas',
+          // Solo alertas medias: sin tono, queda en el dorado de "atención".
+          tone: hasHigh ? 'bad' : alerts.length ? undefined : 'ok',
+          note: `${totals.failures} de ${totals.attempts} ingresos fallaron (${totals.failureRatePct}%) durante la elección.`,
+        },
+        items: (raw.failuresByReason || []).map((r) => ({ name: r.reason, value: r.count })),
+        table: {
+          columns: ['Severidad', 'Qué pasó', 'Origen', 'Intentos', 'Cuándo', 'Qué significa'],
+          rows: alerts.map((a) => [
+            a.severity === 'alta' ? 'Alta' : 'Media',
+            a.title,
+            a.subject,
+            a.attempts,
+            `${moment(a.from)} – ${moment(a.to)}`,
+            a.detail,
+          ]),
+          emptyMessage: 'Sin alertas: ningún patrón de ingresos fallidos superó los umbrales durante la elección.',
+        },
+      };
+    }
+
     default:
       return emptyShape(dataSource);
   }
+}
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+// Hora corta para ejes y tablas: solo HH:MM si todo cae el mismo día, con
+// la fecha si abarca varios (una elección puede durar más de un día).
+function momentFormatter(isoDates) {
+  const days = new Set(isoDates.map((d) => new Date(d).toDateString()));
+  const options =
+    days.size > 1 ? { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' } : { hour: '2-digit', minute: '2-digit' };
+  return (iso) => new Date(iso).toLocaleString([], options);
 }
 
 function emptyShape(dataSource) {
