@@ -230,9 +230,13 @@ sistema operativo anfitrión.
 `scripts\start.bat` y `scripts\pipeline-local.bat` son el equivalente
 nativo de Windows de `start.sh`/`pipeline-local.sh`: mismo comportamiento
 (preparar el `.env`, correr el análisis de seguridad completo mostrando
-el detalle en pantalla y, solo si todo pasa, levantar el stack), pero
-escritos en batch para correr directo en un `cmd.exe` normal, sin
-necesitar bash ni WSL2.
+el resultado ya interpretado de cada control y un cuadro final por
+servicio y, solo si todo pasa, levantar el stack), pero escritos en batch
+para correr directo en un `cmd.exe` normal, sin necesitar bash ni WSL2.
+Tanto en Linux como en Windows, agregar `--detalle` (ej.
+`scripts\start.bat --detalle`) muestra además la salida completa de cada
+herramienta; sin eso, queda guardada en un log por paso cuya carpeta se
+indica al empezar el análisis.
 
 1. Instalar Docker Desktop y, en **Settings → General**, activar el motor
    que prefieras (WSL2 o Hyper-V — para este camino no hace falta usar

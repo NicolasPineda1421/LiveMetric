@@ -6,11 +6,14 @@
 # usa .github/workflows/devsecops.yml - para detectar problemas ANTES de
 # hacer push, sin esperar a que corra en GitHub Actions.
 #
-# A diferencia de un simple check/x, cada paso muestra en vivo la salida
-# real de la herramienta (no solo el resultado final) para poder leerla e
-# interpretarla mientras corre - la misma idea que expandir un paso en un
-# log de GitHub Actions. Ademas de verse en pantalla, cada salida queda
-# guardada en un archivo por si queres volver a revisarla despues.
+# Cada paso termina en una linea ya interpretada (cuantos secretos, CVE,
+# hallazgos o pruebas fallidas, y en que servicio) y, si algo falla, las
+# lineas del log que explican por que; al final, un cuadro con todos los
+# controles por servicio. La salida completa de cada herramienta queda
+# guardada en un log por paso, y con --detalle ademas se ve en vivo
+# mientras corre - la misma idea que expandir un paso en un log de GitHub
+# Actions. La interpretacion vive en scripts/lib/pipeline-resumen.js,
+# compartida con la version para Windows (pipeline-local.bat).
 #
 # A diferencia de scripts/pipeline-status.sh (que solo CONSULTA el
 # resultado de una corrida ya hecha en GitHub), este script EJECUTA los
@@ -21,49 +24,51 @@
 # verificando en GitHub Actions (o a mano con "cd infra/terraform &&
 # terraform apply", ver README).
 #
-# Requisitos: Docker, y (para las pruebas unitarias) un .env real en la
-# raiz del repo con las credenciales de Supabase.
+# Requisitos: Docker, Node.js/npm, y (para las pruebas unitarias) un .env
+# real en la raiz del repo con las credenciales de Supabase.
 #
 # Uso:
-#   ./scripts/pipeline-local.sh
+#   ./scripts/pipeline-local.sh             resumen interpretado de cada paso
+#   ./scripts/pipeline-local.sh --detalle   ademas, la salida real en vivo
 
 set -uo pipefail  # sin -e a proposito: un control que falla no debe abortar el resto
 
 cd "$(dirname "$0")/.."
 REPO_ROOT="$(pwd)"
 
+# shellcheck source=lib/ui.sh
+source "$REPO_ROOT/scripts/lib/ui.sh"
+
+for arg in "$@"; do
+  case "$arg" in
+    -d|--detalle) DETALLE=true ;;
+    -h|--help) sed -n '/^# Uso:/,/^$/s/^# \{0,1\}//p' "$0"; exit 0 ;;
+    *) echo "Opción desconocida: $arg (ver --help)" >&2; exit 2 ;;
+  esac
+done
+
 SERVICES=(auth voting analytics scrutiny scheduler frontend)
 BACKEND_SERVICES=(auth voting analytics scrutiny scheduler)
-LOG_DIR="$(mktemp -d /tmp/livemetric-pipeline-local.XXXXXX)"
 
-declare -A RESULT
-
-# Colores ANSI: azul para procesos en curso, verde para lo que aprueba,
-# rojo para lo que falla. Si la salida no va a una terminal (por ejemplo,
-# redirigida a un archivo) se dejan vacios para no ensuciar el log con
-# codigos de escape.
-if [ -t 1 ]; then
-  BLUE='\033[0;34m'; GREEN='\033[0;32m'; RED='\033[0;31m'; BOLD='\033[1m'; NC='\033[0m'
-else
-  BLUE=''; GREEN=''; RED=''; BOLD=''; NC=''
-fi
-
-section() {
-  printf '\n%b── %s ────────────────────────────────────────────────%b\n' "${BLUE}${BOLD}" "$1" "$NC"
-}
-
-result_line() {
-  if [ "$2" = "success" ]; then
-    printf '   %b✓ %s%b\n' "$GREEN" "$1" "$NC"
-  else
-    printf '   %b✗ %s%b\n' "$RED" "$1" "$NC"
+for requisito in docker node npm; do
+  if ! command -v "$requisito" &> /dev/null; then
+    falla "Este script necesita $requisito instalado (ver README)." >&2
+    exit 1
   fi
-}
+done
 
-if ! command -v docker &> /dev/null; then
-  echo "Error: este script necesita Docker instalado y corriendo." >&2
-  exit 1
-fi
+LOG_DIR="$(mktemp -d /tmp/livemetric-pipeline-local.XXXXXX)"
+RESULTADOS="$LOG_DIR/resultados.jsonl"
+node scripts/lib/pipeline-resumen.js inicio "$RESULTADOS"
+
+# resumir <control> <servicio|-> <codigo-de-salida> <log> [sarif]
+# Interpreta el resultado de un paso e imprime su linea (ver
+# scripts/lib/pipeline-resumen.js); tambien lo anota para el cuadro final.
+resumir() { node scripts/lib/pipeline-resumen.js resultado "$RESULTADOS" "$@"; }
+
+# paso <n> - encabezado del paso n (sus textos estan en pipeline-resumen.js,
+# compartidos con la version para Windows).
+paso() { node scripts/lib/pipeline-resumen.js paso "$1"; }
 
 # DOCKER_MOUNT_ROOT es la ruta a usar como origen en los "-v X:/repo" que
 # le pasamos a "docker run" para gitleaks/semgrep/trivy. Normalmente es
@@ -120,27 +125,27 @@ if [ -f /.dockerenv ] && [ "$DOCKER_MOUNT_ROOT" = "$REPO_ROOT" ] && \
   fi
 fi
 
-printf '%b🚀 Corriendo el pipeline DevSecOps localmente (copia de cada log en %s)%b\n' "$BLUE" "$LOG_DIR" "$NC"
+# start.sh ya muestra su propio encabezado para esta etapa.
+if [ -z "${LIVEMETRIC_DESDE_START:-}" ]; then
+  banner "$C_AZUL" "Pipeline DevSecOps local · mismos controles que GitHub Actions"
+fi
+info "Salida completa de cada paso: $LOG_DIR"
+[ "$DETALLE" = true ] || info "Para verla en vivo mientras corre: --detalle"
 
 # 1. Gitleaks -----------------------------------------------------------
-section "🔑 Secret Scanning (Gitleaks)"
-if docker run --rm -v "$DOCKER_MOUNT_ROOT:/repo" zricethezav/gitleaks:latest \
-    detect --source /repo --config /repo/.gitleaks.toml --redact --verbose --no-banner \
-    2>&1 | tee "$LOG_DIR/gitleaks.log"; then
-  RESULT[gitleaks]=success
-else
-  RESULT[gitleaks]=failure
-fi
-result_line "Secret Scanning (Gitleaks)" "${RESULT[gitleaks]}"
+paso 1
+correr "$LOG_DIR/gitleaks.log" "Gitleaks revisando el historial" \
+  docker run --rm -v "$DOCKER_MOUNT_ROOT:/repo" zricethezav/gitleaks:latest \
+  detect --source /repo --config /repo/.gitleaks.toml --redact --verbose --no-banner
+resumir gitleaks - $? "$LOG_DIR/gitleaks.log"
 
 # 2. Semgrep (SAST) -------------------------------------------------------
 # Igual que en CI: Semgrep termina en 0 sin importar cuantos hallazgos
 # reporte (no se le pasa --error) - el pipeline lo usa para SUBIR resultados
-# a GitHub Security, no como gate por cantidad de hallazgos. Este paso
-# imprime cada hallazgo (severidad, archivo, linea, por que importa) igual
-# que lo veriamos en la terminal si corrieramos semgrep a mano; el gate
-# real es que el escaneo corra sin romperse y genere el SARIF.
-section "🔍 SAST (Semgrep: OWASP Top 10 / Express / JWT)"
+# a GitHub Security, no como gate por cantidad de hallazgos. Por eso sus
+# hallazgos se muestran como "para revisar" (amarillo) y no bloquean; el
+# gate real es que el escaneo corra sin romperse y genere el SARIF.
+paso 2
 # Semgrep descarga las reglas (p/owasp-top-ten, etc.) de semgrep.dev en cada
 # corrida, desde una imagen Alpine (musl). Algunos DNS - tipicamente el de
 # "Compartir conexion a Internet" / hotspot de Windows (192.168.137.1,
@@ -153,132 +158,77 @@ section "🔍 SAST (Semgrep: OWASP Top 10 / Express / JWT)"
 SEMGREP_DNS_ARGS=()
 if ! docker run --rm alpine getent ahosts semgrep.dev > /dev/null 2>&1 && \
    docker run --rm --dns 1.1.1.1 --dns 8.8.8.8 alpine getent ahosts semgrep.dev > /dev/null 2>&1; then
-  echo "ℹ️  El DNS de esta red no le resuelve semgrep.dev a los contenedores"
-  echo "   Alpine (responde NXDOMAIN a la consulta IPv6). Se usan DNS publicos"
-  echo "   (1.1.1.1, 8.8.8.8) solo para el contenedor de Semgrep."
+  info "El DNS de esta red no le resuelve semgrep.dev a los contenedores Alpine"
+  info "(responde NXDOMAIN a la consulta IPv6): se usan DNS públicos (1.1.1.1,"
+  info "8.8.8.8) solo para el contenedor de Semgrep."
   SEMGREP_DNS_ARGS=(--dns 1.1.1.1 --dns 8.8.8.8)
 fi
-if docker run --rm "${SEMGREP_DNS_ARGS[@]}" -v "$DOCKER_MOUNT_ROOT:/src" -w /src semgrep/semgrep \
-    semgrep scan --config=p/owasp-top-ten --config=p/expressjs --config=p/nodejsscan --config=p/jwt \
-    --sarif --output=/src/semgrep-local.sarif . 2>&1 | tee "$LOG_DIR/semgrep.log" \
-    && [ -s "$REPO_ROOT/semgrep-local.sarif" ]; then
-  RESULT[semgrep]=success
-else
-  RESULT[semgrep]=failure
-fi
-rm -f "$REPO_ROOT/semgrep-local.sarif"
-result_line "SAST (Semgrep)" "${RESULT[semgrep]}"
+correr "$LOG_DIR/semgrep.log" "Semgrep analizando el código" \
+  docker run --rm "${SEMGREP_DNS_ARGS[@]}" -v "$DOCKER_MOUNT_ROOT:/src" -w /src semgrep/semgrep \
+  semgrep scan --config=p/owasp-top-ten --config=p/expressjs --config=p/nodejsscan --config=p/jwt \
+  --sarif --output=/src/semgrep-local.sarif .
+SEMGREP_RC=$?
+# El SARIF se escribe dentro del repo (es lo unico que el contenedor ve); se
+# pasa a la carpeta de logs para no dejarlo suelto en el arbol de trabajo.
+mv -f "$REPO_ROOT/semgrep-local.sarif" "$LOG_DIR/semgrep.sarif" 2>/dev/null \
+  || rm -f "$REPO_ROOT/semgrep-local.sarif"
+resumir semgrep - "$SEMGREP_RC" "$LOG_DIR/semgrep.log" "$LOG_DIR/semgrep.sarif"
 
 # 3-4. npm audit + Trivy fs (SCA) por servicio -----------------------------
-NPM_AUDIT_OK=true
-TRIVY_FS_OK=true
+npm_audit() {
+  cd "services/$1" || return 1
+  npm install --package-lock-only --silent --ignore-scripts > "$LOG_DIR/npm-install-$1.log" 2>&1
+  npm audit --omit=dev --audit-level=high
+}
+
+paso 3
 for svc in "${SERVICES[@]}"; do
-  (cd "services/$svc" && npm install --package-lock-only --silent --ignore-scripts) \
-    > "$LOG_DIR/npm-install-$svc.log" 2>&1
+  correr "$LOG_DIR/npm-audit-$svc.log" "$svc · npm audit" npm_audit "$svc"
+  resumir npm-audit "$svc" $? "$LOG_DIR/npm-audit-$svc.log"
 
-  section "📦 npm audit - $svc"
-  if (cd "services/$svc" && npm audit --omit=dev --audit-level=high) \
-      2>&1 | tee "$LOG_DIR/npm-audit-$svc.log"; then
-    result_line "npm audit - $svc" success
-  else
-    result_line "npm audit - $svc" failure
-    NPM_AUDIT_OK=false
-  fi
-
-  section "📦 Trivy fs (SCA) - $svc"
-  if docker run --rm -v "$DOCKER_MOUNT_ROOT:/repo" -w /repo aquasec/trivy:0.70.0 \
-      fs "services/$svc" --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed \
-      --scanners vuln --ignorefile /repo/.trivyignore --skip-version-check --no-progress \
-      2>&1 | tee "$LOG_DIR/trivy-fs-$svc.log"; then
-    result_line "Trivy fs - $svc" success
-  else
-    result_line "Trivy fs - $svc" failure
-    TRIVY_FS_OK=false
-  fi
+  correr "$LOG_DIR/trivy-fs-$svc.log" "$svc · Trivy (deps)" \
+    docker run --rm -v "$DOCKER_MOUNT_ROOT:/repo" -w /repo aquasec/trivy:0.70.0 \
+    fs "services/$svc" --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed \
+    --scanners vuln --ignorefile /repo/.trivyignore --skip-version-check --no-progress
+  resumir trivy-fs "$svc" $? "$LOG_DIR/trivy-fs-$svc.log"
 done
-$NPM_AUDIT_OK && RESULT[npm_audit]=success || RESULT[npm_audit]=failure
-$TRIVY_FS_OK && RESULT[trivy_fs]=success || RESULT[trivy_fs]=failure
 
 # 5. docker build + Trivy image (Container Scan) --------------------------
-CONTAINER_OK=true
+paso 4
 for svc in "${SERVICES[@]}"; do
-  section "🐳 docker build - $svc"
-  if docker build -t "livemetric-$svc-localcheck" "services/$svc" \
-      2>&1 | tee "$LOG_DIR/docker-build-$svc.log"; then
-    result_line "docker build - $svc" success
+  correr "$LOG_DIR/docker-build-$svc.log" "$svc · construyendo la imagen" \
+    docker build -t "livemetric-$svc-localcheck" "services/$svc"
+  BUILD_RC=$?
+  resumir build "$svc" "$BUILD_RC" "$LOG_DIR/docker-build-$svc.log"
 
-    section "🐳 Trivy image (Container Scan) - $svc"
-    if docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$DOCKER_MOUNT_ROOT:/repo" \
-        aquasec/trivy:0.70.0 image "livemetric-$svc-localcheck" --severity CRITICAL,HIGH \
-        --exit-code 1 --ignore-unfixed --scanners vuln --ignorefile /repo/.trivyignore \
-        --skip-version-check --no-progress 2>&1 | tee "$LOG_DIR/trivy-image-$svc.log"; then
-      result_line "Trivy image - $svc" success
-    else
-      result_line "Trivy image - $svc" failure
-      CONTAINER_OK=false
-    fi
-  else
-    result_line "docker build - $svc" failure
-    CONTAINER_OK=false
+  if [ "$BUILD_RC" -eq 0 ]; then
+    correr "$LOG_DIR/trivy-image-$svc.log" "$svc · Trivy (imagen)" \
+      docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$DOCKER_MOUNT_ROOT:/repo" \
+      aquasec/trivy:0.70.0 image "livemetric-$svc-localcheck" --severity CRITICAL,HIGH \
+      --exit-code 1 --ignore-unfixed --scanners vuln --ignorefile /repo/.trivyignore \
+      --skip-version-check --no-progress
+    resumir trivy-image "$svc" $? "$LOG_DIR/trivy-image-$svc.log"
   fi
   docker rmi "livemetric-$svc-localcheck" > /dev/null 2>&1
 done
-$CONTAINER_OK && RESULT[container]=success || RESULT[container]=failure
 
 # 6. Pruebas unitarias ------------------------------------------------------
-if [ -f .env ]; then
-  UNIT_OK=true
-  for svc in "${BACKEND_SERVICES[@]}"; do
-    (cd "services/$svc" && npm ci --silent --ignore-scripts) > "$LOG_DIR/npm-install-test-$svc.log" 2>&1
-
-    section "🧪 Pruebas unitarias - $svc"
-    if (cd "services/$svc" && npm test) 2>&1 | tee "$LOG_DIR/test-$svc.log"; then
-      result_line "pruebas - $svc" success
-    else
-      result_line "pruebas - $svc" failure
-      UNIT_OK=false
-    fi
-  done
-  $UNIT_OK && RESULT[tests]=success || RESULT[tests]=failure
-else
-  section "🧪 Pruebas unitarias"
-  echo "   OMITIDAS: no hay .env en la raiz del repo."
-  RESULT[tests]=missing
-fi
-
-section "ℹ️  Fuera de alcance local"
-echo "   Checkov (el CLI en Docker no detecta recursos de forma confiable en"
-echo "   este entorno; se verifica en CI via la GitHub Action), el despliegue"
-echo "   con Terraform y el DAST con OWASP ZAP (requieren levantar el stack"
-echo "   completo). Esos tres se validan solo en GitHub Actions."
-
-# Resumen final -----------------------------------------------------------
-check() {
-  case "$1" in
-    success) printf '%b✅ %s%b\n' "$GREEN" "$2" "$NC" ;;
-    missing) printf '⚪ %s (no se corrio)\n' "$2" ;;
-    *)       printf '%b❌ %s%b\n' "$RED" "$2" "$NC" ;;
-  esac
+pruebas() {
+  cd "services/$1" || return 1
+  npm ci --silent --ignore-scripts > "$LOG_DIR/npm-install-test-$1.log" 2>&1
+  npm test
 }
 
-section "Resumen del Runner DevSecOps (local)"
-echo ""
-check "${RESULT[gitleaks]}"  "🔑 Secret Scanning (Gitleaks) — sin secretos expuestos"
-check "${RESULT[semgrep]}"   "🔍 SAST (Semgrep: OWASP Top 10 / Express / JWT)"
-check "${RESULT[npm_audit]}" "📦 SCA (npm audit) — sin CVEs de severidad alta o mayor"
-check "${RESULT[trivy_fs]}"  "📦 SCA (Trivy fs, sobre package.json) — sin CVEs de severidad alta o mayor"
-check "${RESULT[container]}" "🐳 Container Scan (docker build + Trivy, imagenes reales)"
-check "${RESULT[tests]}"     "🧪 Pruebas unitarias (Jest + Supertest)"
-echo ""
-echo "Logs completos guardados en: $LOG_DIR"
-echo ""
-
-if [[ "${RESULT[gitleaks]:-}" == "success" && "${RESULT[semgrep]:-}" == "success" && \
-      "${RESULT[npm_audit]:-}" == "success" && "${RESULT[trivy_fs]:-}" == "success" && \
-      "${RESULT[container]:-}" == "success" && "${RESULT[tests]:-}" != "failure" ]]; then
-  printf '%b✅ Todo en verde localmente. Es seguro hacer push.%b\n' "$GREEN" "$NC"
-  exit 0
+paso 5
+if [ -f .env ]; then
+  for svc in "${BACKEND_SERVICES[@]}"; do
+    correr "$LOG_DIR/test-$svc.log" "$svc · pruebas" pruebas "$svc"
+    resumir pruebas "$svc" $? "$LOG_DIR/test-$svc.log"
+  done
 else
-  printf '%b❌ Hay controles en rojo. Revisa el detalle de arriba (o los logs en %s) antes de hacer push.%b\n' "$RED" "$LOG_DIR" "$NC"
-  exit 1
+  node scripts/lib/pipeline-resumen.js omitido "$RESULTADOS" pruebas - "falta el .env en la raíz del repo"
 fi
+
+# Cuadro final: decide ademas el codigo de salida (1 si algo que bloquea fallo).
+node scripts/lib/pipeline-resumen.js final "$RESULTADOS" "$LOG_DIR"
+exit $?
