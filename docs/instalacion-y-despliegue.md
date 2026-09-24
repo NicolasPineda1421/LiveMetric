@@ -33,6 +33,14 @@ Todas las formas necesitan un `.env` en la raíz del repo, con las credenciales 
    ```bash
    docker compose run --rm auth-service node src/scripts/backfillVoterEncryption.js
    ```
+5. Crea el primer administrador. El repositorio no trae ninguno, ni ninguna credencial: el script pide la contraseña por teclado (dos veces, sin mostrarla, mínimo 10 caracteres) y deja el evento en la auditoría. Los siguientes se crean desde la pestaña **Usuarios**.
+
+   ```bash
+   docker compose run --rm auth-service node src/scripts/crearAdmin.js <usuario>            # administrador
+   docker compose run --rm auth-service node src/scripts/crearAdmin.js <usuario> auditor    # solo lectura
+   ```
+
+   Con el contenedor global, primero entra con `./scripts/contenedor.sh shell` y corre ahí el mismo comando.
 
 ## 1. `start.sh` / `start.bat` (recomendada)
 
@@ -105,23 +113,21 @@ El requisito común es [Docker Desktop](https://www.docker.com/products/docker-d
 
 ## Datos de demostración
 
-`db/init.sql` deja listo lo necesario para probar sin cargar nada a mano:
+`db/init.sql` deja datos para probar el ciclo completo, pero **ninguna credencial**:
 
 | Elemento | Valor |
 |---|---|
-| Administrador de arranque | usuario `admin`, credencial fija definida en `db/init.sql` |
-| Padrón de demostración | cédulas `1000000001` a `1000000005`, en "Puesto Central" (Mesa 1 y 2) y "Puesto Norte" (Mesa 1); PIN definido en `db/init.sql` / `db/migrations/003_voter_access_codes.sql` |
+| Padrón de demostración | cédulas `1000000001` a `1000000005`, en "Puesto Central" (Mesa 1 y 2) y "Puesto Norte" (Mesa 1). Entran **sin PIN**: para votar con ellas, genéralo en **Padrón** ("Regenerar PIN"); se muestra una sola vez. |
 | Plantillas | "Elección de ejemplo" (3 opciones) y "Elección Presidencial de Ejemplo" (3 candidatos numerados) |
-
-> ⚠️ Son credenciales fijas y conocidas, solo para el primer uso: entra, ve a **Usuarios** y crea tu propio administrador antes de usar el sistema con datos reales (ver [decisiones y riesgos](decisiones-y-riesgos.md)).
+| Administrador | ninguno: el primero se crea con `crearAdmin.js` (ver [el archivo `.env`](#el-archivo-env), paso 5) |
 
 ## Recorrido por la interfaz
 
-1. Entra a **http://localhost:3000** → "Administrador" → usuario `admin` con la credencial de arranque.
-2. En **Usuarios**, crea tu propio administrador (contraseña de al menos 10 caracteres).
+1. Entra a **http://localhost:3000** → "Administrador" → con tu cuenta.
+2. En **Padrón**, genera el PIN de las cédulas de demostración que vayas a usar ("Regenerar PIN"; anótalo, se muestra una sola vez). En **Usuarios** puedes crear más administradores o auditores.
 3. En **Plantillas**, usa "Elección Presidencial de Ejemplo" o crea una nueva con candidatos (número, nombre y foto).
 4. En **Elecciones**, instancia una con una ventana corta (2–3 minutos) para ver el ciclo completo.
-5. En una ventana de incógnito → "Votante" → cédula `1000000001` con su PIN de demostración → vota. Repite con `1000000003` (otra mesa) para tener votos en más de una mesa.
+5. En una ventana de incógnito → "Votante" → cédula `1000000001` con el PIN que generaste → vota. Repite con `1000000003` (otra mesa) para tener votos en más de una mesa.
 6. En **Elecciones** puedes pulsar "Detener" para cerrarla antes de tiempo.
 7. En **Resultados**: "En vivo" mientras está activa; tras cerrarla, "✓ Certificado", el ganador y el desglose por mesa.
 8. En **Escrutinio**, "Verificar cadena de escrutinio" confirma que ningún acta fue alterada.
@@ -140,9 +146,9 @@ curl http://127.0.0.1:3003/health   # analytics
 curl http://127.0.0.1:3004/health   # scrutiny
 docker compose logs -f scheduler-worker   # el worker no expone puerto
 
-# Login de admin (reemplaza <password> por la credencial de arranque de db/init.sql)
+# Login de admin (reemplaza <usuario> y <password> por las credenciales de un administrador)
 curl -X POST http://127.0.0.1:3001/login/admin \
-  -H "Content-Type: application/json" -d '{"username":"admin","password":"<password>"}'
+  -H "Content-Type: application/json" -d '{"username":"<usuario>","password":"<password>"}'
 
 # Login de votante (cédula + PIN)
 curl -X POST http://127.0.0.1:3001/login/voter \

@@ -244,26 +244,19 @@ CREATE TRIGGER trg_audit_no_update
 -- de Auth, ya autenticados con JWT de administrador.
 
 -- ---------------------------------------------------------------------------
--- SEED de arranque: para que el sistema sea usable con solo "docker compose
--- up", se crea UN admin por defecto y datos de demostración. Esto es
--- SOLO para entorno local de evaluación/desarrollo (Local-First), nunca
--- para producción real. Es un riesgo aceptado y documentado explícitamente
--- en docs/decisiones-y-riesgos.md.
---
---   usuario:    admin
---   contraseña: Admin123!
---
--- El hash de abajo corresponde exactamente a esa contraseña (bcrypt, costo 12).
+-- Datos de demostración: un padrón y dos plantillas, para poder probar el
+-- ciclo completo apenas se inicializa la base. NO se crea ningún
+-- administrador ni se asigna ningún PIN: el repositorio no lleva ninguna
+-- credencial, ni siquiera su hash. El primer administrador se crea con
+--   docker compose run --rm auth-service node src/scripts/crearAdmin.js <usuario>
+-- (pide la contraseña por teclado), y los demás desde la pestaña "Usuarios".
 -- ---------------------------------------------------------------------------
-
-INSERT INTO admins (username, password_hash)
-VALUES ('admin', '$2b$12$YLIAL2uDCaAs5y/mwRj6WuNCk/dmxsNyZitdBPlvTi/Tqyn598bHS')
-ON CONFLICT (username) DO NOTHING;
 
 -- Padrón de demostración: 5 cédulas ficticias, repartidas en 2 mesas de un
 -- mismo puesto, para que el acta de escrutinio tenga algo real que
--- consolidar entre mesas al certificar una elección de prueba. Mismo riesgo
--- aceptado que el admin de arriba: PIN fijo "123456", solo para demo local.
+-- consolidar entre mesas al certificar una elección de prueba. Entran SIN
+-- PIN (access_code_hash NULL): no pueden votar hasta que un administrador
+-- les genere uno desde la pestaña "Padrón" ("Regenerar PIN").
 --
 -- IMPORTANTE en una instalación NUEVA: este INSERT no puede cifrar
 -- "cedula"/"polling_place"/"voting_table" (ese SQL no conoce
@@ -273,10 +266,8 @@ ON CONFLICT (username) DO NOTHING;
 -- Ese script detecta cualquier valor sin cifrar (de este seed, o de datos
 -- previos a esta migración) y lo cifra en el sitio; es seguro correrlo
 -- más de una vez.
-INSERT INTO voters (cedula, full_name, polling_place, voting_table, access_code_hash, created_by)
-SELECT v.cedula, v.full_name, v.polling_place, v.voting_table,
-       '$2a$12$Ggbitu7PTzh/kWQEfrN77O6Dpx.3ZaXnIJen37XVNuLYOTSQU0Yru', -- bcrypt('123456')
-       (SELECT id FROM admins WHERE username = 'admin')
+INSERT INTO voters (cedula, full_name, polling_place, voting_table)
+SELECT v.cedula, v.full_name, v.polling_place, v.voting_table
 FROM (VALUES
     ('1000000001', 'Votante Demo Uno',     'Puesto Central', 'Mesa 1'),
     ('1000000002', 'Votante Demo Dos',     'Puesto Central', 'Mesa 1'),
@@ -288,7 +279,7 @@ ON CONFLICT (cedula) DO NOTHING;
 
 -- Plantilla genérica de demostración (formato libre, como antes).
 INSERT INTO election_templates (id, name, description, template_type, created_by)
-VALUES (1, 'Elección de ejemplo', 'Plantilla genérica de demostración', 'generic', (SELECT id FROM admins WHERE username = 'admin'))
+VALUES (1, 'Elección de ejemplo', 'Plantilla genérica de demostración', 'generic', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO template_options (template_id, label)
@@ -299,7 +290,7 @@ WHERE NOT EXISTS (SELECT 1 FROM template_options WHERE template_id = 1);
 -- (sin logo precargado; se puede editar/crear una nueva con fotos reales
 -- desde la pestaña "Plantillas" del panel de administración).
 INSERT INTO election_templates (id, name, description, template_type, created_by)
-VALUES (2, 'Elección Presidencial de Ejemplo', 'Plantilla en formato de elección presidencial', 'presidential', (SELECT id FROM admins WHERE username = 'admin'))
+VALUES (2, 'Elección Presidencial de Ejemplo', 'Plantilla en formato de elección presidencial', 'presidential', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO template_options (template_id, label, candidate_number)

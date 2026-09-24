@@ -4,6 +4,7 @@
 // CITEST_ para poder identificarlo y borrarlo sin riesgo al final
 // (afterAll), sin tocar datos reales del padrón/admins.
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const request = require('supertest');
 const app = require('../app');
 const pool = require('../db');
@@ -20,12 +21,24 @@ const TEST_AUDITOR_USER = `${RUN_ID}_auditor`;
 // validación de /admin/voters/bulk) — nada de guion bajo, y corta.
 const TEST_VOTER_CEDULA = `CI-${Date.now().toString().slice(-10)}`;
 
+// Admin base de las pruebas: se crea directo en la base con una contraseña
+// aleatoria (igual que hacen las pruebas de voting), en vez de depender de
+// un admin sembrado con una credencial fija: el repositorio no lleva
+// ninguna. Se borra en el afterAll junto con los demás CITEST_.
+const BASE_ADMIN_USER = `${RUN_ID}_base`;
+const BASE_ADMIN_PASS = `Ci-${crypto.randomBytes(12).toString('base64url')}`;
+
 let adminToken;
 
 async function createBaseAdmin() {
+  await pool.query('INSERT INTO admins (username, password_hash, role) VALUES ($1, $2, $3)', [
+    BASE_ADMIN_USER,
+    await bcrypt.hash(BASE_ADMIN_PASS, 12),
+    'admin',
+  ]);
   const res = await request(app)
     .post('/login/admin')
-    .send({ username: 'admin', password: 'Admin123!' });
+    .send({ username: BASE_ADMIN_USER, password: BASE_ADMIN_PASS });
   return res.body.token;
 }
 
@@ -38,8 +51,9 @@ afterAll(async () => {
   // "cedula" está cifrada en la base (voterCrypto.js): hay que cifrar el
   // mismo valor de prueba con la misma clave para poder encontrarla, un
   // "WHERE cedula = <texto plano>" nunca matchearía nada.
-  await pool.query('DELETE FROM admins WHERE username LIKE $1', [`${RUN_ID}%`]);
+  // El votante primero: su created_by apunta al admin base (FK).
   await pool.query('DELETE FROM voters WHERE cedula = $1', [encryptField(TEST_VOTER_CEDULA)]);
+  await pool.query('DELETE FROM admins WHERE username LIKE $1', [`${RUN_ID}%`]);
   await pool.end();
 });
 
@@ -55,7 +69,7 @@ describe('POST /login/admin', () => {
   it('rechaza credenciales inválidas con un mensaje genérico', async () => {
     const res = await request(app)
       .post('/login/admin')
-      .send({ username: 'admin', password: 'clave-incorrecta-123' }); // gitleaks:allow (password de prueba deliberadamente incorrecta, no un secreto)
+      .send({ username: BASE_ADMIN_USER, password: 'clave-incorrecta-123' }); // gitleaks:allow (password de prueba deliberadamente incorrecta, no un secreto)
     expect(res.status).toBe(401);
     expect(res.body.error).toBe('Credenciales inválidas');
   });
@@ -68,10 +82,10 @@ describe('POST /login/admin', () => {
     expect(res.body.error).toBe('Credenciales inválidas');
   });
 
-  it('acepta la credencial de admin sembrada y devuelve un JWT con role', async () => {
+  it('acepta la credencial correcta de un admin y devuelve un JWT con role', async () => {
     const res = await request(app)
       .post('/login/admin')
-      .send({ username: 'admin', password: 'Admin123!' });
+      .send({ username: BASE_ADMIN_USER, password: BASE_ADMIN_PASS });
     expect(res.status).toBe(200);
     expect(res.body.token).toEqual(expect.any(String));
     expect(res.body.role).toBe('admin');

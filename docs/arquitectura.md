@@ -61,13 +61,13 @@ Ningún secreto (`JWT_SECRET`, credenciales de la base, `VOTER_ID_SALT`, `VOTERS
 - `.env.gpg`: el `.env` del equipo cifrado con gpg (sí está en el repo); la passphrase se comparte por otro canal. `start.sh`/`start.bat`/`contenedor.sh` lo descifran solos si no hay `.env`.
 - En GitHub Actions, los mismos valores viven como *secrets* del repositorio.
 
-**Excepción documentada:** el sistema arranca con un usuario administrador y un padrón de demostración precargados (ver [instalación](instalacion-y-despliegue.md#datos-de-demostración)), pensados para cambiarse en el primer uso; se analiza como riesgo aceptado en [decisiones y riesgos](decisiones-y-riesgos.md).
+Tampoco hay credenciales de la aplicación en el repositorio: `db/init.sql` no crea ningún administrador ni asigna PINs. El primer administrador se crea con `services/auth/src/scripts/crearAdmin.js`, que pide la contraseña por teclado (ver [instalación](instalacion-y-despliegue.md#el-archivo-env)).
 
 ## Flujo funcional (de punta a punta)
 
 ```
-0) [SETUP] db/init.sql deja un admin, un padrón y plantillas de demostración
-   → cambiar la credencial del admin de arranque en el primer uso
+0) [SETUP] db/init.sql deja un padrón y plantillas de demostración, sin credenciales
+   → el primer admin se crea con src/scripts/crearAdmin.js; los PINs, desde "Padrón"
 
 1) Admin hace login       → POST /login/admin (Auth)         → JWT rol "admin", ~1h
    Votante hace login     → POST /login/voter (Auth)         → JWT rol "voter", ~10min

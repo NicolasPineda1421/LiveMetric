@@ -345,19 +345,27 @@ jobs:
     name: Despliegue automatizado - Terraform
     needs: [iac-scan, container-scan]
     runs-on: ubuntu-latest
-    env:
-      # Valores desechables SOLO para este Postgres local efimero, que se
-      # destruye al final del job - nunca son las credenciales reales.
-      TF_VAR_postgres_password: 'ci-throwaway-password-123'
-      TF_VAR_jwt_secret: 'ci-throwaway-jwt-secret-not-real-0123456789' # gitleaks:allow
-      TF_VAR_voter_id_salt: 'ci-throwaway-voter-salt-0123456789'
-      TF_VAR_internal_service_token: 'ci-throwaway-internal-token-0123456789'
-      # Clave AES-256 (32 bytes) en base64 desechable, generada solo para
-      # este Postgres local efimero - auth-service y analytics-service
-      # fallan al arrancar sin una clave con este formato exacto.
-      TF_VAR_voters_encryption_key: 'a2Y6b/DIA3UvA2Ojx4plUy8J3uiOUZzku7tMnf81mnc=' # gitleaks:allow
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # Secretos para el Postgres local efimero de este job, que se destruye
+      # al final: se generan al azar en cada corrida (ningun valor fijo en el
+      # repositorio) y se enmascaran en los logs. Quedan en GITHUB_ENV, asi
+      # que "terraform destroy" usa los mismos. En hexadecimal para no meter
+      # caracteres especiales en la contrasena de Postgres, salvo la clave
+      # AES-256 del padron, que tiene que ser base64 de exactamente 32 bytes
+      # (auth-service y analytics-service no arrancan sin ese formato).
+      - name: Generar secretos desechables para el entorno efimero
+        run: |
+          set_secret() {
+            echo "::add-mask::$2"
+            echo "TF_VAR_$1=$2" >> "$GITHUB_ENV"
+          }
+          set_secret postgres_password "$(openssl rand -hex 24)"
+          set_secret jwt_secret "$(openssl rand -hex 48)"
+          set_secret voter_id_salt "$(openssl rand -hex 32)"
+          set_secret internal_service_token "$(openssl rand -hex 32)"
+          set_secret voters_encryption_key "$(openssl rand -base64 32)"
 
       - name: Configurar Terraform
         uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3

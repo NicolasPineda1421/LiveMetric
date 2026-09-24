@@ -60,7 +60,7 @@ La primera vez tarda varios minutos (construye y analiza las 6 imágenes). Al te
     Desde otra PC de la red:  http://192.168.x.x:3000
 ```
 
-**3. Primer ingreso.** Entra como administrador con el usuario `admin` y la credencial de arranque definida en `db/init.sql`. En **Usuarios**, crea tu propio administrador antes de usar datos reales. Hay un padrón y plantillas de demostración para probar el ciclo completo (ver el [recorrido por la interfaz](docs/instalacion-y-despliegue.md#recorrido-por-la-interfaz)).
+**3. Primer ingreso.** Entra con tu cuenta de administrador; el repositorio no trae ninguna. Si la base es nueva, crea la primera con `docker compose run --rm auth-service node src/scripts/crearAdmin.js <usuario>`, que pide la contraseña sin mostrarla; las demás se crean desde **Usuarios**. Hay un padrón y plantillas de demostración para probar el ciclo completo (los votantes necesitan un PIN que se genera en **Padrón**) (ver el [recorrido por la interfaz](docs/instalacion-y-despliegue.md#recorrido-por-la-interfaz)).
 
 ## Documentación
 

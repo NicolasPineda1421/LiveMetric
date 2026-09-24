@@ -30,17 +30,17 @@ function signToken(payload) {
 
 beforeAll(async () => {
   // El INSERT de report_dashboards guarda created_by con una FK real hacia
-  // admins(id) (ver POST /api/elections/:id/dashboards en app.js). En vez de
-  // insertar un admin de prueba (fuera del alcance de limpieza que se pidió:
-  // solo dashboards/options/elección), se reutiliza el id del admin ya
-  // sembrado por db/init.sql -- no se modifica esa fila, solo se lee su id.
-  const seededAdmin = await pool.query(`SELECT id FROM admins WHERE username = 'admin' LIMIT 1`);
-  if (seededAdmin.rows.length === 0) {
-    throw new Error('No se encontró el admin sembrado por db/init.sql; no se puede preparar el fixture de prueba.');
-  }
-  const realAdminId = seededAdmin.rows[0].id;
+  // admins(id) (ver POST /api/elections/:id/dashboards en app.js), así que
+  // hace falta una fila real: se crea un admin propio de la prueba (igual
+  // que en voting; su password_hash no es un bcrypt válido, así que nadie
+  // puede iniciar sesión con él) y se borra en el afterAll.
+  const testAdmin = await pool.query(
+    `INSERT INTO admins (username, password_hash, role) VALUES ($1, 'x', 'admin') RETURNING id`,
+    [`${RUN_ID}-admin`]
+  );
+  const realAdminId = testAdmin.rows[0].id;
 
-  adminToken = signToken({ sub: realAdminId, username: 'admin', role: 'admin' });
+  adminToken = signToken({ sub: realAdminId, username: `${RUN_ID}-admin`, role: 'admin' });
   // El sub del auditor nunca se persiste (las rutas de escritura son
   // admin-only y el auditor recibe 403 antes de tocar la base), así que no
   // hace falta que corresponda a una fila real.
@@ -66,11 +66,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   // Orden importa por las foreign keys: dashboards y options referencian a
-  // elections, así que se borran antes que la elección misma. No se toca la
-  // tabla admins (solo se leyó, nunca se insertó nada ahí).
+  // elections, y elections y dashboards al admin de prueba, así que ese va
+  // al final.
   await pool.query('DELETE FROM report_dashboards WHERE election_id = $1', [electionId]);
   await pool.query('DELETE FROM election_options WHERE election_id = $1', [electionId]);
   await pool.query('DELETE FROM elections WHERE id = $1', [electionId]);
+  await pool.query('DELETE FROM admins WHERE username = $1', [`${RUN_ID}-admin`]);
   await pool.end();
 });
 
