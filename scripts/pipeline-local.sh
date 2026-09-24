@@ -141,7 +141,24 @@ result_line "Secret Scanning (Gitleaks)" "${RESULT[gitleaks]}"
 # que lo veriamos en la terminal si corrieramos semgrep a mano; el gate
 # real es que el escaneo corra sin romperse y genere el SARIF.
 section "🔍 SAST (Semgrep: OWASP Top 10 / Express / JWT)"
-if docker run --rm -v "$DOCKER_MOUNT_ROOT:/src" -w /src semgrep/semgrep \
+# Semgrep descarga las reglas (p/owasp-top-ten, etc.) de semgrep.dev en cada
+# corrida, desde una imagen Alpine (musl). Algunos DNS - tipicamente el de
+# "Compartir conexion a Internet" / hotspot de Windows (192.168.137.1,
+# dominio mshome.net) - responden NXDOMAIN a la consulta IPv6 (AAAA) de un
+# nombre que solo tiene IPv4, en vez de "sin registros". glibc (el host) lo
+# ignora; musl le cree y da el nombre por inexistente, asi que Semgrep falla
+# con "Name does not resolve" aunque el host tenga internet. Se detecta con
+# un contenedor Alpine descartable y, si con DNS publicos si resuelve, se
+# usan esos DNS solo para el contenedor de Semgrep.
+SEMGREP_DNS_ARGS=()
+if ! docker run --rm alpine getent ahosts semgrep.dev > /dev/null 2>&1 && \
+   docker run --rm --dns 1.1.1.1 --dns 8.8.8.8 alpine getent ahosts semgrep.dev > /dev/null 2>&1; then
+  echo "ℹ️  El DNS de esta red no le resuelve semgrep.dev a los contenedores"
+  echo "   Alpine (responde NXDOMAIN a la consulta IPv6). Se usan DNS publicos"
+  echo "   (1.1.1.1, 8.8.8.8) solo para el contenedor de Semgrep."
+  SEMGREP_DNS_ARGS=(--dns 1.1.1.1 --dns 8.8.8.8)
+fi
+if docker run --rm "${SEMGREP_DNS_ARGS[@]}" -v "$DOCKER_MOUNT_ROOT:/src" -w /src semgrep/semgrep \
     semgrep scan --config=p/owasp-top-ten --config=p/expressjs --config=p/nodejsscan --config=p/jwt \
     --sarif --output=/src/semgrep-local.sarif . 2>&1 | tee "$LOG_DIR/semgrep.log" \
     && [ -s "$REPO_ROOT/semgrep-local.sarif" ]; then
