@@ -12,3 +12,12 @@
 #     no un secreto.
 823f53dbf3098508cd1ab44b3c41f4c91ab0b533:.github/workflows/devsecops.yml:livemetric-jwt-secret-assignment:279
 823f53dbf3098508cd1ab44b3c41f4c91ab0b533:services/auth/src/__tests__/app.test.js:generic-api-key:54
+#
+# aeb9015 (README reorganizado en docs/):
+#   - docs/pipeline-devsecops.md linea 64: el secreto FALSO de ejemplo
+#     ("sk_live_abcdef...") con el que la guia muestra que Gitleaks bloquea
+#     un commit. Antes vivia en README.md (excluido en .gitleaks.toml); al
+#     pasar a docs/ se exceptuan solo estos dos hallazgos, no el archivo
+#     entero, para que Gitleaks siga revisando el resto de la documentacion.
+aeb90154dcecd0f23f862a53dd8b62fc1143a779:docs/pipeline-devsecops.md:stripe-access-token:64
+aeb90154dcecd0f23f862a53dd8b62fc1143a779:docs/pipeline-devsecops.md:livemetric-jwt-secret-assignment:64
