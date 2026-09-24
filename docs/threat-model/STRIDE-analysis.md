@@ -4,7 +4,7 @@ Este documento es la versión legible del modelo formal en
 [`livemetric.threatdragon.json`](./livemetric.threatdragon.json), pensado para
 abrirse en [OWASP Threat Dragon](https://www.threatdragon.com/) (web o
 desktop). Los diagramas de flujo de datos (DFD) reflejan la arquitectura real
-del sistema (ver `README.md`, sección 1), no un ejemplo genérico: cada
+del sistema (ver `docs/arquitectura.md`), no un ejemplo genérico: cada
 amenaza está anclada a un flujo o proceso que existe de verdad en el código,
 y cita la mitigación real ya implementada cuando la hay.
 
@@ -88,6 +88,7 @@ por responsabilidad):
   un tercero) más allá de "qué pasa si se filtran sus credenciales", que sí
   está cubierto (#5, #13).
 - Las categorías STRIDE no cubiertas explícitamente arriba (p. ej. Spoofing
-  del rol admin) heredan las mismas mitigaciones ya documentadas en el README
+  del rol admin) heredan las mismas mitigaciones ya documentadas en
+  `docs/decisiones-y-riesgos.md`
   (bcrypt, JWT HS256 con verificación de algoritmo, etc.) y no se repiten aquí
   para no duplicar contenido.

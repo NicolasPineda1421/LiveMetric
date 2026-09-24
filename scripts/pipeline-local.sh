@@ -22,7 +22,7 @@
 # No incluye el despliegue con Terraform ni el DAST con OWASP ZAP: esos
 # pasos levantan el stack completo y tardan varios minutos mas; se siguen
 # verificando en GitHub Actions (o a mano con "cd infra/terraform &&
-# terraform apply", ver README).
+# terraform apply", ver docs/instalacion-y-despliegue.md).
 #
 # Requisitos: Docker, Node.js/npm, y (para las pruebas unitarias) un .env
 # real en la raiz del repo con las credenciales de Supabase.

@@ -29,8 +29,8 @@ function newWidgetId() {
     return crypto.randomUUID();
   }
   // "crypto.randomUUID" exige un contexto seguro (HTTPS o localhost); esta
-  // app tambien se sirve por HTTP plano en la red local (ver README,
-  // sección "red local"), donde el navegador ni siquiera expone esa
+  // app tambien se sirve por HTTP plano en la red local (ver
+  // docs/instalacion-y-despliegue.md, "Acceso desde otras PC"), donde el navegador ni siquiera expone esa
   // función — ahí este id nunca es un secreto, solo la clave de un widget
   // dentro del layout del tablero, así que "crypto.getRandomValues" (que sí
   // funciona en cualquier contexto, seguro o no) alcanza de sobra.

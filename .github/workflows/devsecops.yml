@@ -279,9 +279,59 @@ jobs:
         working-directory: services/${{ matrix.service }}
         run: npm ci --ignore-scripts
 
-      - name: Correr pruebas
+      - name: Correr pruebas (con cobertura)
         working-directory: services/${{ matrix.service }}
-        run: npm test
+        run: npm test -- --coverage --coverageReporters=json-summary --coverageReporters=text-summary
+
+      # El job "coverage-badge" junta el resumen de cada servicio para la
+      # insignia de cobertura del README.
+      - name: Guardar el resumen de cobertura
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-${{ matrix.service }}
+          path: services/${{ matrix.service }}/coverage/coverage-summary.json
+          retention-days: 7
+
+  # -------------------------------------------------------------------------
+  # 6b) INSIGNIA DE COBERTURA - junta la cobertura de las pruebas de los 5
+  #     servicios y la publica en GitHub Pages: coverage.json (el formato
+  #     que lee shields.io para la insignia del README) y una pagina con el
+  #     detalle por servicio. Solo en pushes a main, para que la insignia
+  #     refleje la rama principal y no un PR a medio camino. No es un
+  #     control de seguridad, asi que security-gate no la espera.
+  # -------------------------------------------------------------------------
+  coverage-badge:
+    name: Insignia de cobertura (GitHub Pages)
+    needs: unit-tests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Descargar la cobertura de cada servicio
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: coverage-*
+          path: coverage
+
+      - name: Calcular la cobertura total y armar la pagina
+        run: node scripts/ci/cobertura-insignia.js coverage _site
+
+      - name: Subir la pagina
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: _site
+
+      - name: Publicar en GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
 
   # -------------------------------------------------------------------------
   # 7) IaC DEPLOY - Despliegue automatizado con Terraform (Fase 5). Usa el

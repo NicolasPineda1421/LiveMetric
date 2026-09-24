@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS admins (
 -- 003_voter_access_codes.sql): el admin lo genera al cargar el padrón y lo
 -- distribuye en el puesto de votación. No hay registro de cuentas
 -- self-service; la cédula solo identifica, el PIN es el secreto real. Ver
--- Manual de Seguridad (README) para el análisis de riesgo y los controles
+-- docs/decisiones-y-riesgos.md para el análisis de riesgo y los controles
 -- compensatorios (rate limiting agresivo, JWT de vida muy corta, y que el
 -- anti-doble-voto se ancle a la identidad real en vez de a un fingerprint).
 --
@@ -248,7 +248,7 @@ CREATE TRIGGER trg_audit_no_update
 -- up", se crea UN admin por defecto y datos de demostración. Esto es
 -- SOLO para entorno local de evaluación/desarrollo (Local-First), nunca
 -- para producción real. Es un riesgo aceptado y documentado explícitamente
--- en el Manual de Seguridad (README).
+-- en docs/decisiones-y-riesgos.md.
 --
 --   usuario:    admin
 --   contraseña: Admin123!

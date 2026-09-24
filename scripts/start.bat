@@ -72,7 +72,7 @@ if exist .env (
 )
 if not exist .env.gpg (
   call :falla "No hay .env ni .env.gpg en esta carpeta."
-  call :info "Copia .env.example a .env y completa los valores (ver README, seccion 3),"
+  call :info "Copia .env.example a .env y completa los valores (ver README, Inicio rapido),"
   call :info "o pedi el .env.gpg + la passphrase a quien te comparta el proyecto."
   exit /b 1
 )
@@ -160,7 +160,7 @@ if "%FRONTEND_UP%"=="1" (
   echo %VERDE%    En esta PC:               http://localhost:3000%RESET%
   if defined IP_LAN (
     echo %VERDE%    Desde otra PC de la red:  http://%IP_LAN%:3000%RESET%
-    echo %GRIS%    Si otra PC no llega, permiti el puerto 3000 TCP en el Firewall de Windows, ver README.%RESET%
+    echo %GRIS%    Si otra PC no llega, permiti el puerto 3000 TCP en el Firewall de Windows, ver docs\instalacion-y-despliegue.md.%RESET%
   ) else (
     echo %VERDE%    Desde otra PC de la red:  no se detecto una conexion de red%RESET%
   )

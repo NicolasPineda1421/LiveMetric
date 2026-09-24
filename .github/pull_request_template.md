@@ -11,7 +11,7 @@
 
 ## Checklist antes de solicitar revisión
 
-- [ ] La rama sigue la convención `tipo/descripcion-corta` (ver `README.md` → Estrategia de ramas)
+- [ ] La rama sigue la convención `tipo/descripcion-corta` (ver `docs/estrategia-de-ramas.md`)
 - [ ] Se ejecutó `docker compose up --build` localmente y el stack levanta sin errores
 - [ ] No se agregaron secretos, tokens ni contraseñas en el código (verificado localmente, ej. `gitleaks detect`)
 - [ ] Si se tocó `services/*/package.json`, se corrió `npm audit` localmente

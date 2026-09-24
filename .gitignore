@@ -10,6 +10,8 @@ node_modules/
 npm-debug.log*
 services/**/node_modules/
 services/frontend/dist/
+# Reportes de cobertura de Jest (npm test -- --coverage)
+coverage/
 
 # Terraform
 infra/terraform/.terraform/

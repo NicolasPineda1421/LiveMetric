@@ -188,7 +188,7 @@ iniciar() {
     ok ".env descifrado adentro del contenedor global (no queda en esta carpeta)"
   else
     falla "No hay .env ni .env.gpg en $(pwd)."
-    info "Copiá .env.example a .env y completá los valores (ver README, sección 3),"
+    info "Copiá .env.example a .env y completá los valores (ver README, «Inicio rápido»),"
     info "o pedí el .env.gpg + la passphrase a quien te comparta el proyecto."
     exit 1
   fi

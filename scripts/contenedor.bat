@@ -149,7 +149,7 @@ if exist .env (
 )
 if not exist .env.gpg (
   call :falla "No hay .env ni .env.gpg en esta carpeta."
-  call :info "Copia .env.example a .env y completa los valores (ver README, seccion 3),"
+  call :info "Copia .env.example a .env y completa los valores (ver README, Inicio rapido),"
   call :info "o pedi el .env.gpg + la passphrase a quien te comparta el proyecto."
   goto :fin_error
 )
@@ -229,7 +229,7 @@ echo %VERDE%    scripts\contenedor.bat logs      logs en vivo, o: logs auth-serv
 echo %VERDE%    scripts\contenedor.bat shell     terminal adentro%RESET%
 echo %VERDE%    scripts\contenedor.bat detener   apagar todo%RESET%
 echo %VERDE%%RAYA%%RESET%
-if defined IP_LAN call :info "Si otra PC no llega, permiti el puerto %PUERTO% TCP en el Firewall de Windows, ver README."
+if defined IP_LAN call :info "Si otra PC no llega, permiti el puerto %PUERTO% TCP en el Firewall de Windows, ver docs\instalacion-y-despliegue.md."
 call :restaurar_consola
 exit /b 0
 

@@ -21,7 +21,13 @@
     "node": ">=20.0.0"
   },
   "jest": {
-    "setupFiles": ["<rootDir>/jest.setup.js"],
-    "testEnvironment": "node"
+    "setupFiles": [
+      "<rootDir>/jest.setup.js"
+    ],
+    "testEnvironment": "node",
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/**/__tests__/**"
+    ]
   }
 }
