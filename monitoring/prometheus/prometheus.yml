@@ -1,0 +1,84 @@
+# =============================================================================
+# LiveMetric — Configuracion de Prometheus
+#
+# NOTA IMPORTANTE SOBRE EL ORIGEN DE LAS METRICAS
+#
+# Los microservicios de LiveMetric NO exponen un endpoint /metrics: no tienen
+# instrumentacion con prom-client. En lugar de afirmar que si la tienen, este
+# stack obtiene observabilidad real por dos vias que no requieren tocar el
+# codigo de la aplicacion:
+#
+#   1. cAdvisor  -> CPU, memoria, red y reinicios POR CONTENEDOR.
+#   2. Blackbox  -> sondas HTTP contra los /health que los servicios YA exponen,
+#                   lo que da disponibilidad y latencia por microservicio.
+#
+# Instrumentar los servicios con prom-client (metricas de negocio: votos por
+# minuto, logins fallidos, duracion de la certificacion) es el siguiente paso
+# y esta documentado como trabajo futuro en monitoring/README.md.
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    entorno: local
+    proyecto: livemetric
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ---------------------------------------------------------------------------
+  # Metricas por contenedor
+  # ---------------------------------------------------------------------------
+  - job_name: cadvisor
+    static_configs:
+      - targets: ['cadvisor:8080']
+    metric_relabel_configs:
+      # Solo interesan los contenedores de LiveMetric, no los del propio stack
+      # de monitoreo: reduce a la mitad el volumen de series almacenadas.
+      - source_labels: [name]
+        regex: 'livemetric-.*'
+        action: keep
+
+  # ---------------------------------------------------------------------------
+  # Metricas del host
+  # ---------------------------------------------------------------------------
+  - job_name: node
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # ---------------------------------------------------------------------------
+  # Disponibilidad y latencia de cada microservicio, mediante sonda HTTP sobre
+  # el /health que ya exponen. Es la metrica que de verdad importa en un
+  # sistema electoral: si el servicio de votacion no responde durante la
+  # ventana de votacion, hay un problema grave.
+  # ---------------------------------------------------------------------------
+  - job_name: blackbox-health
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://auth-service:3001/health
+          - http://voting-service:3002/health
+          - http://analytics-service:3003/health
+          - http://scrutiny-service:3004/health
+        labels:
+          capa: microservicio
+      - targets:
+          - http://frontend:8080/
+        labels:
+          capa: frontend
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

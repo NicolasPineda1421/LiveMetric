@@ -1,0 +1,239 @@
+{
+  "uid": "livemetric-overview",
+  "title": "LiveMetric — Estado del sistema electoral",
+  "tags": ["livemetric", "devsecops"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "15s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Disponibilidad del servicio",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "Microservicios respondiendo",
+      "description": "Cuántos de los cinco endpoints de salud responden correctamente. Si alguno cae durante una votación activa, los votantes no pueden votar.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
+      "targets": [
+        {
+          "expr": "sum(probe_success{job=\"blackbox-health\"})",
+          "legendFormat": "activos",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "max": 5,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 4 },
+              { "color": "green", "value": 5 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Estado de salud por servicio",
+      "description": "1 = responde, 0 = caído. Un escalón hacia abajo marca el momento exacto de una caída.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 18, "x": 6, "y": 1 },
+      "targets": [
+        {
+          "expr": "probe_success{job=\"blackbox-health\"}",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "max": 1,
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "fillOpacity": 15,
+            "lineWidth": 2
+          }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Latencia de respuesta por servicio",
+      "description": "Tiempo que tarda cada microservicio en responder a la sonda de salud. Una latencia creciente suele anticipar una caída.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "expr": "probe_duration_seconds{job=\"blackbox-health\"}",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 2 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Worker de programación",
+      "description": "El scheduler es el único responsable de abrir, cerrar y certificar elecciones. Si no está activo, el proceso electoral se detiene sin que nadie lo note.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        {
+          "expr": "(time() - container_last_seen{name=\"livemetric-scheduler\"}) < 120",
+          "legendFormat": "scheduler",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": { "text": "DETENIDO", "color": "red", "index": 0 },
+                "1": { "text": "ACTIVO", "color": "green", "index": 1 }
+              }
+            }
+          ]
+        }
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "type": "row",
+      "title": "Recursos por contenedor",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Uso de CPU",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "targets": [
+        {
+          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name=~\"livemetric-.*\"}[2m])) * 100",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1 }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Uso de memoria",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "targets": [
+        {
+          "expr": "sum by (name) (container_memory_usage_bytes{name=~\"livemetric-.*\"})",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1 }
+        }
+      }
+    },
+    {
+      "type": "row",
+      "title": "Registros",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 }
+    },
+    {
+      "type": "logs",
+      "title": "Intentos de autenticación fallidos",
+      "description": "Filtra los eventos de login fallido de todos los servicios. Un repunte súbito desde una misma fuente puede indicar un intento de fuerza bruta contra el padrón.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 23 },
+      "targets": [
+        {
+          "expr": "{contenedor=~\"livemetric-.*\"} |= \"LOGIN_FAILURE\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      }
+    },
+    {
+      "type": "logs",
+      "title": "Errores de la aplicación",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 23 },
+      "targets": [
+        {
+          "expr": "{contenedor=~\"livemetric-.*\"} |~ \"(?i)error|exception|fatal\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      }
+    },
+    {
+      "type": "logs",
+      "title": "Actividad del proceso electoral",
+      "description": "Apertura, cierre y certificación de elecciones. Permite verificar que el ciclo automático ocurre en los tiempos previstos.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "targets": [
+        {
+          "expr": "{servicio=~\"scheduler|scrutiny\"}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      }
+    }
+  ]
+}

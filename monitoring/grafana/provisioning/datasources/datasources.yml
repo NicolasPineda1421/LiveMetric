@@ -1,0 +1,28 @@
+# =============================================================================
+# LiveMetric — Fuentes de datos de Grafana (aprovisionadas como codigo)
+#
+# Se declaran aqui en vez de configurarlas a mano en la interfaz: el tablero
+# queda reproducible y versionado, coherente con el enfoque de IaC del resto
+# del proyecto.
+# =============================================================================
+
+apiVersion: 1
+
+datasources:
+
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    uid: prometheus
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 15s
+
+  - name: Loki
+    type: loki
+    access: proxy
+    uid: loki
+    url: http://loki:3100
+    editable: false

@@ -1,0 +1,63 @@
+# =============================================================================
+# LiveMetric — Reglas de alerta
+#
+# Criterio: alertar solo sobre condiciones que exigen una accion humana. Una
+# alerta que nadie atiende entrena al equipo a ignorar el tablero.
+# =============================================================================
+
+groups:
+
+  - name: disponibilidad
+    rules:
+
+      - alert: ServicioCaido
+        expr: probe_success{job="blackbox-health"} == 0
+        for: 1m
+        labels:
+          severidad: critica
+        annotations:
+          resumen: "El servicio {{ $labels.instance }} no responde"
+          descripcion: "La sonda de salud lleva mas de 1 minuto fallando. Si hay una eleccion activa, los votantes no pueden votar."
+
+      - alert: LatenciaAlta
+        expr: probe_duration_seconds{job="blackbox-health"} > 2
+        for: 3m
+        labels:
+          severidad: advertencia
+        annotations:
+          resumen: "Latencia alta en {{ $labels.instance }}"
+          descripcion: "El servicio responde pero tarda mas de 2 segundos."
+
+  - name: recursos
+    rules:
+
+      - alert: ContenedorReiniciandose
+        expr: increase(container_start_time_seconds{name=~"livemetric-.*"}[15m]) > 0
+        labels:
+          severidad: advertencia
+        annotations:
+          resumen: "El contenedor {{ $labels.name }} se reinicio"
+          descripcion: "Un reinicio inesperado puede indicar un fallo recurrente."
+
+      - alert: MemoriaAlta
+        expr: (container_memory_usage_bytes{name=~"livemetric-.*"} / container_spec_memory_limit_bytes{name=~"livemetric-.*"}) > 0.9
+        for: 5m
+        labels:
+          severidad: advertencia
+        annotations:
+          resumen: "{{ $labels.name }} por encima del 90% de su limite de memoria"
+
+  - name: proceso-electoral
+    rules:
+
+      # El scheduler es el unico responsable de abrir, cerrar y certificar.
+      # Si se cae, las elecciones no se cierran solas y la certificacion no
+      # ocurre: es el punto unico de fallo del proceso electoral.
+      - alert: SchedulerCaido
+        expr: absent(container_last_seen{name="livemetric-scheduler"}) or (time() - container_last_seen{name="livemetric-scheduler"}) > 120
+        for: 2m
+        labels:
+          severidad: critica
+        annotations:
+          resumen: "El worker de programacion no esta activo"
+          descripcion: "Sin el scheduler, las elecciones no se abren, no se cierran y no se certifican automaticamente."

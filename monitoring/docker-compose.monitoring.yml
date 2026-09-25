@@ -1,0 +1,211 @@
+# =============================================================================
+# LiveMetric — Stack de observabilidad (Fase 6)
+#
+# Se levanta APARTE del stack de la aplicacion, con su propio archivo. Motivo:
+# el monitoreo no debe poder tumbar lo que monitorea. Si Grafana consume
+# memoria de mas o Loki llena el disco, la votacion sigue funcionando.
+#
+# Uso:
+#   docker compose up -d                                  # primero la app
+#   docker compose -f monitoring/docker-compose.monitoring.yml up -d
+#
+# Accesos:
+#   Grafana      http://localhost:3010
+#   Prometheus   http://localhost:9090
+#
+# Todos los puertos se publican SOLO en 127.0.0.1, igual que los
+# microservicios: el monitoreo no debe ser alcanzable desde la red.
+# =============================================================================
+
+networks:
+  # Se conecta a la red que ya creo el docker-compose.yml principal, para
+  # poder sondear los /health de los microservicios por nombre de servicio.
+  app-net:
+    external: true
+    name: livemetric_app-net
+  monitoring-net:
+    driver: bridge
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PROMETHEUS — recoleccion y almacenamiento de metricas
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: livemetric-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - monitoring-net
+      - app-net
+    ports:
+      - "127.0.0.1:9090:9090"
+    security_opt:
+      - no-new-privileges:true
+
+  # ---------------------------------------------------------------------------
+  # CADVISOR — metricas por contenedor (CPU, memoria, red, reinicios)
+  #
+  # Requiere acceso de lectura al socket de Docker y a varios directorios del
+  # host: es inherente a su funcion. Se monta todo en solo lectura.
+  # ---------------------------------------------------------------------------
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: livemetric-cadvisor
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - monitoring-net
+
+  # ---------------------------------------------------------------------------
+  # NODE EXPORTER — metricas del host
+  # ---------------------------------------------------------------------------
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: livemetric-node-exporter
+    restart: unless-stopped
+    command:
+      - '--path.rootfs=/host'
+    volumes:
+      - /:/host:ro,rslave
+    networks:
+      - monitoring-net
+    security_opt:
+      - no-new-privileges:true
+
+  # ---------------------------------------------------------------------------
+  # BLACKBOX EXPORTER — sondas HTTP sobre los /health
+  #
+  # Es lo que convierte este stack en observabilidad real de la APLICACION y
+  # no solo de la infraestructura: mide si cada microservicio responde y
+  # cuanto tarda, sin necesidad de instrumentar el codigo.
+  # ---------------------------------------------------------------------------
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: livemetric-blackbox
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/blackbox/blackbox.yml'
+    volumes:
+      - ./blackbox/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    networks:
+      - monitoring-net
+      - app-net
+    security_opt:
+      - no-new-privileges:true
+
+  # ---------------------------------------------------------------------------
+  # LOKI — agregacion de logs
+  # ---------------------------------------------------------------------------
+  loki:
+    image: grafana/loki:3.1.1
+    container_name: livemetric-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    networks:
+      - monitoring-net
+    security_opt:
+      - no-new-privileges:true
+
+  # ---------------------------------------------------------------------------
+  # PROMTAIL — envia a Loki los logs de los contenedores
+  # ---------------------------------------------------------------------------
+  promtail:
+    image: grafana/promtail:3.1.1
+    container_name: livemetric-promtail
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    networks:
+      - monitoring-net
+    depends_on:
+      - loki
+    security_opt:
+      - no-new-privileges:true
+
+  # ---------------------------------------------------------------------------
+  # GRAFANA — visualizacion
+  #
+  # Fuentes de datos y tableros se aprovisionan desde archivos versionados,
+  # no se configuran a mano: el tablero es reproducible como cualquier otro
+  # artefacto de infraestructura.
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: livemetric-grafana
+    restart: unless-stopped
+    environment:
+      # Credenciales desde el .env: nunca hardcodeadas, coherente con el
+      # manejo de secretos del resto del proyecto.
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Define GRAFANA_ADMIN_PASSWORD en el .env}
+      # Registro de usuarios deshabilitado y modo anonimo apagado.
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - monitoring-net
+    ports:
+      - "127.0.0.1:3010:3000"
+    depends_on:
+      - prometheus
+      - loki
+    security_opt:
+      - no-new-privileges:true
+
+  # ---------------------------------------------------------------------------
+  # FALCO — deteccion de amenazas en tiempo de ejecucion
+  #
+  # Ultima capa de defensa: detecta comportamiento anomalo DENTRO de los
+  # contenedores mientras corren, que es justo lo que los escaneos estaticos
+  # del pipeline no pueden ver porque ocurre despues del despliegue.
+  #
+  # Necesita privilegios elevados para instrumentar el kernel. Es inherente a
+  # su funcion y debe declararse explicitamente, no disimularse.
+  # ---------------------------------------------------------------------------
+  falco:
+    image: falcosecurity/falco:0.38.2
+    container_name: livemetric-falco
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/host/var/run/docker.sock:ro
+      - /dev:/host/dev
+      - /proc:/host/proc:ro
+      - /etc:/host/etc:ro
+      - ./falco/falco_rules.local.yaml:/etc/falco/rules.d/falco_rules.local.yaml:ro
+    networks:
+      - monitoring-net

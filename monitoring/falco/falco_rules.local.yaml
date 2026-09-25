@@ -1,0 +1,85 @@
+# =============================================================================
+# LiveMetric — Reglas locales de Falco (deteccion en tiempo de ejecucion)
+#
+# Falco detecta comportamiento anomalo DENTRO de los contenedores mientras
+# corren. Es la ultima capa de defensa: cubre lo que los escaneos estaticos
+# no pueden ver, porque ocurre despues del despliegue.
+#
+# Las reglas aprovechan una propiedad del diseño de LiveMetric: los
+# contenedores corren con read_only y usuario no-root, asi que cualquier
+# escritura fuera de /tmp o cualquier shell interactiva es, por definicion,
+# anomala.
+# =============================================================================
+
+- macro: contenedor_livemetric
+  condition: container.name startswith "livemetric-"
+
+- list: puertos_db_livemetric
+  items: [5432]
+
+# -----------------------------------------------------------------------------
+# Una shell dentro de un contenedor de produccion no tiene ninguna razon de
+# ser. Si aparece, o alguien esta depurando en produccion o hay un intruso.
+# -----------------------------------------------------------------------------
+- rule: Shell abierta en contenedor LiveMetric
+  desc: Se abrio una shell interactiva dentro de un contenedor de la aplicacion
+  condition: >
+    spawned_process
+    and contenedor_livemetric
+    and proc.name in (bash, sh, ash, dash, zsh, busybox)
+  output: >
+    Shell abierta en contenedor LiveMetric
+    (usuario=%user.name comando=%proc.cmdline contenedor=%container.name)
+  priority: WARNING
+  tags: [container, shell, livemetric]
+
+# -----------------------------------------------------------------------------
+# Los contenedores tienen read_only: true con tmpfs solo en /tmp. Una escritura
+# fuera de ahi indica que algo logro saltarse esa restriccion.
+# -----------------------------------------------------------------------------
+- rule: Escritura fuera de tmp en contenedor LiveMetric
+  desc: Escritura en el sistema de archivos de solo lectura del contenedor
+  condition: >
+    open_write
+    and contenedor_livemetric
+    and not fd.name startswith /tmp
+    and not fd.name startswith /proc
+    and not fd.name startswith /dev
+  output: >
+    Escritura inesperada en contenedor de solo lectura
+    (archivo=%fd.name proceso=%proc.name contenedor=%container.name)
+  priority: ERROR
+  tags: [container, filesystem, livemetric]
+
+# -----------------------------------------------------------------------------
+# Los servicios solo deben hablar con la base de datos y entre ellos. Una
+# conexion saliente a un destino distinto puede ser exfiltracion.
+# -----------------------------------------------------------------------------
+- rule: Conexion saliente inesperada desde LiveMetric
+  desc: Un contenedor de la aplicacion abrio una conexion a un destino no previsto
+  condition: >
+    outbound
+    and contenedor_livemetric
+    and not fd.sport in (puertos_db_livemetric)
+    and not fd.sip.name contains "livemetric"
+  output: >
+    Conexion saliente inesperada
+    (destino=%fd.rip:%fd.rport proceso=%proc.name contenedor=%container.name)
+  priority: NOTICE
+  tags: [container, network, livemetric]
+
+# -----------------------------------------------------------------------------
+# Escalada de privilegios: los contenedores corren como no-root con
+# no-new-privileges. Cualquier intento de cambiar de usuario es anomalo.
+# -----------------------------------------------------------------------------
+- rule: Intento de escalada de privilegios en LiveMetric
+  desc: Ejecucion de binarios de cambio de identidad dentro de un contenedor
+  condition: >
+    spawned_process
+    and contenedor_livemetric
+    and proc.name in (su, sudo, chroot, setuid)
+  output: >
+    Intento de escalada de privilegios
+    (comando=%proc.cmdline usuario=%user.name contenedor=%container.name)
+  priority: CRITICAL
+  tags: [container, privilege_escalation, livemetric]
