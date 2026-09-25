@@ -1,0 +1,223 @@
+# =============================================================================
+# LiveMetric — Stack de Docker Swarm (entorno de produccion simulado)
+#
+# Corresponde a la Fase 5 del ciclo DevSecOps: despliegue orquestado.
+#
+# Diferencia clave frente a docker-compose.yml: este stack NO construye
+# imagenes. Consume las que el workflow "release.yml" ya publico en Docker Hub
+# despues de superar el escaneo de Trivy. Es lo que hace que el despliegue sea
+# reproducible: se despliega un artefacto versionado y verificado, no el
+# resultado de compilar el codigo que haya en la maquina en ese momento.
+#
+# Despliegue:
+#   cd orquestacion && ./deploy.sh v1.0.0
+#
+# Ver orquestacion/README.md para el detalle.
+# =============================================================================
+
+version: "3.8"
+
+x-deploy-defaults: &deploy-defaults
+  replicas: 2
+  update_config:
+    # Despliegue sin interrupcion: actualiza una replica a la vez y espera a
+    # que quede sana antes de tocar la siguiente.
+    parallelism: 1
+    delay: 10s
+    order: start-first
+    failure_action: rollback
+  rollback_config:
+    parallelism: 1
+    order: stop-first
+  restart_policy:
+    condition: on-failure
+    delay: 5s
+    max_attempts: 3
+    window: 60s
+  resources:
+    limits:
+      cpus: "0.50"
+      memory: 256M
+    reservations:
+      cpus: "0.10"
+      memory: 64M
+
+x-service-common: &service-common
+  networks:
+    - app-net
+  read_only: true
+  tmpfs:
+    - /tmp
+  # El endurecimiento del compose se conserva: sin escalada de privilegios y
+  # sistema de archivos de solo lectura.
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-db-env: &db-env
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_NAME: ${SUPABASE_DB_NAME:-postgres}
+  DB_USER: ${SUPABASE_DB_USER:-postgres}
+  DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
+  DB_SSL: ${DB_SSL:-true}
+  DB_SSL_HOST: ${SUPABASE_DB_HOST}
+
+networks:
+  app-net:
+    driver: overlay
+    # Red cifrada entre nodos: en Swarm el trafico entre servicios puede
+    # cruzar la red fisica entre maquinas, asi que se cifra en transito.
+    driver_opts:
+      encrypted: "true"
+    attachable: false
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Proxy hacia la base de datos. Replica unica: es un reenviador de puertos,
+  # no tiene estado que replicar.
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: alpine/socat:latest
+    command: ["TCP-LISTEN:5432,fork,reuseaddr", "TCP:${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:-5432}"]
+    networks:
+      - app-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 64M
+
+  # ---------------------------------------------------------------------------
+  # Auth — identidad y emision de JWT
+  # ---------------------------------------------------------------------------
+  auth-service:
+    <<: *service-common
+    image: ${DOCKERHUB_NAMESPACE}/livemetric-auth:${LIVEMETRIC_VERSION}
+    environment:
+      <<: *db-env
+      NODE_ENV: production
+      PORT: 3001
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      VOTER_JWT_EXPIRES_IN: ${VOTER_JWT_EXPIRES_IN:-10m}
+      VOTER_ID_SALT: ${VOTER_ID_SALT}
+      VOTERS_ENCRYPTION_KEY: ${VOTERS_ENCRYPTION_KEY}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+    ports:
+      - target: 3001
+        published: 3001
+        protocol: tcp
+        mode: ingress
+    deploy: *deploy-defaults
+
+  # ---------------------------------------------------------------------------
+  # Voting — emision de votos
+  # ---------------------------------------------------------------------------
+  voting-service:
+    <<: *service-common
+    image: ${DOCKERHUB_NAMESPACE}/livemetric-voting:${LIVEMETRIC_VERSION}
+    environment:
+      <<: *db-env
+      NODE_ENV: production
+      PORT: 3002
+      JWT_SECRET: ${JWT_SECRET}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+    ports:
+      - target: 3002
+        published: 3002
+        protocol: tcp
+        mode: ingress
+    deploy: *deploy-defaults
+
+  # ---------------------------------------------------------------------------
+  # Analytics — resultados y tableros
+  # ---------------------------------------------------------------------------
+  analytics-service:
+    <<: *service-common
+    image: ${DOCKERHUB_NAMESPACE}/livemetric-analytics:${LIVEMETRIC_VERSION}
+    environment:
+      <<: *db-env
+      NODE_ENV: production
+      PORT: 3003
+      JWT_SECRET: ${JWT_SECRET}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+    ports:
+      - target: 3003
+        published: 3003
+        protocol: tcp
+        mode: ingress
+    deploy: *deploy-defaults
+
+  # ---------------------------------------------------------------------------
+  # Scrutiny — certificacion y cadena de actas
+  #
+  # REPLICA UNICA A PROPOSITO: la certificacion encadena hashes, y dos replicas
+  # certificando la misma eleccion en paralelo podrian producir dos eslabones
+  # compitiendo por la misma posicion de la cadena. La correccion del escrutinio
+  # vale mas que su disponibilidad.
+  # ---------------------------------------------------------------------------
+  scrutiny-service:
+    <<: *service-common
+    image: ${DOCKERHUB_NAMESPACE}/livemetric-scrutiny:${LIVEMETRIC_VERSION}
+    environment:
+      <<: *db-env
+      NODE_ENV: production
+      PORT: 3004
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+    ports:
+      - target: 3004
+        published: 3004
+        protocol: tcp
+        mode: ingress
+    deploy:
+      <<: *deploy-defaults
+      replicas: 1
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+
+  # ---------------------------------------------------------------------------
+  # Scheduler — worker de apertura, cierre y certificacion automatica
+  #
+  # REPLICA UNICA OBLIGATORIA: dos workers con el mismo cron dispararian dos
+  # veces el cierre y la certificacion de la misma eleccion.
+  # ---------------------------------------------------------------------------
+  scheduler-worker:
+    <<: *service-common
+    image: ${DOCKERHUB_NAMESPACE}/livemetric-scheduler:${LIVEMETRIC_VERSION}
+    environment:
+      <<: *db-env
+      NODE_ENV: production
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      SCRUTINY_URL: http://scrutiny-service:3004
+    deploy:
+      <<: *deploy-defaults
+      replicas: 1
+      update_config:
+        parallelism: 1
+        order: stop-first
+
+  # ---------------------------------------------------------------------------
+  # Frontend — SPA servida por nginx
+  # ---------------------------------------------------------------------------
+  frontend:
+    <<: *service-common
+    image: ${DOCKERHUB_NAMESPACE}/livemetric-frontend:${LIVEMETRIC_VERSION}
+    ports:
+      - target: 8080
+        published: 3000
+        protocol: tcp
+        mode: ingress
+    deploy: *deploy-defaults
