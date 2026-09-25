@@ -82,18 +82,18 @@ services:
   # ---------------------------------------------------------------------------
   # NODE EXPORTER — metricas del host
   # ---------------------------------------------------------------------------
-  #node-exporter:
-    #image: prom/node-exporter:v1.8.2
-    #container_name: livemetric-node-exporter
-    #restart: unless-stopped
-    #command:
-     # - '--path.rootfs=/host'
-    #volumes:
-     # - /:/host:ro,rslave
-    #networks:
-     # - monitoring-net
-    #security_opt:
-     # - no-new-privileges:true
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: livemetric-node-exporter
+    restart: unless-stopped
+    command:
+      - '--path.rootfs=/host'
+    volumes:
+      - /:/host:ro,rslave
+    networks:
+      - monitoring-net
+    security_opt:
+      - no-new-privileges:true
 
   # ---------------------------------------------------------------------------
   # BLACKBOX EXPORTER — sondas HTTP sobre los /health
@@ -196,16 +196,16 @@ services:
   # Necesita privilegios elevados para instrumentar el kernel. Es inherente a
   # su funcion y debe declararse explicitamente, no disimularse.
   # ---------------------------------------------------------------------------
-  #falco:
-   # image: falcosecurity/falco:0.38.2
-    #container_name: livemetric-falco
-    #restart: unless-stopped
-    #privileged: true
-    #volumes:
-     # - /var/run/docker.sock:/host/var/run/docker.sock:ro
-      #- /dev:/host/dev
-      #- /proc:/host/proc:ro
-      #- /etc:/host/etc:ro
-      #- ./falco/falco_rules.local.yaml:/etc/falco/rules.d/falco_rules.local.yaml:ro
-    #networks:
-      #- monitoring-net
+  falco:
+    image: falcosecurity/falco:0.38.2
+    container_name: livemetric-falco
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/host/var/run/docker.sock:ro
+      - /dev:/host/dev
+      - /proc:/host/proc:ro
+      - /etc:/host/etc:ro
+      - ./falco/falco_rules.local.yaml:/etc/falco/rules.d/falco_rules.local.yaml:ro
+    networks:
+      - monitoring-net
