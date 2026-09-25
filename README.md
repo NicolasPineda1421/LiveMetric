@@ -76,5 +76,7 @@ La primera vez tarda varios minutos (construye y analiza las 6 imágenes). Al te
 | [Modelo de amenazas](docs/threat-model/STRIDE-analysis.md) | Análisis STRIDE y diagramas de flujo de datos |
 | [Manual de Usuario](docs/manual-usuario.md) | Guía de las tres interfaces con capturas de pantalla |
 | [Orquestación](orquestacion/README.md) | Despliegue en Docker Swarm con réplicas, rolling updates y red cifrada |
+
 ## Licencia
+
 Distribuido bajo la licencia **MIT**: se puede usar, copiar, modificar y distribuir libremente, conservando el aviso de copyright. Ver [LICENSE](LICENSE).
