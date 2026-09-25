@@ -76,6 +76,7 @@ La primera vez tarda varios minutos (construye y analiza las 6 imágenes). Al te
 | [Modelo de amenazas](docs/threat-model/STRIDE-analysis.md) | Análisis STRIDE y diagramas de flujo de datos |
 | [Manual de Usuario](docs/manual-usuario.md) | Guía de las tres interfaces con capturas de pantalla |
 | [Orquestación](orquestacion/README.md) | Despliegue en Docker Swarm con réplicas, rolling updates y red cifrada |
+| [Observabilidad](monitoring/README.md) | Prometheus, Grafana, Loki y Falco: métricas, logs y detección en runtime |
 
 ## Licencia
 
