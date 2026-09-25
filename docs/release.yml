@@ -1,0 +1,238 @@
+name: LiveMetric Release — Publicacion en Docker Hub
+
+# =============================================================================
+# Publica las 6 imagenes del proyecto en Docker Hub, versionadas con semver.
+#
+# Se separa de "devsecops.yml" a proposito: ese pipeline corre en CADA push y
+# PR y su trabajo es BLOQUEAR codigo inseguro; este corre solo cuando el
+# equipo decide liberar una version, y su trabajo es PUBLICAR. Mezclarlos
+# significaria publicar una imagen en cada commit, lo que hace que el tag
+# "latest" deje de significar nada.
+#
+# Disparadores:
+#   - push de un tag semver (v1.0.0, v1.2.3): el caso normal de release.
+#   - workflow_dispatch: ejecucion manual indicando la version, util para la
+#     sustentacion o para republicar sin crear un tag nuevo.
+#
+# Puerta de seguridad: cada imagen se construye, se escanea con Trivy y SOLO
+# se publica si el escaneo pasa. Una imagen con CVEs CRITICAL/HIGH nunca
+# llega a Docker Hub.
+#
+# Requisitos de configuracion (una sola vez, en el repositorio de GitHub):
+#   Settings > Secrets and variables > Actions
+#     - Secret   DOCKERHUB_TOKEN      -> Access Token generado en Docker Hub
+#                                        (Account Settings > Personal access
+#                                        tokens > New, permiso Read & Write).
+#                                        NO usar la contraseña de la cuenta.
+#     - Variable DOCKERHUB_NAMESPACE  -> usuario u organizacion de Docker Hub
+#                                        bajo la que se publican las imagenes
+#                                        (ej. "livemetric").
+#     - Secret   DOCKERHUB_USERNAME   -> usuario con el que se hace login
+#                                        (normalmente igual al namespace).
+# =============================================================================
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version a publicar (formato vX.Y.Z, ej. v1.0.0)'
+        required: true
+        type: string
+
+# Minimo privilegio: este workflow solo necesita leer el codigo. No escribe
+# nada en el repositorio.
+permissions:
+  contents: read
+
+# Si se dispara dos veces seguidas, cancela la corrida anterior: evita que dos
+# publicaciones compitan por el mismo tag "latest".
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # 1) Resuelve la version una sola vez y la comparte con el resto de jobs,
+  #    para que las 6 imagenes lleven exactamente el mismo numero.
+  # ---------------------------------------------------------------------------
+  version:
+    name: Resolver version
+    runs-on: ubuntu-latest
+    outputs:
+      semver: ${{ steps.resolve.outputs.semver }}
+    steps:
+      - name: Determinar y validar la version
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME}"
+          fi
+
+          # Falla temprano si el formato no es semver: mejor detenerse aqui
+          # que publicar una imagen con un tag invalido en Docker Hub.
+          if ! echo "$VERSION" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "❌ Version invalida: '$VERSION'. Se espera el formato vX.Y.Z (ej. v1.0.0)."
+            exit 1
+          fi
+
+          echo "semver=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "✅ Publicando la version ${VERSION}"
+
+  # ---------------------------------------------------------------------------
+  # 2) Construye, escanea y publica cada microservicio.
+  #    El escaneo ocurre ANTES del push: la imagen solo sale del runner si
+  #    Trivy la aprueba.
+  # ---------------------------------------------------------------------------
+  publish:
+    name: Publicar ${{ matrix.service }}
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      # Sin fail-fast: si una imagen falla el escaneo, queremos ver el estado
+      # de las otras cinco en la misma corrida, no un reporte a medias.
+      fail-fast: false
+      matrix:
+        service: [auth, voting, analytics, scrutiny, scheduler, frontend]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      # -----------------------------------------------------------------------
+      # Etiquetas y metadatos OCI. metadata-action genera automaticamente:
+      #   livemetric/livemetric-auth:1.0.0   (version exacta)
+      #   livemetric/livemetric-auth:1.0     (linea menor, para recibir parches)
+      #   livemetric/livemetric-auth:latest  (ultima version estable)
+      # y ademas inyecta labels OCI (fuente, revision, fecha) en la imagen,
+      # para que cualquiera pueda rastrear desde una imagen publicada hasta
+      # el commit exacto que la produjo.
+      # -----------------------------------------------------------------------
+      - name: Calcular etiquetas y metadatos
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ${{ vars.DOCKERHUB_NAMESPACE }}/livemetric-${{ matrix.service }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.version.outputs.semver }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.version.outputs.semver }}
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.title=LiveMetric ${{ matrix.service }}
+            org.opencontainers.image.description=Microservicio ${{ matrix.service }} de LiveMetric
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.vendor=LiveMetric
+
+      # -----------------------------------------------------------------------
+      # Construccion LOCAL (load: true, push: false). La imagen se queda en el
+      # runner para poder escanearla antes de decidir si se publica.
+      # -----------------------------------------------------------------------
+      - name: Construir imagen (sin publicar todavia)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ./services/${{ matrix.service }}
+          load: true
+          push: false
+          tags: livemetric-${{ matrix.service }}:release-candidate
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      # -----------------------------------------------------------------------
+      # PUERTA DE SEGURIDAD: mismas reglas que el job "container-scan" del
+      # pipeline principal. exit-code 1 detiene el job y la imagen NUNCA se
+      # publica.
+      # -----------------------------------------------------------------------
+      - name: Escanear la imagen candidata con Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: 'livemetric-${{ matrix.service }}:release-candidate'
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          ignore-unfixed: true
+          trivyignores: '.trivyignore'
+
+      # -----------------------------------------------------------------------
+      # El login ocurre DESPUES del escaneo, a proposito: si la imagen no pasa,
+      # el runner nunca llega a manejar las credenciales de Docker Hub.
+      # -----------------------------------------------------------------------
+      - name: Iniciar sesion en Docker Hub
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # -----------------------------------------------------------------------
+      # Segunda invocacion de build-push: gracias a la cache de la primera, no
+      # reconstruye nada, solo etiqueta y sube la MISMA imagen ya escaneada.
+      # -----------------------------------------------------------------------
+      - name: Publicar en Docker Hub
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ./services/${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+
+      - name: Registrar lo publicado en el resumen
+        run: |
+          {
+            echo "### 🐳 ${{ matrix.service }} publicado"
+            echo ""
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # 3) Resumen del release: deja en la pestaña Summary una tabla con las 6
+  #    imagenes y el comando para consumirlas. Sirve de evidencia directa
+  #    para el informe tecnico y la sustentacion.
+  # ---------------------------------------------------------------------------
+  release-summary:
+    name: Resumen del release
+    needs: [version, publish]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Escribir resumen
+        run: |
+          VERSION="${{ needs.version.outputs.semver }}"
+          NS="${{ vars.DOCKERHUB_NAMESPACE }}"
+          CLEAN="${VERSION#v}"
+
+          if [ "${{ needs.publish.result }}" != "success" ]; then
+            echo "## ❌ Release ${VERSION} NO completado" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Una o mas imagenes no superaron el escaneo de Trivy y no fueron publicadas." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          {
+            echo "## ✅ Release ${VERSION} publicado en Docker Hub"
+            echo ""
+            echo "| Microservicio | Imagen |"
+            echo "|---|---|"
+            for s in auth voting analytics scrutiny scheduler frontend; do
+              echo "| ${s} | \`${NS}/livemetric-${s}:${CLEAN}\` |"
+            done
+            echo ""
+            echo "Todas las imagenes superaron el escaneo de Trivy (CRITICAL/HIGH) antes de publicarse."
+            echo ""
+            echo "Para descargarlas:"
+            echo '```bash'
+            echo "for s in auth voting analytics scrutiny scheduler frontend; do"
+            echo "  docker pull ${NS}/livemetric-\$s:${CLEAN}"
+            echo "done"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
