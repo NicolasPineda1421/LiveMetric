@@ -82,18 +82,21 @@ services:
   # ---------------------------------------------------------------------------
   # NODE EXPORTER — metricas del host
   # ---------------------------------------------------------------------------
+  # node-exporter se excluye en este entorno: Docker Desktop sobre Windows
+  # ejecuta los contenedores en una VM de WSL2, así que mediría esa VM y no
+  # el equipo real. Requiere un host Linux para aportar datos válidos.
   #node-exporter:
     #image: prom/node-exporter:v1.8.2
     #container_name: livemetric-node-exporter
     #restart: unless-stopped
     #command:
-     # - '--path.rootfs=/host'
+      #- '--path.rootfs=/host'
     #volumes:
-     # - /:/host:ro,rslave
+      #- /:/host:ro,rslave
     #networks:
-     # - monitoring-net
+      #- monitoring-net
     #security_opt:
-     # - no-new-privileges:true
+      #- no-new-privileges:true
 
   # ---------------------------------------------------------------------------
   # BLACKBOX EXPORTER — sondas HTTP sobre los /health
@@ -196,13 +199,17 @@ services:
   # Necesita privilegios elevados para instrumentar el kernel. Es inherente a
   # su funcion y debe declararse explicitamente, no disimularse.
   # ---------------------------------------------------------------------------
+    # falco se excluye en este entorno: instrumenta el kernel del host, y en
+  # Docker Desktop los contenedores corren sobre el kernel de la VM de WSL2,
+  # no sobre Windows. Las reglas quedan versionadas en falco/ para un
+  # despliegue sobre host Linux.
   #falco:
-   # image: falcosecurity/falco:0.38.2
+    #image: falcosecurity/falco:0.38.2
     #container_name: livemetric-falco
     #restart: unless-stopped
     #privileged: true
     #volumes:
-     # - /var/run/docker.sock:/host/var/run/docker.sock:ro
+      #- /var/run/docker.sock:/host/var/run/docker.sock:ro
       #- /dev:/host/dev
       #- /proc:/host/proc:ro
       #- /etc:/host/etc:ro
