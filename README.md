@@ -66,6 +66,7 @@ La primera vez tarda varios minutos (construye y analiza las 6 imágenes). Al te
 
 | Documento | Contenido |
 |---|---|
+| [Manual de Arquitectura](docs/manual-arquitectura.md) | Estilo arquitectónico, patrones, ADRs, modelo de datos y los 7 diagramas (componentes, despliegue, secuencia, casos de uso, DFD 0 y 1) |
 | [Arquitectura](docs/arquitectura.md) | Componentes, red, secretos, flujo de punta a punta y estructura del repositorio |
 | [Instalación y despliegue](docs/instalacion-y-despliegue.md) | Las cuatro formas de levantarlo, `.env`, Windows, acceso desde la red, datos de demostración, API por línea de comandos |
 | [Pipeline DevSecOps](docs/pipeline-devsecops.md) | Cada job del pipeline, cómo correrlo en local y cómo comprobar que los controles bloquean |
