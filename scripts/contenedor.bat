@@ -52,6 +52,16 @@ if /i "%~2"=="--detalle" set "ARG_DETALLE=--detalle"
 if /i "%~2"=="-d" set "ARG_DETALLE=--detalle"
 
 if /i "%COMANDO%"=="iniciar" goto :iniciar
+if /i "%COMANDO%"=="estado" goto :estado
+if /i "%COMANDO%"=="logs" goto :logs
+if /i "%COMANDO%"=="shell" goto :shell
+if /i "%COMANDO%"=="detener" goto :detener
+if /i "%COMANDO%"=="borrar" goto :borrar
+echo Opcion desconocida: %COMANDO% ^(ver el comentario al principio de este archivo^) 1>&2
+exit /b 2
+
+REM ===========================================================================
+:iniciar
 REM Lo que corre adentro del contenedor global escribe en UTF-8 (acentos,
 REM simbolos): la consola se pasa a UTF-8 mientras dura esto, y en todas
 REM las salidas (:fin) se deja como estaba.
