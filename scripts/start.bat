@@ -5,9 +5,8 @@ REM corre el analisis de seguridad completo (scripts/pipeline-local.bat)
 REM y, SOLO si todo pasa, levanta el stack con Docker Desktop y muestra
 REM el link final.
 REM
-REM Requisitos (se intentan instalar solos via winget si faltan): gpg
-REM (Gpg4win, solo hace falta si todavia no existe tu .env), Docker
-REM Desktop, Node.js. winget viene incluido en Windows 10/11 modernos; si
+REM Requisitos (se intentan instalar solos via winget si faltan): Docker
+REM Desktop y Node.js. winget viene incluido en Windows 10/11 modernos; si
 REM no esta disponible, hay que instalar cada cosa a mano (se indica el
 REM link).
 REM
@@ -52,7 +51,6 @@ if errorlevel 1 (
 
 call :fase 1 "Requisitos"
 set REQUISITOS_OK=1
-call :ensure_tool gpg "GnuPG.Gpg4win" "C:\Program Files (x86)\GnuPG\bin"
 call :ensure_tool node "OpenJS.NodeJS.LTS" "C:\Program Files\nodejs"
 call :ensure_docker
 if "%REQUISITOS_OK%"=="0" (
@@ -65,26 +63,15 @@ if "%REQUISITOS_OK%"=="0" (
 )
 
 REM --- 1. Preparar el .env -------------------------------------------------
+REM Cada instalacion tiene su propia base y sus propias claves: si no hay
+REM .env, se genera con secretos aleatorios; si ya hay uno, solo se le
+REM agregan las variables nuevas que falten (nunca se pisa un valor).
 call :fase 2 "Configuracion (.env)"
-if exist .env (
-  call :ok ".env ya existe, se usa tal cual."
-  goto :env_listo
-)
-if not exist .env.gpg (
-  call :falla "No hay .env ni .env.gpg en esta carpeta."
-  call :info "Copia .env.example a .env y completa los valores (ver README, Inicio rapido),"
-  call :info "o pedi el .env.gpg + la passphrase a quien te comparta el proyecto."
-  exit /b 1
-)
-call :info "No hay .env, pero si .env.gpg: descifrandolo (te va a pedir la passphrase)..."
-call gpg --quiet --output .env --decrypt .env.gpg
+node scripts\lib\generar-env.js
 if errorlevel 1 (
-  call :falla "No se pudo descifrar .env.gpg (passphrase incorrecta, o se cancelo)."
-  call :info "Volve a correr este script para intentarlo de nuevo."
+  call :falla "No se pudo preparar el .env."
   exit /b 1
 )
-call :ok ".env descifrado desde .env.gpg"
-:env_listo
 
 REM --- 2. Analisis de seguridad completo (el mismo que corre en CI) --------
 call :fase 3 "Analisis de seguridad"
@@ -132,6 +119,12 @@ if errorlevel 1 (
   echo %ROJO%%RAYA%%RESET%
   exit /b 1
 )
+
+REM Primer administrador: en una base nueva no hay ninguno (el repositorio
+REM no trae credenciales), asi que se ofrece crearlo aca mismo. Si ya hay
+REM alguno, crearAdmin.js --si-no-hay no hace nada.
+echo.
+call docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay
 
 REM Con el contenedor del frontend sano, esto solo confirma que el puerto
 REM 3000 tambien responde desde afuera de Docker (mapeo de puertos, firewall).

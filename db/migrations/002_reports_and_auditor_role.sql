@@ -1,9 +1,11 @@
 -- Migración 002: rol "auditor" (solo lectura) + tableros de reportes configurables.
 --
--- Este proyecto no tiene runner de migraciones: init.sql se corrió una vez a
--- mano contra Supabase. Este archivo se debe correr también a mano (psql o
--- el SQL Editor de Supabase) contra la misma base. Es seguro re-ejecutarlo:
--- usa IF NOT EXISTS / guarda condicional para el ALTER TABLE.
+-- Este proyecto no tiene runner de migraciones. db/init.sql ya incluye este
+-- cambio, así que una base nueva no lo necesita: sirve solo para una base
+-- creada con una versión anterior de init.sql, corriéndolo a mano con psql
+-- (docker compose exec -T postgres psql -U livemetric -d livemetric < archivo).
+-- Es seguro re-ejecutarlo: usa IF NOT EXISTS / guarda condicional para el
+-- ALTER TABLE.
 
 DO $$
 BEGIN

@@ -1,6 +1,7 @@
 // Pruebas de integración de analytics-service contra la app de Express en
-// memoria (Supertest, sin abrir puerto real) y la base real configurada por
-// entorno (Supabase). Todo dato que estas pruebas crean (elección + sus
+// memoria (Supertest, sin abrir puerto real) y un PostgreSQL de verdad: el
+// desechable que levanta scripts/lib/jest-db-setup.js para esta corrida (o
+// el de DB_HOST, si viene definido). Todo dato que estas pruebas crean (elección + sus
 // opciones + los tableros de reporte) usa el prefijo único CITEST-ANALYTICS-
 // para poder identificarlo y borrarlo sin riesgo al final (afterAll), sin
 // tocar datos reales de otras elecciones.
@@ -238,11 +239,27 @@ describe('Estadística: concentración (HHI), participación con IC 95% y anomal
   // buckets horarios de date_trunc caigan siempre en el mismo lugar, sin
   // depender de en qué segundo/minuto real corra la prueba.
   const crypto = require('crypto');
+  const { encryptField } = require('../voterCrypto');
   function fakeHash() {
     return crypto.randomBytes(32).toString('hex');
   }
+  // 30 votantes propios en el padrón (cifrados, como los deja auth-service):
+  // la tasa de participación se calcula sobre el padrón, y la base de
+  // pruebas empieza con el padrón vacío.
+  const TEST_CEDULAS = Array.from({ length: 30 }, (_, i) => `CI-AN-${Date.now().toString().slice(-8)}-${i}`);
+
+  afterAll(async () => {
+    await pool.query('DELETE FROM voters WHERE cedula = ANY($1)', [TEST_CEDULAS.map(encryptField)]);
+  });
 
   beforeAll(async () => {
+    for (const cedula of TEST_CEDULAS) {
+      await pool.query(
+        `INSERT INTO voters (cedula, full_name, polling_place, voting_table) VALUES ($1, $2, $3, $4)`,
+        [encryptField(cedula), 'Votante de Prueba CI', encryptField('Puesto Central'), encryptField('Mesa 1')]
+      );
+    }
+
     // 5 votos para la opción A repartidos en 5 horas distintas (1 por
     // bucket) + 10 votos para la opción B, todos en una sexta hora: un pico
     // deliberado para que el detector de anomalías tenga algo que marcar,

@@ -114,19 +114,17 @@ for %%S in (%SERVICES%) do (
 )
 
 REM --- 6. Pruebas unitarias -------------------------------------------------
+REM Cada "npm test" levanta su propia base PostgreSQL desechable (ver
+REM scripts\lib\jest-db-setup.js): no hace falta .env ni ninguna base externa.
 call :paso 5
-if exist .env (
-  for %%S in (%BACKEND_SERVICES%) do (
-    call :en_curso "%%S - pruebas"
-    pushd services\%%S
-    call npm ci --silent --ignore-scripts > "%LOG_DIR%\npm-install-test-%%S.log" 2>&1
-    call npm test > "%LOG_DIR%\test-%%S.log" 2>&1
-    set RC=!errorlevel!
-    popd
-    call :resumir pruebas %%S !RC! "%LOG_DIR%\test-%%S.log"
-  )
-) else (
-  %RESUMEN% omitido "%RESULTADOS%" pruebas - "falta el .env en la raiz del repo"
+for %%S in (%BACKEND_SERVICES%) do (
+  call :en_curso "%%S - pruebas"
+  pushd services\%%S
+  call npm ci --silent --ignore-scripts > "%LOG_DIR%\npm-install-test-%%S.log" 2>&1
+  call npm test > "%LOG_DIR%\test-%%S.log" 2>&1
+  set RC=!errorlevel!
+  popd
+  call :resumir pruebas %%S !RC! "%LOG_DIR%\test-%%S.log"
 )
 
 REM Cuadro final: decide ademas el codigo de salida (1 si algo que bloquea fallo).

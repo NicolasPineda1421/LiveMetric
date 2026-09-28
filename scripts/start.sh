@@ -8,7 +8,7 @@
 # Si el analisis encuentra algo en rojo, el script se detiene ahi: no
 # levanta contenedores con codigo que no paso sus propios controles.
 #
-# Requisitos (se intentan instalar solos si faltan): Docker, gpg, curl,
+# Requisitos (se intentan instalar solos si faltan): Docker, curl,
 # Node.js/npm. La instalacion automatica detecta el gestor de paquetes
 # (apt/dnf/yum/pacman/zypper/apk) y usa "sudo" si no se corre como root;
 # Docker se instala con el script oficial (get.docker.com), igual que
@@ -184,7 +184,6 @@ ensure_docker() {
 
 fase 1 4 "Requisitos"
 ensure_tool curl curl
-ensure_tool gpg gnupg
 ensure_node
 ensure_docker
 if ! $REQUISITOS_OK; then
@@ -194,24 +193,15 @@ if ! $REQUISITOS_OK; then
 fi
 
 # 1. Preparar el .env -------------------------------------------------------
+# Cada instalación tiene su propia base y sus propias claves: si no hay .env,
+# se genera con secretos aleatorios; si ya hay uno, solo se le agregan las
+# variables nuevas que falten (nunca se pisa un valor existente).
 fase 2 4 "Configuración (.env)"
-if [ -f .env ]; then
-  ok ".env ya existe, se usa tal cual."
-elif [ -f .env.gpg ]; then
-  info "No hay .env, pero sí .env.gpg: descifrándolo (te va a pedir la passphrase)..."
-  if gpg --quiet --output .env --decrypt .env.gpg; then
-    ok ".env descifrado desde .env.gpg"
-  else
-    falla "No se pudo descifrar .env.gpg (¿passphrase incorrecta, o se canceló?)."
-    info "Volvé a correr este script para intentarlo de nuevo."
-    exit 1
-  fi
-else
-  falla "No hay .env ni .env.gpg en $(pwd)."
-  info "Copiá .env.example a .env y completá los valores (ver README, «Inicio rápido»),"
-  info "o pedí el .env.gpg + la passphrase a quien te comparta el proyecto."
+if ! RESULTADO_ENV="$(node scripts/lib/generar-env.js)"; then
+  falla "No se pudo preparar el .env."
   exit 1
 fi
+ok "$RESULTADO_ENV"
 
 # 2. Analisis de seguridad completo (el mismo que corre en CI) --------------
 fase 3 4 "Análisis de seguridad"
@@ -249,6 +239,18 @@ if ! node scripts/lib/esperar-contenedores.js; then
   banner "$C_ROJO" "✘ LiveMetric no quedó sano: revisá el motivo de cada contenedor arriba." \
     "  Logs en vivo: docker compose logs -f"
   exit 1
+fi
+
+# Primer administrador: en una base nueva no hay ninguno (el repositorio no
+# trae credenciales), así que se ofrece crearlo acá mismo. Si ya hay alguno,
+# crearAdmin.js --si-no-hay no hace nada. Necesita una terminal para pedir
+# la contraseña; sin ella (por ejemplo, en CI) solo se indica cómo hacerlo.
+echo ""
+if [ -t 0 ] && [ -t 1 ]; then
+  docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay || true
+else
+  info "Si todavía no hay ningún administrador, créalo con:"
+  info "  docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay"
 fi
 
 # Con el contenedor del frontend sano, esto solo confirma que el puerto 3000

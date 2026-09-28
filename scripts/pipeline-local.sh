@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # LiveMetric - Corre localmente, con Docker, los mismos controles de
 # seguridad del pipeline de GitHub Actions: construye las 6 imagenes reales
-# con "docker build" (igual que hace scripts/deploy.sh para levantar el
-# stack) y las escanea con las mismas herramientas y comandos exactos que
+# con "docker build" (las mismas que levanta docker compose en
+# scripts/start.sh) y las escanea con las mismas herramientas y comandos exactos que
 # usa .github/workflows/devsecops.yml - para detectar problemas ANTES de
 # hacer push, sin esperar a que corra en GitHub Actions.
 #
@@ -24,8 +24,8 @@
 # verificando en GitHub Actions (o a mano con "cd infra/terraform &&
 # terraform apply", ver docs/instalacion-y-despliegue.md).
 #
-# Requisitos: Docker, Node.js/npm, y (para las pruebas unitarias) un .env
-# real en la raiz del repo con las credenciales de Supabase.
+# Requisitos: Docker y Node.js/npm. Las pruebas unitarias no necesitan .env
+# ni base externa: cada una levanta su propio PostgreSQL desechable.
 #
 # Uso:
 #   ./scripts/pipeline-local.sh             resumen interpretado de cada paso
@@ -219,15 +219,13 @@ pruebas() {
   npm test
 }
 
+# Cada "npm test" levanta su propia base PostgreSQL desechable (ver
+# scripts/lib/jest-db-setup.js): no hace falta .env ni ninguna base externa.
 paso 5
-if [ -f .env ]; then
-  for svc in "${BACKEND_SERVICES[@]}"; do
-    correr "$LOG_DIR/test-$svc.log" "$svc · pruebas" pruebas "$svc"
-    resumir pruebas "$svc" $? "$LOG_DIR/test-$svc.log"
-  done
-else
-  node scripts/lib/pipeline-resumen.js omitido "$RESULTADOS" pruebas - "falta el .env en la raíz del repo"
-fi
+for svc in "${BACKEND_SERVICES[@]}"; do
+  correr "$LOG_DIR/test-$svc.log" "$svc · pruebas" pruebas "$svc"
+  resumir pruebas "$svc" $? "$LOG_DIR/test-$svc.log"
+done
 
 # Cuadro final: decide ademas el codigo de salida (1 si algo que bloquea fallo).
 node scripts/lib/pipeline-resumen.js final "$RESULTADOS" "$LOG_DIR"

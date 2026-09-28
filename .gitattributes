@@ -17,4 +17,3 @@ scripts/git-hooks/* text eol=lf
 *.png  binary
 *.jpg  binary
 *.jpeg binary
-*.gpg  binary

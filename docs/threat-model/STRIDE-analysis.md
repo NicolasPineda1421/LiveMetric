@@ -15,12 +15,12 @@ y cita la mitigación real ya implementada cuando la hay.
    │ Votante  │ ───────────────────────────────────────▶│                     │
    │          │◀─────────────────────────────────────── │                     │
    └──────────┘   confirmación / historial (sin detalle) │                     │
-                                                          │  Sistema LiveMetric │        ┌──────────────────┐
+                                                          │  Sistema LiveMetric │        ┌───────────────────┐
    ┌──────────────┐  gestión (padrón, plantillas,        │  (trust boundary)   │───────▶│ Postgres          │
-   │ Administrador│  elecciones, usuarios)                │                     │◀───────│ (Supabase)        │
+   │ Administrador│  elecciones, usuarios)                │                     │◀───────│ (local, db-net)   │
    │              │──────────────────────────────────────▶│                     │        │ lectura/escritura │
    │              │◀────────────────────────────────────  │                     │        │ cifrada del padrón│
-   └──────────────┘   resultados, reportes, auditoría     └─────────────────────┘        └──────────────────┘
+   └──────────────┘   resultados, reportes, auditoría     └─────────────────────┘        └───────────────────┘
                                                                  ▲
    ┌──────────┐   consulta de solo lectura                       │
    │ Auditor  │───────────────────────────────────────────────────┘
@@ -51,8 +51,8 @@ Administrador/Auditor ──descarga acta PDF / verificar cadena──▶ scruti
 auth-service ──escribe evento──▶ [Audit log] (append-only)
 ```
 
-Almacenes de datos (todos en el mismo Postgres de Supabase, separados aquí
-por responsabilidad):
+Almacenes de datos (todos en el mismo PostgreSQL local de la instalación,
+separados aquí por responsabilidad):
 
 - **Padrón (voters)**: `cedula`, `polling_place`, `voting_table` cifrados
   (AES-256-GCM); `full_name` en texto plano; `access_code_hash` (bcrypt del
@@ -79,14 +79,22 @@ por responsabilidad):
 | 10 | Almacén Audit log (`audit_log`) | Repudiation | Borrar o modificar el registro de un evento de login/gestión para ocultar un incidente | Mitigado | Trigger `trg_audit_no_update`, append-only igual que el acta de escrutinio. |
 | 11 | Flujo Administrador/Auditor → analytics-service (tableros) | Elevation of Privilege | Un usuario con rol `auditor` (solo lectura) crea, edita o borra un tablero de reportes | Mitigado | Middleware `requireRole('admin','auditor')` para lectura vs. `requireRole('admin')` exclusivo para escritura, verificado en cada endpoint de `report_dashboards`. |
 | 12 | Flujo navegador → frontend/proxy nginx | Information Disclosure | Exponer los 4 microservicios en puertos sueltos en vez de un solo origen aumenta la superficie de ataque | Mitigado | Proxy reverso en `nginx.conf`: el navegador solo habla con el origen del frontend; los backends nunca se exponen directamente fuera de la red interna de Docker. |
-| 13 | Credenciales de despliegue (`.env`) | Information Disclosure | El archivo con todos los secretos se filtra al compartir el proyecto con un tercero | Aceptado (con control compensatorio) | `.env` nunca se commitea (`.gitignore`); para compartir el proyecto se cifra con GPG (`scripts/deploy.sh`) y la passphrase viaja por un canal distinto al del archivo. Quien reciba y ejecute el stack en su propia máquina necesariamente puede leer esas credenciales — es un límite de confianza, no de este control. |
+| 13 | Credenciales de despliegue (`.env`) | Information Disclosure | El archivo con todos los secretos se filtra al compartir el proyecto con un tercero | Mitigado | No hay un `.env` compartido que distribuir: cada instalación genera el suyo con secretos aleatorios (`scripts/lib/generar-env.js`, permisos 600) y tiene su propia base, así que filtrar uno compromete solo esa instalación. Nunca se commitea (`.gitignore`) ni entra a ninguna imagen. Quien controle la máquina donde corre puede leerlo: es un límite de confianza, no de este control. |
+| 14 | Flujo frontend → Postgres | Elevation of Privilege | Un atacante que comprometa el frontend (lo único expuesto a la red local) intenta conectarse directo a la base | Mitigado | Postgres solo está en la red interna `db-net` (`internal: true`), sin puerto en la PC; a esa red solo están conectados los 5 servicios de backend, no el frontend. La contraseña de la base es aleatoria y propia de cada instalación. |
 
 ## Alcance y limitaciones de este modelo
 
-- No cubre la Fase 6 (observabilidad) porque todavía no existe en el sistema.
-- No modela amenazas de la infraestructura de Supabase en sí (gestionada por
-  un tercero) más allá de "qué pasa si se filtran sus credenciales", que sí
-  está cubierto (#5, #13).
+- No modela el stack de observabilidad de la Fase 6 (`monitoring/`: Prometheus,
+  Grafana, Loki, Falco) como parte del sistema: corre aparte, publica sus puertos
+  solo en `127.0.0.1` y no se conecta a `db-net`, así que no llega a la base.
+  Sí lee los logs de todos los contenedores (Promtail usa el socket de Docker en
+  solo lectura) y cAdvisor corre con `privileged`: quien controle ese stack ve
+  todo lo que los servicios registran, así que Grafana exige una contraseña
+  propia (`GRAFANA_ADMIN_PASSWORD`, generada en el `.env`).
+- No modela amenazas de la máquina donde corre la instalación (su sistema
+  operativo y su motor de Docker): la base, su volumen y el `.env` viven
+  ahí, así que quien controle esa máquina controla la instalación (#13).
+  Sí cubre qué pasa si se filtran los datos o las credenciales (#5, #13).
 - Las categorías STRIDE no cubiertas explícitamente arriba (p. ej. Spoofing
   del rol admin) heredan las mismas mitigaciones ya documentadas en
   `docs/decisiones-y-riesgos.md`

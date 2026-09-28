@@ -26,7 +26,7 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 |---|---|
 | Frontend | React 18, Vite, Recharts, react-grid-layout, jsPDF; servido por nginx |
 | Backend | Node.js 20, Express, node-cron (4 microservicios y un worker) |
-| Base de datos | PostgreSQL gestionado en Supabase (conexión TLS verificada) |
+| Base de datos | PostgreSQL 16 en su propio contenedor, en una red interna sin puerto a la PC |
 | Seguridad en la aplicación | JWT, bcrypt, AES-256-GCM (padrón cifrado), cadena de hashes SHA-256, helmet, rate limiting |
 | Contenedores e infraestructura | Docker, Docker Compose, Docker Hub, Terraform (provider `kreuzwerker/docker`), Docker-in-Docker |
 | Orquestación y observabilidad | Docker Swarm, Prometheus, Grafana, Loki + Promtail, Falco |
@@ -43,7 +43,7 @@ git clone https://github.com/NicolasPineda1421/LiveMetric.git
 cd LiveMetric
 ```
 
-**1. Configuración (`.env`).** El repo trae el `.env` del equipo cifrado (`.env.gpg`): los scripts de arranque lo descifran solos y te piden la passphrase, que se comparte por otro canal. Si vas a usar tu propia base de Supabase, copia `.env.example` a `.env` y sigue [estos pasos](docs/instalacion-y-despliegue.md#el-archivo-env).
+**1. Configuración (`.env`).** No hay que hacer nada: la primera vez, los scripts de arranque generan el `.env` con secretos aleatorios propios de tu instalación (la contraseña de tu base, tus claves). No se comparte con nadie ni se sube al repo; los detalles, en [el archivo `.env`](docs/instalacion-y-despliegue.md#el-archivo-env).
 
 **2. Arranque.** Elige una opción:
 
@@ -62,11 +62,11 @@ La primera vez tarda varios minutos (construye y analiza las 6 imágenes). Al te
     Desde otra PC de la red:  http://192.168.x.x:3000
 ```
 
-**3. Primer ingreso.** Entra con tu cuenta de administrador; el repositorio no trae ninguna. Si la base es nueva, crea la primera con `docker compose run --rm auth-service node src/scripts/crearAdmin.js <usuario>`, que pide la contraseña sin mostrarla; las demás se crean desde **Usuarios**. Hay un padrón y plantillas de demostración para probar el ciclo completo (los votantes necesitan un PIN que se genera en **Padrón**) (ver el [recorrido por la interfaz](docs/instalacion-y-despliegue.md#recorrido-por-la-interfaz)).
+**3. Primer ingreso.** El repositorio no trae ninguna cuenta: con la base nueva, el script de arranque te pide el usuario y la contraseña (sin mostrarla) del primer administrador. Si lo saltaste, créalo después con `docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay`; las demás cuentas se crean desde **Usuarios**. Hay un padrón y plantillas de demostración para probar el ciclo completo (los votantes necesitan un PIN que se genera en **Padrón**) (ver el [recorrido por la interfaz](docs/instalacion-y-despliegue.md#recorrido-por-la-interfaz)).
 
 ## Imágenes en Docker Hub
 
-Las 6 imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspineda1421) con cada versión de git (`vX.Y.Z`), etiquetadas con la versión exacta (`1.1.0`), la línea menor (`1.1`) y `latest`. Antes de subirse, cada una se escanea con Trivy: si tiene CVE críticas o altas, no se publica (ver [`release.yml`](.github/workflows/release.yml)). Son las que usa el [despliegue con Docker Swarm](orquestacion/README.md).
+Las 6 imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspineda1421) con cada versión de git (`vX.Y.Z`), etiquetadas con la versión exacta (`1.2.0`), la línea menor (`1.2`) y `latest`. Antes de subirse, cada una se escanea con Trivy: si tiene CVE críticas o altas, no se publica (ver [`release.yml`](.github/workflows/release.yml)). Son las que usa el [despliegue con Docker Swarm](orquestacion/README.md).
 
 | Servicio | Imagen |
 |---|---|
@@ -78,7 +78,7 @@ Las 6 imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspine
 | Scheduler (worker) | [`nicolaspineda1421/livemetric-scheduler`](https://hub.docker.com/r/nicolaspineda1421/livemetric-scheduler) |
 
 ```bash
-docker pull nicolaspineda1421/livemetric-auth:1.1.0
+docker pull nicolaspineda1421/livemetric-auth:1.2.0
 ```
 
 Para publicar una versión nueva basta con crear el tag: `git tag -a v1.2.0 -m "..." && git push origin v1.2.0`.

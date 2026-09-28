@@ -1,50 +1,72 @@
-# LiveMetric - Orquestacion (microservicios locales + PostgreSQL en Supabase)
-#
-# El servicio "postgres" YA NO corre una base de datos local: es un proxy TCP
-# transparente (socat) que reenvia byte a byte cada conexion en el puerto
-# 5432 hacia el proyecto de Supabase (SUPABASE_DB_HOST/PORT del .env). No
-# termina TLS ni entiende el protocolo Postgres, asi que el handshake TLS de
-# cada microservicio sigue siendo extremo a extremo contra Supabase. Se
-# mantiene como servicio propio (en vez de apuntar cada microservicio
-# directo a Supabase) para que "DB_HOST: postgres" no cambie en el resto
-# del stack.
+# LiveMetric - Orquestación local: los 7 contenedores del sistema, incluida
+# la base de datos, corren en esta máquina. No depende de ningún servicio
+# externo.
 #
 # Seguridad de red:
-#   - "app-net" conecta a los microservicios entre si, con el host, y con
-#     Internet (necesario para que "postgres" alcance a Supabase),
-#     unicamente en los puertos que exponen explicitamente.
+#   - "db-net" (internal): solo la base y los 5 servicios de backend. Sin
+#     salida a Internet y sin puertos en el host: nadie fuera de estos
+#     contenedores puede hablar con PostgreSQL.
+#   - "app-net": los servicios entre sí y con el host, únicamente en los
+#     puertos que publican explícitamente (el frontend en 3000 para la red
+#     local; los microservicios solo en 127.0.0.1).
 #
 # Secretos:
-#   - Ninguna credencial esta hardcodeada en este archivo.
-#   - Todas provienen de variables de entorno cargadas desde un archivo .env
-#     LOCAL (ver .env.example), que NUNCA debe commitearse (ver .gitignore).
+#   - Ninguna credencial está escrita en este archivo: todas salen del .env
+#     LOCAL, que genera scripts/lib/generar-env.js con valores aleatorios
+#     propios de cada instalación y que NUNCA se commitea (ver .gitignore).
 #
 # Servicios:
-#   - postgres: proxy TCP local -> PostgreSQL gestionado en Supabase.
+#   - postgres: PostgreSQL 16; carga db/init.sql la primera vez que arranca
+#     con el volumen vacío. Los datos persisten en el volumen "db-data".
 #   - frontend: SPA en React (nginx), único servicio pensado para el navegador.
 #   - auth-service, voting-service, analytics-service: microservicios A, B, C.
 #   - scrutiny-service: microservicio D, certifica resultados con hash SHA-256
 #     encadenado (append-only en la base de datos).
-#   - scheduler-worker: proceso asincrono (node-cron) que abre/cierra
-#     elecciones segun su ventana de tiempo y dispara la certificacion.
+#   - scheduler-worker: proceso asíncrono (node-cron) que abre/cierra
+#     elecciones según su ventana de tiempo y dispara la certificación.
 
 networks:
   app-net:
     driver: bridge
+  db-net:
+    driver: bridge
+    internal: true
+
+volumes:
+  db-data:
 
 services:
 
   postgres:
-    image: alpine/socat:latest
+    image: postgres:16-alpine
     container_name: livemetric-postgres
     restart: unless-stopped
-    command: ["TCP-LISTEN:5432,fork,reuseaddr", "TCP:${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:-5432}"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-livemetric}
+      POSTGRES_USER: ${POSTGRES_USER:-livemetric}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en el .env (lo genera scripts/lib/generar-env.js)}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # Solo corre con el volumen vacío (la primera vez). Trae el esquema
+      # completo; db/migrations/ es para actualizar bases ya creadas.
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
-      - app-net
-    # SIN "ports": no se expone al host, solo es alcanzable por los
-    # microservicios dentro de "app-net" (igual que el Postgres local antes).
+      - db-net
+    # SIN "ports": no se expone al host; solo la ven los servicios en db-net.
+    healthcheck:
+      # Por TCP a propósito: mientras corre init.sql, Postgres atiende solo
+      # por socket local, así que la base no figura "sana" hasta terminar.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     security_opt:
       - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
 
   auth-service:
     build:
@@ -62,17 +84,15 @@ services:
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: ${SUPABASE_DB_NAME:-postgres}
-      DB_USER: ${SUPABASE_DB_USER:-postgres}
-      DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
-      DB_SSL: ${DB_SSL:-true}
-      # Los servicios llegan a Supabase por el proxy "postgres" (socat), asi que
-      # el certificado TLS se verifica contra el host real (ver src/db.js).
-      DB_SSL_HOST: ${SUPABASE_DB_HOST}
+      DB_NAME: ${POSTGRES_DB:-livemetric}
+      DB_USER: ${POSTGRES_USER:-livemetric}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - app-net
+      - db-net
     ports:
       # Solo accesible desde localhost del host anfitrion, nunca 0.0.0.0
       - "127.0.0.1:3001:3001"
@@ -94,17 +114,15 @@ services:
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: ${SUPABASE_DB_NAME:-postgres}
-      DB_USER: ${SUPABASE_DB_USER:-postgres}
-      DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
-      DB_SSL: ${DB_SSL:-true}
-      # Los servicios llegan a Supabase por el proxy "postgres" (socat), asi que
-      # el certificado TLS se verifica contra el host real (ver src/db.js).
-      DB_SSL_HOST: ${SUPABASE_DB_HOST}
+      DB_NAME: ${POSTGRES_DB:-livemetric}
+      DB_USER: ${POSTGRES_USER:-livemetric}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - app-net
+      - db-net
     ports:
       - "127.0.0.1:3002:3002"
     security_opt:
@@ -126,20 +144,17 @@ services:
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: ${SUPABASE_DB_NAME:-postgres}
-      DB_USER: ${SUPABASE_DB_USER:-postgres}
-      DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
-      DB_SSL: ${DB_SSL:-true}
-      # Los servicios llegan a Supabase por el proxy "postgres" (socat), asi que
-      # el certificado TLS se verifica contra el host real (ver src/db.js).
-      DB_SSL_HOST: ${SUPABASE_DB_HOST}
+      DB_NAME: ${POSTGRES_DB:-livemetric}
+      DB_USER: ${POSTGRES_USER:-livemetric}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
       auth-service:
         condition: service_started
     networks:
       - app-net
+      - db-net
     ports:
       - "127.0.0.1:3003:3003"
     security_opt:
@@ -165,17 +180,15 @@ services:
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: ${SUPABASE_DB_NAME:-postgres}
-      DB_USER: ${SUPABASE_DB_USER:-postgres}
-      DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
-      DB_SSL: ${DB_SSL:-true}
-      # Los servicios llegan a Supabase por el proxy "postgres" (socat), asi que
-      # el certificado TLS se verifica contra el host real (ver src/db.js).
-      DB_SSL_HOST: ${SUPABASE_DB_HOST}
+      DB_NAME: ${POSTGRES_DB:-livemetric}
+      DB_USER: ${POSTGRES_USER:-livemetric}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - app-net
+      - db-net
     ports:
       # Solo para que un admin autenticado consulte /certifications y /verify
       # desde el host. El endpoint /internal/certify igual exige el token de
@@ -203,20 +216,17 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: ${SUPABASE_DB_NAME:-postgres}
-      DB_USER: ${SUPABASE_DB_USER:-postgres}
-      DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
-      DB_SSL: ${DB_SSL:-true}
-      # Los servicios llegan a Supabase por el proxy "postgres" (socat), asi que
-      # el certificado TLS se verifica contra el host real (ver src/db.js).
-      DB_SSL_HOST: ${SUPABASE_DB_HOST}
+      DB_NAME: ${POSTGRES_DB:-livemetric}
+      DB_USER: ${POSTGRES_USER:-livemetric}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
     depends_on:
       postgres:
-        condition: service_started
+        condition: service_healthy
       scrutiny-service:
         condition: service_started
     networks:
       - app-net
+      - db-net
     # Sin "ports": este worker no necesita ser alcanzable desde el host.
     security_opt:
       - no-new-privileges:true
@@ -224,10 +234,9 @@ services:
     tmpfs:
       - /tmp
 
-  # SPA en React, servida como archivos estáticos por nginx. Corre en el
-  # navegador del usuario, así que habla con los microservicios directo en
-  # 127.0.0.1 (no atraviesa "app-net"); por eso solo necesita "app-net" para
-  # que el propio contenedor sea alcanzable desde el host.
+  # SPA en React, servida como archivos estáticos por nginx, que además hace
+  # de proxy reverso hacia los 4 microservicios por "app-net". No está en
+  # "db-net": el frontend nunca habla con la base.
   frontend:
     build:
       context: ./services/frontend

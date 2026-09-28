@@ -27,16 +27,16 @@ Todas las actions de terceros están **fijadas a un SHA de commit** (con la vers
 
 | Job | Herramienta | Qué cubre |
 |---|---|---|
-| `unit-tests` | **Jest + Supertest** | Pruebas contra la app de Express en memoria de cada servicio, usando la Supabase real (decisión del proyecto: no hay base de staging). Todo dato de prueba lleva el prefijo `CITEST-` y se borra al final. Mide la **cobertura** de cada servicio. Localmente: `cd services/<nombre> && npm test`. |
+| `unit-tests` | **Jest + Supertest** | Pruebas contra la app de Express en memoria de cada servicio y un PostgreSQL 16 de verdad: uno **desechable** por corrida, que levanta `scripts/lib/jest-db-setup.js` con el esquema de `db/init.sql` y se borra al terminar. Los secretos también son aleatorios en cada corrida (`jest.setup.js`), así que el job no necesita ningún *secret* del repositorio. Mide la **cobertura** de cada servicio. Localmente, con Docker: `cd services/<nombre> && npm test`. |
 | `coverage-badge` | GitHub Pages | Solo en `main`: junta la cobertura de los 5 servicios y la publica en GitHub Pages (`coverage.json` para la insignia del README y una página con el detalle). |
-| `staging-deploy-and-dast` | **OWASP ZAP** (baseline) | Levanta el stack completo y lo ataca en `http://localhost:3000` como caja negra. El reporte queda como artefacto (`zap-baseline-report`); por ahora es un gate de **reporte**, no bloqueante. |
+| `staging-deploy-and-dast` | **OWASP ZAP** (baseline) | Levanta el stack completo, con su propia base y un `.env` generado como en una instalación nueva, y lo ataca en `http://localhost:3000` como caja negra. El reporte queda como artefacto (`zap-baseline-report`); por ahora es un gate de **reporte**, no bloqueante. |
 
 **Fase 5 — Despliegue.**
 
 | Job | Herramienta | Qué cubre |
 |---|---|---|
 | `iac-scan` | **Checkov** | Malas prácticas en `infra/terraform/main.tf`: redes no aisladas, contenedores privilegiados, falta de límites, secretos en `.tf`. |
-| `iac-deploy` | **Terraform** | Despliegue real: `terraform apply` levanta el stack (con su propio PostgreSQL local, nunca Supabase), un smoke test confirma que los 4 microservicios responden y `terraform destroy` limpia todo. |
+| `iac-deploy` | **Terraform** | Despliegue real: `terraform apply` levanta el stack (con su propio PostgreSQL), un smoke test confirma que los 4 microservicios responden y `terraform destroy` limpia todo. |
 
 | Job final | |
 |---|---|
@@ -44,9 +44,9 @@ Todas las actions de terceros están **fijadas a un SHA de commit** (con la vers
 
 Los hallazgos de Semgrep, Trivy y Checkov se suben en formato **SARIF** a **Security → Code scanning** de GitHub.
 
-> **Terraform y Supabase:** `iac-deploy` usa un PostgreSQL local efímero, así que no puede tocar datos reales. Las pruebas y el DAST sí usan la Supabase real (con `docker compose`), por decisión del equipo: cada corrida escribe y borra datos de prueba con el prefijo `CITEST-`.
+> **Ninguna base real:** las pruebas, el DAST y `iac-deploy` usan cada uno su propio PostgreSQL efímero, que se borra al terminar. Ningún job del pipeline puede leer ni escribir los datos de una instalación.
 >
-> **`scrutiny_ledger` es append-only:** las pruebas de Scrutiny que certifican una elección dejan esa acta para siempre en la base (borrarla sería romper la misma garantía de integridad que el sistema existe para dar). Como además borran sus votos, en **Reportes → Integridad del acta** esas elecciones aparecen "Alterada": el detector funciona como debe.
+> **`scrutiny_ledger` es append-only, también en las pruebas:** el trigger impide borrar las actas que certifican las pruebas de Scrutiny, incluso desde las propias pruebas (es la misma garantía de integridad que el sistema existe para dar). Por eso se prueban contra una base desechable: las actas desaparecen con ella.
 
 ## Correr el mismo análisis en la PC
 

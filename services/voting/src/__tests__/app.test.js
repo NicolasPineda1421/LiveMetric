@@ -1,6 +1,7 @@
 // Pruebas de integración de voting-service contra la app de Express en
-// memoria (Supertest, sin abrir puerto real) y la base real configurada por
-// entorno (Supabase). No se llama a auth-service: los JWT se firman aquí
+// memoria (Supertest, sin abrir puerto real) y un PostgreSQL de verdad: el
+// desechable que levanta scripts/lib/jest-db-setup.js para esta corrida (o
+// el de DB_HOST, si viene definido). No se llama a auth-service: los JWT se firman aquí
 // mismo con JWT_SECRET, replicando exactamente el payload que auth-service
 // emite en /login/admin y /login/voter. Todo dato que estas pruebas crean
 // (plantillas, elecciones, opciones, votos, y un admin de prueba necesario

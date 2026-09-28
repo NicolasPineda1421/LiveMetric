@@ -23,7 +23,8 @@ es el mismo que fue auditado, no una recompilación local que podría diferir.
 | Origen de las imágenes | `build:` desde el código local | Docker Hub, versión fija |
 | Réplicas | 1 por servicio | 2 en los servicios sin estado |
 | Actualización | Reinicio completo | Rolling update con rollback automático |
-| Red | bridge | overlay **cifrada** entre nodos |
+| Red | bridge: `app-net` y `db-net` (interna) | overlay **cifrada** entre nodos: las mismas dos redes |
+| Base de datos | Contenedor `postgres`, volumen `db-data` | Igual, con su propio volumen; una réplica fijada al nodo manager y `init.sql` como `config` de Swarm versionada |
 | Límites de recursos | Ninguno | CPU y memoria acotadas por servicio |
 | Rotación de logs | Ninguna | 3 archivos de 10 MB por servicio |
 
@@ -40,6 +41,12 @@ En ambos casos se sacrifica disponibilidad a cambio de corrección. En un sistem
 electoral esa es la decisión correcta, y conviene poder explicarla: es el tipo de
 trade-off que distingue una orquestación pensada de una copiada.
 
+`postgres` tampoco se replica: dos instancias de PostgreSQL no comparten datos por
+el solo hecho de montar el mismo volumen (eso exige replicación propia de la base).
+Además, un volumen de Docker es local a un nodo, así que la base queda fijada al
+nodo manager (`placement.constraints`) para que sus datos no se queden atrás si
+Swarm la reprograma.
+
 ## Despliegue
 
 ```bash
@@ -49,13 +56,28 @@ docker swarm init
 # 2. Desplegar la versión publicada
 cd orquestacion
 chmod +x deploy.sh
-./deploy.sh v1.0.0
+./deploy.sh v1.2.0
 ```
+
+Desde **v1.2.0**: las versiones anteriores de las imágenes se conectaban a Supabase y no
+traen lo que este stack espera de la base local (el cifrado del padrón al arrancar y
+`crearAdmin.js --si-no-hay`).
 
 El script valida, antes de desplegar, que Swarm esté activo, que el `.env` exista con
 todas las variables obligatorias y que las seis imágenes de esa versión estén realmente
 publicadas en el registro. Fallar en la validación es mucho más barato que desplegar y
 quedarse con réplicas reiniciándose en bucle.
+
+Usa el mismo `.env` de la raíz del repo que `docker compose`; si todavía no existe, se
+genera con `node scripts/lib/generar-env.js`. La base del stack es **otra**, con su
+propio volumen (`livemetric_db-data`): empieza vacía aunque ya haya una instalación con
+`docker compose` en la misma PC. Por eso, la primera vez hay que crear su primer
+administrador (el script lo recuerda al terminar):
+
+```bash
+docker exec -it $(docker ps -q -f name=livemetric_auth-service | head -n 1) \
+  node src/scripts/crearAdmin.js --si-no-hay
+```
 
 Al terminar, la aplicación queda en `http://localhost:3000`.
 
@@ -72,7 +94,7 @@ docker stack rm livemetric                # retirar el stack
 ### Actualizar a una versión nueva
 
 ```bash
-./deploy.sh v1.1.0
+./deploy.sh v1.3.0     # la versión nueva, una vez publicada por release.yml
 ```
 
 Swarm reemplaza las réplicas de a una, esperando 10 segundos entre cada una y verificando
@@ -101,6 +123,10 @@ servicio. Aprovecharlo requiere un cambio menor en los servicios: leer
 `/run/secrets/<nombre>` cuando el archivo exista y caer a la variable de entorno cuando
 no. Es el siguiente paso natural de endurecimiento y está pendiente.
 
-**Un solo nodo.** El stack está probado en un Swarm de nodo único. En varios nodos haría
-falta añadir restricciones de ubicación (`placement.constraints`) para fijar el scheduler
-a un nodo concreto.
+**Un solo nodo.** El stack está probado en un Swarm de nodo único. La base ya queda
+fijada al nodo manager; en varios nodos habría que hacer lo mismo con el scheduler.
+
+**La base no tiene respaldo automático ni alta disponibilidad.** Si el nodo manager se
+pierde, se pierde la base. El respaldo es manual (`pg_dump`, ver
+[decisiones y riesgos](../docs/decisiones-y-riesgos.md)); una base replicada queda fuera
+del alcance del proyecto.

@@ -2,7 +2,7 @@
 # =============================================================================
 # LiveMetric — Despliegue orquestado en Docker Swarm
 #
-# Uso:  ./deploy.sh v1.0.0
+# Uso:  ./deploy.sh v1.2.0
 #
 # Requisitos previos:
 #   - Docker Swarm inicializado:  docker swarm init
@@ -22,7 +22,7 @@ REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 # -----------------------------------------------------------------------------
 VERSION="${1:-}"
 if [ -z "$VERSION" ]; then
-  echo "❌ Falta la version. Uso: ./deploy.sh v1.0.0"
+  echo "❌ Falta la version. Uso: ./deploy.sh v1.2.0"
   exit 1
 fi
 
@@ -53,7 +53,7 @@ fi
 ENV_FILE="${REPO_ROOT}/.env"
 if [ ! -f "$ENV_FILE" ]; then
   echo "❌ No se encontro ${ENV_FILE}"
-  echo "   Copia .env.example a .env y completa los valores."
+  echo "   Generalo con: node scripts/lib/generar-env.js (o corriendo ./scripts/start.sh una vez)."
   exit 1
 fi
 
@@ -65,7 +65,7 @@ set +a
 # -----------------------------------------------------------------------------
 # 4) Validar variables obligatorias
 # -----------------------------------------------------------------------------
-REQUIRED=(DOCKERHUB_NAMESPACE JWT_SECRET VOTER_ID_SALT VOTERS_ENCRYPTION_KEY INTERNAL_SERVICE_TOKEN SUPABASE_DB_HOST SUPABASE_DB_PASSWORD)
+REQUIRED=(DOCKERHUB_NAMESPACE JWT_SECRET VOTER_ID_SALT VOTERS_ENCRYPTION_KEY INTERNAL_SERVICE_TOKEN POSTGRES_PASSWORD)
 MISSING=()
 for var in "${REQUIRED[@]}"; do
   if [ -z "${!var:-}" ]; then
@@ -115,6 +115,9 @@ docker stack services "$STACK_NAME"
 echo ""
 echo "✅ Stack desplegado."
 echo "   Aplicacion:  http://localhost:3000"
+echo ""
+echo "   Con la base nueva, crea el primer administrador (cuando auth-service este arriba):"
+echo "   docker exec -it \$(docker ps -q -f name=${STACK_NAME}_auth-service | head -n 1) node src/scripts/crearAdmin.js --si-no-hay"
 echo ""
 echo "   Ver servicios:   docker stack services ${STACK_NAME}"
 echo "   Ver replicas:    docker stack ps ${STACK_NAME}"

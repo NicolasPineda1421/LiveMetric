@@ -238,10 +238,11 @@ jobs:
 
   # -------------------------------------------------------------------------
   # 6) PRUEBAS UNITARIAS/INTEGRACION - Jest + Supertest, contra la app de
-  #    Express en memoria (sin desplegar nada) pero usando la Supabase REAL
-  #    (decision explicita del proyecto: no hay base de staging separada).
-  #    Todo dato que las pruebas crean usa el prefijo CITEST-<servicio> y se
-  #    borra en un afterAll (ver services/*/src/__tests__/*.test.js).
+  #    Express en memoria (sin desplegar nada) y una base PostgreSQL real
+  #    pero desechable: cada "npm test" la levanta en un contenedor propio,
+  #    le carga db/init.sql y la borra al final (scripts/lib/jest-db-setup.js).
+  #    No necesita ningun secreto: los de la aplicacion se generan al azar
+  #    en cada corrida (services/*/jest.setup.js).
   # -------------------------------------------------------------------------
   unit-tests:
     name: Pruebas unitarias - ${{ matrix.service }}
@@ -251,20 +252,6 @@ jobs:
       fail-fast: false
       matrix:
         service: [auth, voting, analytics, scrutiny, scheduler]
-    env:
-      SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
-      SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
-      SUPABASE_DB_NAME: ${{ secrets.SUPABASE_DB_NAME }}
-      SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-      DB_SSL: 'true'
-      JWT_SECRET: ${{ secrets.JWT_SECRET }}
-      JWT_EXPIRES_IN: '1h'
-      VOTER_JWT_EXPIRES_IN: '10m'
-      VOTER_ID_SALT: ${{ secrets.VOTER_ID_SALT }}
-      VOTERS_ENCRYPTION_KEY: ${{ secrets.VOTERS_ENCRYPTION_KEY }}
-      INTERNAL_SERVICE_TOKEN: ${{ secrets.INTERNAL_SERVICE_TOKEN }}
-      SCRUTINY_INTERNAL_URL: 'http://localhost:3004'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -334,12 +321,9 @@ jobs:
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
 
   # -------------------------------------------------------------------------
-  # 7) IaC DEPLOY - Despliegue automatizado con Terraform (Fase 5). Usa el
-  #    Postgres LOCAL efimero que el propio infra/terraform/main.tf provee
-  #    (documentado como alternativa Local-First a docker compose) - nunca
-  #    toca la Supabase real. Es la demostracion de "despliegue automatizado
-  #    con IaC"; el staging que de verdad escanea DAST (mas abajo) usa
-  #    docker compose con la Supabase real, por decision explicita del proyecto.
+  # 7) IaC DEPLOY - Despliegue automatizado con Terraform (Fase 5): levanta
+  #    el sistema completo, con su propio PostgreSQL efimero, a partir de
+  #    infra/terraform/main.tf, comprueba que responda y lo destruye.
   # -------------------------------------------------------------------------
   iac-deploy:
     name: Despliegue automatizado - Terraform
@@ -397,7 +381,7 @@ jobs:
         run: terraform destroy -auto-approve
 
   # -------------------------------------------------------------------------
-  # 8) DAST - Levanta el stack completo (docker compose, Supabase real) y
+  # 8) DAST - Levanta el stack completo (docker compose, base local) y
   #    corre OWASP ZAP Baseline Scan contra el frontend (que ya pasa por el
   #    proxy reverso de nginx hacia los 4 microservicios). Va en un solo job
   #    porque los contenedores de un job no sobreviven para el siguiente.
@@ -412,40 +396,10 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Crear .env con los secretos reales (solo vive en el runner, nunca se imprime ni se commitea)
-        # Los secretos se pasan por "env:" (variables de entorno del proceso)
-        # en vez de interpolar "${{ secrets.X }}" directamente en el texto del
-        # script: esa sustitucion ocurre ANTES de que bash vea el script, asi
-        # que el valor crudo del secreto queda pegado en el comando textual.
-        # Pasandolo como variable de entorno, bash lo expande de forma segura
-        # con "$VAR" sin que el secreto pase por el parser de shell como texto.
-        env:
-          SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
-          SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
-          SUPABASE_DB_NAME: ${{ secrets.SUPABASE_DB_NAME }}
-          SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          VOTER_ID_SALT: ${{ secrets.VOTER_ID_SALT }}
-          VOTERS_ENCRYPTION_KEY: ${{ secrets.VOTERS_ENCRYPTION_KEY }}
-          INTERNAL_SERVICE_TOKEN: ${{ secrets.INTERNAL_SERVICE_TOKEN }}
-        run: |
-          cat > .env <<EOF
-          SUPABASE_DB_HOST=$SUPABASE_DB_HOST
-          SUPABASE_DB_PORT=$SUPABASE_DB_PORT
-          SUPABASE_DB_NAME=$SUPABASE_DB_NAME
-          SUPABASE_DB_USER=$SUPABASE_DB_USER
-          SUPABASE_DB_PASSWORD=$SUPABASE_DB_PASSWORD
-          DB_SSL=true
-          JWT_SECRET=$JWT_SECRET
-          JWT_EXPIRES_IN=1h
-          VOTER_JWT_EXPIRES_IN=10m
-          VOTER_ID_SALT=$VOTER_ID_SALT
-          VOTERS_ENCRYPTION_KEY=$VOTERS_ENCRYPTION_KEY
-          INTERNAL_SERVICE_TOKEN=$INTERNAL_SERVICE_TOKEN
-          SCHEDULER_CRON=*/5 * * * *
-          FRONTEND_ORIGIN=http://localhost:3000
-          EOF
+      # Igual que en cualquier instalacion: un .env con secretos aleatorios
+      # propios de esta corrida (la base del staging es local y desechable).
+      - name: Generar el .env del entorno de staging
+        run: node scripts/lib/generar-env.js
 
       - name: Levantar el stack completo
         run: docker compose up -d --build

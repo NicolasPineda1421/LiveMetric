@@ -3,7 +3,7 @@
   "summary": {
     "title": "LiveMetric — Sistema de votación",
     "owner": "Equipo LiveMetric",
-    "description": "Modelo de amenazas de LiveMetric: microservicios de votación (auth, voting, analytics, scrutiny, scheduler-worker) sobre Postgres/Supabase. Ver docs/threat-model/STRIDE-analysis.md para la versión en tabla legible con las mismas amenazas.",
+    "description": "Modelo de amenazas de LiveMetric: microservicios de votación (auth, voting, analytics, scrutiny, scheduler-worker) sobre un PostgreSQL local, propio de cada instalación. Ver docs/threat-model/STRIDE-analysis.md para la versión en tabla legible con las mismas amenazas.",
     "id": 0
   },
   "detail": {
@@ -68,11 +68,11 @@
             "shape": "store",
             "position": { "x": 620, "y": 220 },
             "size": { "width": 160, "height": 60 },
-            "attrs": { "text": { "text": "Postgres (Supabase)" } },
+            "attrs": { "text": { "text": "Postgres (local)" } },
             "data": {
               "type": "tm.Store",
-              "name": "Postgres (Supabase)",
-              "description": "Base de datos gestionada por Supabase; el padrón se guarda cifrado (ver DFD Nivel 1).",
+              "name": "Postgres (local)",
+              "description": "PostgreSQL 16 en su propio contenedor, en la red interna db-net (sin puerto en la PC ni salida a Internet); el padrón se guarda cifrado (ver DFD Nivel 1).",
               "outOfScope": false,
               "threats": []
             }
@@ -184,6 +184,15 @@
                   "severity": "High",
                   "description": "Si alguien obtiene acceso directo a Postgres.",
                   "mitigation": "cedula/polling_place/voting_table cifrados (services/auth/src/voterCrypto.js); solo full_name queda en texto plano a propósito."
+                },
+                {
+                  "id": "T14",
+                  "title": "Llegar a la base desde el frontend comprometido o desde la red local",
+                  "type": "Elevation of Privilege",
+                  "status": "Mitigated",
+                  "severity": "High",
+                  "description": "El frontend es lo único expuesto a la red local; si se compromete, el siguiente paso sería conectarse directo a Postgres.",
+                  "mitigation": "Postgres solo está en la red interna db-net (internal: true), sin puerto en la PC; a esa red solo están conectados los 5 servicios de backend, no el frontend. La contraseña de la base es aleatoria y propia de cada instalación."
                 }
               ]
             }

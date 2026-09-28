@@ -10,7 +10,7 @@
 # resultado de compilar el codigo que haya en la maquina en ese momento.
 #
 # Despliegue:
-#   cd orquestacion && ./deploy.sh v1.0.0
+#   cd orquestacion && ./deploy.sh v1.2.0
 #
 # Ver orquestacion/README.md para el detalle.
 # =============================================================================
@@ -61,11 +61,15 @@ x-service-common: &service-common
 x-db-env: &db-env
   DB_HOST: postgres
   DB_PORT: 5432
-  DB_NAME: ${SUPABASE_DB_NAME:-postgres}
-  DB_USER: ${SUPABASE_DB_USER:-postgres}
-  DB_PASSWORD: ${SUPABASE_DB_PASSWORD}
-  DB_SSL: ${DB_SSL:-true}
-  DB_SSL_HOST: ${SUPABASE_DB_HOST}
+  DB_NAME: ${POSTGRES_DB:-livemetric}
+  DB_USER: ${POSTGRES_USER:-livemetric}
+  DB_PASSWORD: ${POSTGRES_PASSWORD}
+
+# Los 5 servicios de backend estan en app-net (entre ellos y el frontend) y
+# en db-net (la base). El frontend solo en app-net: nunca habla con la base.
+x-backend-networks: &backend-networks
+  - app-net
+  - db-net
 
 networks:
   app-net:
@@ -75,32 +79,72 @@ networks:
     driver_opts:
       encrypted: "true"
     attachable: false
+  # Solo la base y los backends; "internal": sin salida a Internet y sin
+  # acceso desde fuera del stack.
+  db-net:
+    driver: overlay
+    internal: true
+    driver_opts:
+      encrypted: "true"
+    attachable: false
+
+volumes:
+  db-data:
+
+# El esquema inicial, como config de Swarm. Las configs no se pueden
+# modificar una vez creadas: el nombre lleva la version para que cada
+# release traiga la suya en vez de chocar con la anterior.
+configs:
+  init_sql:
+    name: livemetric_init_sql_${LIVEMETRIC_VERSION}
+    file: ../db/init.sql
 
 services:
 
   # ---------------------------------------------------------------------------
-  # Proxy hacia la base de datos. Replica unica: es un reenviador de puertos,
-  # no tiene estado que replicar.
+  # PostgreSQL 16. Replica unica y fijada al nodo manager: el volumen de
+  # datos es local a un nodo, y una segunda replica no compartiria los datos.
+  # Carga db/init.sql (config "init_sql") solo con el volumen vacio.
   # ---------------------------------------------------------------------------
   postgres:
-    image: alpine/socat:latest
-    command: ["TCP-LISTEN:5432,fork,reuseaddr", "TCP:${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:-5432}"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-livemetric}
+      POSTGRES_USER: ${POSTGRES_USER:-livemetric}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    configs:
+      - source: init_sql
+        target: /docker-entrypoint-initdb.d/init.sql
     networks:
-      - app-net
+      - db-net
+    healthcheck:
+      # Por TCP a proposito: mientras corre init.sql, Postgres atiende solo
+      # por socket local, asi que no figura "sano" hasta terminar.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     deploy:
       replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
       restart_policy:
         condition: on-failure
       resources:
         limits:
-          cpus: "0.25"
-          memory: 64M
+          cpus: "0.50"
+          memory: 512M
 
   # ---------------------------------------------------------------------------
   # Auth — identidad y emision de JWT
   # ---------------------------------------------------------------------------
   auth-service:
     <<: *service-common
+    networks: *backend-networks
     image: ${DOCKERHUB_NAMESPACE}/livemetric-auth:${LIVEMETRIC_VERSION}
     environment:
       <<: *db-env
@@ -124,6 +168,7 @@ services:
   # ---------------------------------------------------------------------------
   voting-service:
     <<: *service-common
+    networks: *backend-networks
     image: ${DOCKERHUB_NAMESPACE}/livemetric-voting:${LIVEMETRIC_VERSION}
     environment:
       <<: *db-env
@@ -143,6 +188,7 @@ services:
   # ---------------------------------------------------------------------------
   analytics-service:
     <<: *service-common
+    networks: *backend-networks
     image: ${DOCKERHUB_NAMESPACE}/livemetric-analytics:${LIVEMETRIC_VERSION}
     environment:
       <<: *db-env
@@ -167,6 +213,7 @@ services:
   # ---------------------------------------------------------------------------
   scrutiny-service:
     <<: *service-common
+    networks: *backend-networks
     image: ${DOCKERHUB_NAMESPACE}/livemetric-scrutiny:${LIVEMETRIC_VERSION}
     environment:
       <<: *db-env
@@ -196,12 +243,13 @@ services:
   # ---------------------------------------------------------------------------
   scheduler-worker:
     <<: *service-common
+    networks: *backend-networks
     image: ${DOCKERHUB_NAMESPACE}/livemetric-scheduler:${LIVEMETRIC_VERSION}
     environment:
       <<: *db-env
       NODE_ENV: production
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
-      SCRUTINY_URL: http://scrutiny-service:3004
+      SCRUTINY_INTERNAL_URL: http://scrutiny-service:3004
     deploy:
       <<: *deploy-defaults
       replicas: 1

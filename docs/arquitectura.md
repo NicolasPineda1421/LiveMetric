@@ -10,7 +10,7 @@ LiveMetric permite al administrador **cargar plantillas de elección reutilizabl
                             │     Frontend     │  React + Vite, servido por nginx (sin root)
                             │  (proxy reverso) │  /auth · /voting · /analytics · /scrutiny
                             └────────┬─────────┘
-  ┌──────────────────────────────────┼──────────────────────────────── app-net ──┐
+  ┌──────────────────────────────────┼───────────────────────────────── app-net ──┐
   │        ┌─────────────┬───────────┴───┬───────────────┐                        │
   │   ┌────▼────┐   ┌────▼────┐   ┌──────▼────┐   ┌──────▼────┐   ┌────────────┐  │
   │   │  Auth   │   │ Voting  │   │ Analytics │   │ Scrutiny  │◀──│ Scheduler  │  │
@@ -19,17 +19,15 @@ LiveMetric permite al administrador **cargar plantillas de elección reutilizabl
   │   │ padrón  │   │ + admin │   │ y reportes│   │ hash chain│   └─────┬──────┘  │
   │   └────┬────┘   └────┬────┘   └─────┬─────┘   └─────┬─────┘         │         │
   │        └─────────────┴──────┬───────┴───────────────┴───────────────┘         │
-  │                      ┌──────▼──────┐                                          │
-  │                      │  postgres   │  proxy TCP (socat), sin puerto al host   │
-  │                      └──────┬──────┘                                          │
   └─────────────────────────────┼─────────────────────────────────────────────────┘
-                                │ TLS verificado contra la CA de Supabase
-                        ┌───────▼────────┐
-                        │   PostgreSQL   │  gestionado en Supabase
-                        │ (audit_log y   │  (la variante Terraform usa un
-                        │  libro de actas│   PostgreSQL local en red interna)
-                        │  append-only)  │
-                        └────────────────┘
+  ┌─────────────────────────────┼─────────────────────────────────────── db-net ──┐
+  │                     ┌───────▼────────┐                                        │
+  │                     │   PostgreSQL   │  16, datos en el volumen db-data;      │
+  │                     │ (audit_log y   │  red interna: sin salida a Internet,   │
+  │                     │  libro de actas│  sin puerto en la PC y solo para       │
+  │                     │  append-only)  │  los 5 servicios de backend            │
+  │                     └────────────────┘                                        │
+  └───────────────────────────────────────────────────────────────────────────────┘
 ```
 
 Los puertos 3001–3004 se publican solo en `127.0.0.1` (para probar las APIs desde la misma PC); el navegador nunca los usa: todo pasa por el 3000 del frontend.
@@ -44,30 +42,31 @@ Los puertos 3001–3004 se publican solo en `127.0.0.1` (para probar las APIs de
 | **Microservicio C — Analytics** | Resultados (en vivo o certificados), métricas y estadística avanzada de los reportes, tableros configurables | Node.js 20 / Express | Solo lectura para admin/auditor; en elecciones cerradas sirve el acta certificada, nunca un recálculo. Verifica por su cuenta la integridad de las actas |
 | **Microservicio D — Scrutiny** | Recuento **independiente** desde los votos, consolidación por **mesa**, **ganador**, y certificación con cadena de hashes SHA-256; acta en PDF | Node.js 20 / Express | `/internal/certify` solo acepta un token de servicio (`X-Internal-Token`, comparación *timing-safe*), nunca un JWT de usuario |
 | **Worker — Scheduler** | Activa/cierra elecciones según su horario y dispara la certificación | Node.js 20 + `node-cron` | Sin puerto publicado; solo habla con Scrutiny dentro de `app-net` |
-| **postgres** | Proxy TCP (socat) hacia la base de Supabase | `alpine/socat` | No termina TLS: el handshake de cada microservicio es de punta a punta contra Supabase |
-| **PostgreSQL** | Persistencia, incluidos el libro de escrutinio y el log de auditoría | PostgreSQL gestionado (Supabase) | Triggers que bloquean `UPDATE`/`DELETE` sobre `scrutiny_ledger` y `audit_log` |
+| **PostgreSQL** (`postgres`) | Persistencia, incluidos el libro de escrutinio y el log de auditoría | PostgreSQL 16 (`postgres:16-alpine`), volumen `db-data` | Solo en la red interna `db-net`, sin puerto en la PC; sistema de archivos de solo lectura salvo sus datos. Triggers que bloquean `UPDATE`/`DELETE` sobre `scrutiny_ledger` y `audit_log` |
 
 ## Red
 
-- **`app-net` (bridge)**: une a todos los contenedores. Hacia la red local solo se abre el puerto 3000 del frontend; los microservicios se publican únicamente en `127.0.0.1`.
-- **Base de datos**: no tiene ningún puerto en la PC. El único camino es el proxy `postgres` dentro de `app-net`, y la conexión va cifrada y verificada (CA raíz de Supabase en `services/*/src/certs/`, comprobando el nombre del servidor real aunque se pase por el proxy).
-- **Variante Terraform** (`infra/terraform/main.tf`): levanta su propio PostgreSQL en una red interna (`db_net`, sin salida a Internet ni acceso desde el host).
+- **`app-net` (bridge)**: el frontend y los 5 servicios de backend. Hacia la red local solo se abre el puerto 3000 del frontend; los microservicios se publican únicamente en `127.0.0.1`.
+- **`db-net` (bridge, `internal`)**: la base y los 5 servicios de backend, nada más. Sin salida a Internet y sin ningún puerto en la PC: el frontend (lo único expuesto a la red) no llega a la base ni aunque se comprometa. La conexión a Postgres no usa TLS porque nunca sale de la máquina.
+- **Docker Swarm** (`orquestacion/docker-stack.yml`): las mismas dos redes, como *overlay* cifradas entre nodos.
+- **Variante Terraform** (`infra/terraform/main.tf`): la misma separación, con su red interna `db_net`.
 
 ## Gestión de secretos
 
-Ningún secreto (`JWT_SECRET`, credenciales de la base, `VOTER_ID_SALT`, `VOTERS_ENCRYPTION_KEY`, `INTERNAL_SERVICE_TOKEN`) está en `docker-compose.yml`, `main.tf` ni en el código. Todos se inyectan por variables de entorno desde un `.env` **local**, excluido por `.gitignore`:
+Ningún secreto (`POSTGRES_PASSWORD`, `JWT_SECRET`, `VOTER_ID_SALT`, `VOTERS_ENCRYPTION_KEY`, `INTERNAL_SERVICE_TOKEN`) está en `docker-compose.yml`, `main.tf` ni en el código. Todos se inyectan por variables de entorno desde un `.env` **local**, excluido por `.gitignore`:
 
 - `.env.example`: plantilla sin valores reales.
-- `.env.gpg`: el `.env` del equipo cifrado con gpg (sí está en el repo); la passphrase se comparte por otro canal. `start.sh`/`start.bat`/`contenedor.sh` lo descifran solos si no hay `.env`.
-- En GitHub Actions, los mismos valores viven como *secrets* del repositorio.
+- `.env`: lo genera `scripts/lib/generar-env.js` la primera vez que corre `start.sh`/`start.bat`/`contenedor.sh`, con valores aleatorios propios de esa instalación. Como cada instalación tiene su propia base, no hay ningún secreto que compartir entre personas o PCs.
+- En GitHub Actions, las pruebas generan secretos al azar en cada corrida (`jest.setup.js`) contra una base desechable, y el entorno de staging genera su propio `.env` igual que una instalación nueva: el repositorio no necesita *secrets* de la aplicación.
 
-Tampoco hay credenciales de la aplicación en el repositorio: `db/init.sql` no crea ningún administrador ni asigna PINs. El primer administrador se crea con `services/auth/src/scripts/crearAdmin.js`, que pide la contraseña por teclado (ver [instalación](instalacion-y-despliegue.md#el-archivo-env)).
+Tampoco hay credenciales de la aplicación en el repositorio: `db/init.sql` no crea ningún administrador ni asigna PINs. El primer administrador lo pide el script de arranque con `services/auth/src/scripts/crearAdmin.js`, que lee la contraseña por teclado sin mostrarla (ver [instalación](instalacion-y-despliegue.md#primer-administrador)).
 
 ## Flujo funcional (de punta a punta)
 
 ```
 0) [SETUP] db/init.sql deja un padrón y plantillas de demostración, sin credenciales
-   → el primer admin se crea con src/scripts/crearAdmin.js; los PINs, desde "Padrón"
+   → auth-service cifra ese padrón al arrancar; el primer admin lo pide el script
+     de arranque (src/scripts/crearAdmin.js); los PINs, desde "Padrón"
 
 1) Admin hace login       → POST /login/admin (Auth)         → JWT rol "admin", ~1h
    Votante hace login     → POST /login/voter (Auth)         → JWT rol "voter", ~10min
@@ -110,11 +109,11 @@ LiveMetric/
 ├── README.md                     # Presentación e inicio rápido
 ├── LICENSE                       # Licencia MIT
 ├── docker-compose.yml            # El stack completo (7 contenedores)
-├── .env.example / .env.gpg       # Plantilla de variables / .env del equipo cifrado
+├── .env.example                  # Plantilla del .env (los scripts lo generan solos)
 ├── .gitleaks.toml, .trivyignore  # Configuración de los escáneres
 ├── db/
-│   ├── init.sql                  # Esquema + datos de demostración
-│   └── migrations/               # Migraciones 002–004 (se aplican a mano, en orden)
+│   ├── init.sql                  # Esquema completo + datos de demostración (lo carga Postgres)
+│   └── migrations/               # 002–004, solo para bases creadas con un init.sql anterior
 ├── services/
 │   ├── frontend/                 # SPA React + nginx (proxy reverso)
 │   ├── auth/                     # A: login dual, padrón, usuarios, auditoría
@@ -130,10 +129,9 @@ LiveMetric/
 │   ├── contenedor.sh / contenedor.bat # Lo mismo, todo dentro de un contenedor global
 │   ├── pipeline-local.sh / .bat       # Solo el análisis de seguridad (antes de un push)
 │   ├── pipeline-status.sh             # Estado del último pipeline en GitHub
-│   ├── deploy.sh                      # Descifrar .env.gpg y levantar el stack
 │   ├── install-hooks.sh, git-hooks/   # Gitleaks antes de cada commit
 │   ├── setup-branch-protection.sh     # Protección de main vía gh CLI
-│   ├── lib/                           # Presentación y resúmenes compartidos por los scripts
+│   ├── lib/                           # Compartido: presentación, resúmenes, .env, base de pruebas
 │   └── ci/                            # Utilidades del pipeline (insignia de cobertura)
 ├── docs/                         # Esta documentación + modelo de amenazas
 └── .github/

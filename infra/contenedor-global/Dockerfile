@@ -4,7 +4,7 @@
 # el mismo analisis de seguridad (scripts/pipeline-local.sh) y el mismo
 # docker-compose.yml que usa scripts/start.sh: los 7 contenedores del stack
 # quedan ADENTRO de este, no en el host. En el host solo hace falta Docker:
-# nada de Node.js, gpg ni nada mas instalado.
+# nada de Node.js ni nada mas instalado.
 #
 # No se construye ni se corre a mano: lo hace scripts/contenedor.sh (o
 # scripts\contenedor.bat en Windows), que tambien explica el por que de
@@ -18,16 +18,10 @@ FROM docker:dind
 
 # Lo que pipeline-local.sh y scripts/lib necesitan en el "host" (que aca es
 # este contenedor): bash para los scripts, Node.js/npm para npm audit, las
-# pruebas y los resumenes, gpg para descifrar .env.gpg, y procps para
-# "pgrep -P" (cortar con Ctrl+C un paso en curso, ver scripts/lib/ui.sh).
-# git, docker compose y buildx ya vienen en la imagen base.
-RUN apk add --no-cache bash nodejs npm gnupg procps
-
-# gpg pide la passphrase de .env.gpg por la propia terminal ("loopback"),
-# en vez de abrir un pinentry aparte, que dentro de un contenedor no tiene
-# donde mostrarse.
-RUN mkdir -p -m 700 /root/.gnupg && \
-    echo 'pinentry-mode loopback' > /root/.gnupg/gpg.conf
+# pruebas, los resumenes y generar el .env, y procps para "pgrep -P"
+# (cortar con Ctrl+C un paso en curso, ver scripts/lib/ui.sh). git, docker
+# compose y buildx ya vienen en la imagen base.
+RUN apk add --no-cache bash nodejs npm procps
 
 WORKDIR /livemetric
 COPY . .

@@ -1,6 +1,7 @@
 // Pruebas de integración de scrutiny-service contra la app de Express en
-// memoria (Supertest, sin abrir puerto real) y la base real configurada por
-// entorno (Supabase). Todo dato que estas pruebas crean usa el prefijo
+// memoria (Supertest, sin abrir puerto real) y un PostgreSQL de verdad: el
+// desechable que levanta scripts/lib/jest-db-setup.js para esta corrida (o
+// el de DB_HOST, si viene definido). Todo dato que estas pruebas crean usa el prefijo
 // CITEST-SCRUTINY-<timestamp> para poder identificarlo después.
 //
 // OJO: la tabla scrutiny_ledger es APPEND-ONLY (trigger prevent_row_mutation

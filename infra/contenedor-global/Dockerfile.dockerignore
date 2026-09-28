@@ -2,9 +2,8 @@
 # del repo; BuildKit toma este archivo por estar al lado del Dockerfile).
 
 # Secretos: el .env real nunca queda dentro de una imagen (cualquiera con
-# la imagen podria leerlo). scripts/contenedor.sh lo monta en solo lectura
-# al arrancar, o start.sh lo descifra adentro desde .env.gpg (que si entra:
-# esta cifrado y ya vive en el repo).
+# la imagen podria leerlo). scripts/contenedor.sh lo genera en el host la
+# primera vez y lo monta en solo lectura al arrancar.
 .env
 *.env.local
 infra/terraform/*.tfstate

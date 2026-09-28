@@ -11,36 +11,37 @@ Hay cuatro formas de levantar LiveMetric. Todas usan el mismo `docker-compose.ym
 
 ## El archivo `.env`
 
-Todas las formas necesitan un `.env` en la raíz del repo, con las credenciales de la base y los secretos del sistema. Hay dos caminos:
+Todas las formas usan un `.env` en la raíz del repo con los secretos de la instalación: la contraseña de la base, la firma de los JWT, la sal del padrón, la clave con que se cifra el padrón y el token entre servicios. **No hay que escribirlo:** si no existe, `start.sh`, `start.bat` y `contenedor.sh` lo generan a partir de `.env.example`, con un valor aleatorio distinto para cada secreto (`scripts/lib/generar-env.js`). A mano:
 
-**A. Con el `.env.gpg` del equipo (lo habitual).** El repo trae el `.env` cifrado. Si no hay `.env`, `start.sh`, `start.bat` y `contenedor.sh` lo descifran solos y piden la passphrase, que se comparte por otro canal. A mano: `gpg --output .env --decrypt .env.gpg`.
+```bash
+node scripts/lib/generar-env.js
+```
 
-**B. Con tu propia base de Supabase.**
+- Cada instalación tiene su propio `.env` y su propia base: no se comparte con nadie ni se sube al repo (está en `.gitignore`).
+- Nunca pisa un valor existente. Si el `.env` ya existe pero le faltan variables nuevas de la plantilla, solo agrega esas.
+- **Cuídalo junto con la base.** El padrón se guarda cifrado con `VOTERS_ENCRYPTION_KEY`, y la base se inicializa con `POSTGRES_PASSWORD`: si borras o regeneras el `.env`, los datos existentes quedan ilegibles. En ese caso, empieza de cero borrando también el volumen de la base: `docker compose down -v`.
 
-1. `cp .env.example .env` y completa los valores. De Supabase usa el **Session Pooler** (Project Settings → Database → Connection Pooling), no la conexión directa: esa solo resuelve por IPv6 y no se alcanza desde la red de Docker.
-2. Genera un valor **distinto** para `JWT_SECRET`, `VOTER_ID_SALT` e `INTERNAL_SERVICE_TOKEN`:
+## La base de datos
 
-   | Sistema | Comando |
-   |---|---|
-   | Linux / macOS / Git Bash | `openssl rand -base64 48` |
-   | Windows PowerShell | `$b=New-Object byte[] 48; [System.Security.Cryptography.RNGCryptoServiceProvider]::new().GetBytes($b); [Convert]::ToBase64String($b)` |
-   | Con Node.js | `node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"` |
+PostgreSQL 16 corre en su propio contenedor (`postgres` en `docker-compose.yml`) y guarda los datos en el volumen `db-data`, que sobrevive a `docker compose down` y a los reinicios.
 
-   `VOTERS_ENCRYPTION_KEY` es una clave AES-256: tiene que ser de **exactamente 32 bytes**, así que genérala con `openssl rand -base64 32` (o `randomBytes(32)` en Node).
-3. En el SQL Editor de Supabase, ejecuta en orden `db/init.sql` y las migraciones de `db/migrations/` (002, 003, 004). No hay un ejecutor de migraciones: se corren a mano, y son seguras de repetir.
-4. Con el stack arriba, cifra el padrón de demostración (queda en texto plano hasta hacerlo una vez):
+- **Sin puerto en la PC:** está solo en la red interna `db-net`, sin salida a Internet, y la alcanzan únicamente los 5 servicios de backend. El frontend no está en esa red.
+- **Esquema:** la primera vez, con el volumen vacío, Postgres carga `db/init.sql`, que ya incluye todas las migraciones de `db/migrations/`. Esas migraciones solo hacen falta para una base creada con una versión anterior de `init.sql`.
+- **Padrón de demostración:** `init.sql` lo siembra en texto plano (no conoce la clave de cada instalación) y `auth-service` lo cifra solo al arrancar.
+- **Consola SQL**, para inspeccionar a mano: `docker compose exec postgres psql -U livemetric -d livemetric`.
 
-   ```bash
-   docker compose run --rm auth-service node src/scripts/backfillVoterEncryption.js
-   ```
-5. Crea el primer administrador. El repositorio no trae ninguno, ni ninguna credencial: el script pide la contraseña por teclado (dos veces, sin mostrarla, mínimo 10 caracteres) y deja el evento en la auditoría. Los siguientes se crean desde la pestaña **Usuarios**.
+## Primer administrador
 
-   ```bash
-   docker compose run --rm auth-service node src/scripts/crearAdmin.js <usuario>            # administrador
-   docker compose run --rm auth-service node src/scripts/crearAdmin.js <usuario> auditor    # solo lectura
-   ```
+El repositorio no trae ninguna cuenta ni ninguna credencial. Con una base nueva, `start.sh`, `start.bat` y `contenedor.sh`, al terminar de levantar el stack, piden el usuario y la contraseña del primer administrador (la contraseña, dos veces y sin mostrarla, mínimo 10 caracteres); el evento queda en la auditoría. Si ya hay alguno, no preguntan nada. Los siguientes se crean desde la pestaña **Usuarios**.
 
-   Con el contenedor global, primero entra con `./scripts/contenedor.sh shell` y corre ahí el mismo comando.
+Si lo saltaste, o levantaste el stack con `docker compose` directo:
+
+```bash
+docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay               # el primero
+docker compose exec auth-service node src/scripts/crearAdmin.js <usuario> auditor         # uno de solo lectura
+```
+
+Con el contenedor global, primero entra con `./scripts/contenedor.sh shell` y corre ahí el mismo comando.
 
 ## 1. `start.sh` / `start.bat` (recomendada)
 
@@ -49,10 +50,11 @@ Todas las formas necesitan un `.env` en la raíz del repo, con las credenciales 
 scripts\start.bat             # Windows (cmd.exe)
 ```
 
-1. **Requisitos**: instala lo que falte (Docker, gpg, Node.js) con el gestor de paquetes del sistema, o con `winget` en Windows.
-2. **`.env`**: lo usa si existe; si no, descifra `.env.gpg`.
+1. **Requisitos**: instala lo que falte (Docker, Node.js) con el gestor de paquetes del sistema, o con `winget` en Windows.
+2. **`.env`**: lo usa si existe; si no, [lo genera](#el-archivo-env).
 3. **Análisis de seguridad**: los mismos controles que el pipeline de GitHub Actions (Gitleaks, Semgrep, npm audit, Trivy, las 6 imágenes reales y las pruebas), cada uno con su resultado ya interpretado y un cuadro final por servicio. Si algo falla (✘), **se detiene ahí** y no levanta nada.
 4. **Levantar**: `docker compose up --build` y espera, sin límite de tiempo, a que los 7 contenedores estén sanos (*healthy*), mostrando el estado de cada uno en vivo.
+5. **Primer administrador**: si la base es nueva, [lo pide](#primer-administrador).
 
 Al final muestra la URL en esta PC y la URL para el resto de la red local. Con `--detalle` se ve además la salida completa de cada herramienta; sin eso queda en un log por paso, cuya carpeta se indica al empezar.
 
@@ -70,23 +72,25 @@ Al final muestra la URL en esta PC y la URL para el resto de la red local. Con `
 ```
 
 - El frontend queda en `http://localhost:3000`. Si ese puerto está ocupado (por ejemplo, por el stack levantado con `start.sh`), el script lo avisa; se puede usar otro con `LIVEMETRIC_PUERTO=3100 ./scripts/contenedor.sh`.
-- El `.env` de la carpeta se monta en solo lectura y nunca queda dentro de la imagen. Si no existe, se descifra adentro desde `.env.gpg` y no queda en la carpeta.
+- El `.env` de la carpeta se monta en solo lectura y nunca queda dentro de la imagen. Si no existe, se genera primero en la carpeta (con el Node.js de la imagen, sin instalar nada en la PC).
+- La base de datos vive dentro del contenedor global, en el mismo volumen `livemetric-global-docker`.
 - Las imágenes construidas adentro se guardan en el volumen `livemetric-global-docker`: desde la segunda vez arranca mucho más rápido.
 - **La contra:** el contenedor global necesita `--privileged` (lo exige un motor de Docker dentro de un contenedor), que le da acceso amplio al kernel de la PC. Es un modo para no instalar nada, no un aislamiento más fuerte que `start.sh`.
 
 ## 3. `docker compose` directo
 
-Sin análisis de seguridad, para quien ya sabe lo que hace:
+Sin análisis de seguridad, para quien ya sabe lo que hace. Necesita el `.env` (`node scripts/lib/generar-env.js`) y, con una base nueva, [crear el primer administrador](#primer-administrador):
 
 ```bash
 docker compose up -d --build
 docker compose logs -f              # logs en vivo
-docker compose down                 # apagar
+docker compose down                 # apagar (los datos quedan en el volumen db-data)
+docker compose down -v              # apagar y BORRAR la base
 ```
 
 ## 4. Terraform (infraestructura como código)
 
-Levanta el mismo stack con el provider `kreuzwerker/docker`, pero con su **propio PostgreSQL local** en una red interna, sin tocar Supabase.
+Levanta el mismo stack con el provider `kreuzwerker/docker`, también con su **propio PostgreSQL** en una red interna, pero con sus propias variables (`terraform.tfvars`) en vez del `.env`.
 
 ```bash
 cd infra/terraform
@@ -108,7 +112,7 @@ El frontend se publica en el puerto 3000 de todas las interfaces. `start.sh` y `
 
 El requisito común es [Docker Desktop](https://www.docker.com/products/docker-desktop/): los contenedores son Linux y corren igual en cualquier sistema.
 
-- **Opción A — CMD, sin WSL2:** `scripts\start.bat` y `scripts\pipeline-local.bat` son el equivalente nativo de los `.sh`. Hace falta Docker Desktop, Node.js en el `PATH` (npm audit y las pruebas corren en Windows) y [Gpg4win](https://gpg4win.org/) si vas a descifrar `.env.gpg`; `start.bat` intenta instalar lo que falte con `winget`.
+- **Opción A — CMD, sin WSL2:** `scripts\start.bat` y `scripts\pipeline-local.bat` son el equivalente nativo de los `.sh`. Hace falta Docker Desktop y Node.js en el `PATH` (npm audit, las pruebas y la generación del `.env` corren en Windows); `start.bat` intenta instalar lo que falte con `winget`.
 - **Opción B — WSL2:** con `wsl --install` y la integración de Docker Desktop con la distribución (Settings → Resources → WSL Integration), los `.sh` corren sin cambios. Clona el repo dentro del sistema de archivos de Linux (`~`), no en `/mnt/c/...`, que es mucho más lento.
 
 ## Datos de demostración
@@ -117,9 +121,9 @@ El requisito común es [Docker Desktop](https://www.docker.com/products/docker-d
 
 | Elemento | Valor |
 |---|---|
-| Padrón de demostración | cédulas `1000000001` a `1000000005`, en "Puesto Central" (Mesa 1 y 2) y "Puesto Norte" (Mesa 1). Entran **sin PIN**: para votar con ellas, genéralo en **Padrón** ("Regenerar PIN"); se muestra una sola vez. |
+| Padrón de demostración | cédulas `1000000001` a `1000000005`, en "Puesto Central" (Mesa 1 y 2) y "Puesto Norte" (Mesa 1), cifradas por `auth-service` al arrancar. Entran **sin PIN**: para votar con ellas, genéralo en **Padrón** ("Regenerar PIN"); se muestra una sola vez. |
 | Plantillas | "Elección de ejemplo" (3 opciones) y "Elección Presidencial de Ejemplo" (3 candidatos numerados) |
-| Administrador | ninguno: el primero se crea con `crearAdmin.js` (ver [el archivo `.env`](#el-archivo-env), paso 5) |
+| Administrador | ninguno: el primero lo pide el script de arranque (ver [Primer administrador](#primer-administrador)) |
 
 ## Recorrido por la interfaz
 

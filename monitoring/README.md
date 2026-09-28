@@ -45,12 +45,10 @@ monitoreo no debe ser alcanzable desde la red.
 
 ### 1. Contraseña de Grafana
 
-Agreguen al `.env` de la raíz del repositorio:
-
-```bash
-GRAFANA_ADMIN_USER=admin
-GRAFANA_ADMIN_PASSWORD=«una contraseña fuerte»
-```
+Está en el `.env` de la raíz del repositorio (`GRAFANA_ADMIN_USER` y
+`GRAFANA_ADMIN_PASSWORD`), que los scripts de arranque generan con una contraseña
+aleatoria. En un `.env` de antes, `node scripts/lib/generar-env.js` agrega esas dos
+variables sin tocar las demás.
 
 El compose **falla a propósito** si `GRAFANA_ADMIN_PASSWORD` no está definida. Es
 preferible a arrancar con la contraseña por defecto de Grafana, que es pública y
@@ -64,8 +62,11 @@ autenticación.
 docker compose up -d
 
 # Después el monitoreo
-docker compose -f monitoring/docker-compose.monitoring.yml up -d
+docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml up -d
 ```
+
+`--env-file .env` hace falta: con `-f` apuntando a `monitoring/`, Compose buscaría el
+`.env` en esa carpeta y no en la raíz.
 
 El orden importa: el stack de monitoreo se conecta a la red `livemetric_app-net` como red
 externa. Si la aplicación no está levantada, esa red no existe y el arranque falla.
@@ -80,7 +81,7 @@ externa. Si la aplicación no está levantada, esa red no existe y el arranque f
 ### Detener
 
 ```bash
-docker compose -f monitoring/docker-compose.monitoring.yml down
+docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml down
 ```
 
 Con `-v` si además quieren borrar las métricas y logs históricos.

@@ -1,6 +1,7 @@
 // Prueba unitaria de la lógica del tick del scheduler-worker
-// (runSchedulerTick), contra la base real (Supabase) pero con el fetch al
-// scrutiny-service MOCKEADO (nunca se llama a un scrutiny-service real).
+// (runSchedulerTick), contra un PostgreSQL de verdad (el desechable de
+// scripts/lib/jest-db-setup.js) pero con el fetch al scrutiny-service
+// MOCKEADO (nunca se llama a un scrutiny-service real).
 //
 // Todo dato que crea esta prueba usa el prefijo CITEST-SCHEDULER-<timestamp>
 // en el título. A diferencia de scrutiny, estas elecciones SÍ se pueden

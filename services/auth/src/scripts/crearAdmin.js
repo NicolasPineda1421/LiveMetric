@@ -5,6 +5,10 @@
 //
 // Uso, con el stack levantado y desde la raíz del repo:
 //   docker compose run --rm auth-service node src/scripts/crearAdmin.js <usuario> [admin|auditor]
+//   docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay
+// Con --si-no-hay no hace nada si ya existe algún administrador, y si no,
+// pide también el usuario: es lo que ofrecen start.sh, start.bat y
+// contenedor.sh al terminar de levantar una instalación nueva.
 //
 // La contraseña se pide por teclado, sin mostrarla, y dos veces: nunca pasa
 // por la línea de comandos, el historial de la shell ni ningún archivo.
@@ -32,9 +36,9 @@ function createHiddenPrompter() {
   rl.on('line', (line) => (waiting.length ? waiting.shift()(line) : received.push(line)));
   rl.on('close', () => waiting.splice(0).forEach((deliver) => deliver(null)));
   return {
-    ask(question) {
+    ask(question, { hidden = true } = {}) {
       process.stdout.write(question);
-      muted = true;
+      muted = hidden;
       return new Promise((resolve) => {
         const deliver = (line) => {
           muted = false;
@@ -64,13 +68,27 @@ function fail(message) {
 }
 
 (async () => {
-  const [username = '', role = 'admin'] = process.argv.slice(2);
+  const args = process.argv.slice(2);
+  const onlyIfNone = args[0] === '--si-no-hay';
+  const prompter = createHiddenPrompter();
+
+  let [username = '', role = 'admin'] = onlyIfNone ? [] : args;
+  if (onlyIfNone) {
+    const { rows } = await pool.query("SELECT COUNT(*)::int AS n FROM admins WHERE role = 'admin'");
+    if (rows[0].n > 0) {
+      console.log(`Ya hay ${rows[0].n} administrador(es): no hace falta crear uno.`);
+      prompter.close();
+      await pool.end();
+      return;
+    }
+    console.log('Esta instalación todavía no tiene ningún administrador: creemos el primero.');
+    username = (await prompter.ask('Usuario (3 a 50 caracteres): ', { hidden: false })) || '';
+  }
   if (username.trim().length < 3 || username.trim().length > 50) {
     fail('indica un nombre de usuario de 3 a 50 caracteres: crearAdmin.js <usuario> [admin|auditor]');
   }
   if (!['admin', 'auditor'].includes(role)) fail('el rol debe ser "admin" o "auditor".');
 
-  const prompter = createHiddenPrompter();
   const password = await prompter.ask(`Contraseña para "${username.trim()}" (mínimo 10 caracteres): `);
   if (typeof password !== 'string') fail('no se recibió ninguna contraseña.');
   if (password.length < 10 || password.length > 128) fail('la contraseña debe tener entre 10 y 128 caracteres.');

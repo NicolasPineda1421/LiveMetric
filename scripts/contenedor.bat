@@ -18,7 +18,7 @@ REM   scripts\contenedor.bat estado                  estado de cada contenedor d
 REM   scripts\contenedor.bat logs [servicio]         logs en vivo del stack de adentro
 REM   scripts\contenedor.bat shell                   terminal dentro del contenedor global
 REM   scripts\contenedor.bat detener                 apaga el contenedor global y todo lo de adentro
-REM   scripts\contenedor.bat borrar                  ademas borra su imagen y el volumen de cache
+REM   scripts\contenedor.bat borrar                  ademas borra su imagen y su volumen (con la BASE DE DATOS)
 REM
 REM   set LIVEMETRIC_PUERTO=3100 y despues scripts\contenedor.bat   usa otro puerto de la PC
 
@@ -110,11 +110,17 @@ if errorlevel 1 (
 echo.
 call :ok "Imagen %IMAGEN% construida con el codigo actual, sin el .env"
 
-REM El .env de esta carpeta se monta en solo lectura (nunca queda dentro de
-REM la imagen); si no existe, se descifra adentro desde .env.gpg.
-set "ARGS_ENV="
-if exist .env set ARGS_ENV=-v "%cd%\.env:/livemetric/.env:ro"
-docker run -d --name %NOMBRE% --privileged --restart unless-stopped -p %PUERTO%:3000 -v %VOLUMEN%:/var/lib/docker %ARGS_ENV% %IMAGEN% >nul
+REM El .env tiene que quedar en ESTA carpeta y no solo dentro del
+REM contenedor: la base vive en el volumen y sobrevive a que se recree el
+REM contenedor, y con claves nuevas quedaria con otra contrasena y el padron
+REM ilegible. Se genera (o se completa) con la misma imagen: en la PC no hace
+REM falta Node.js. Despues se monta adentro en solo lectura.
+docker run --rm -v "%cd%:/destino" --entrypoint node %IMAGEN% scripts/lib/generar-env.js /destino/.env
+if errorlevel 1 (
+  call :falla "No se pudo preparar el .env."
+  goto :fin_error
+)
+docker run -d --name %NOMBRE% --privileged --restart unless-stopped -p %PUERTO%:3000 -v %VOLUMEN%:/var/lib/docker -v "%cd%\.env:/livemetric/.env:ro" %IMAGEN% >nul
 if errorlevel 1 (
   call :falla "No se pudo arrancar el contenedor global."
   goto :fin_error
@@ -152,26 +158,6 @@ if defined STACK_ANTERIOR (
   echo.
   call :ok "Stack anterior bajado: solo se levanta de nuevo si el analisis pasa"
 )
-
-if exist .env (
-  call :ok ".env de esta carpeta, montado adentro en solo lectura"
-  goto :env_listo
-)
-if not exist .env.gpg (
-  call :falla "No hay .env ni .env.gpg en esta carpeta."
-  call :info "Copia .env.example a .env y completa los valores (ver README, Inicio rapido),"
-  call :info "o pedi el .env.gpg + la passphrase a quien te comparta el proyecto."
-  goto :fin_error
-)
-call :info "No hay .env, pero si .env.gpg: descifrandolo adentro (te va a pedir la passphrase)..."
-docker exec -it %NOMBRE% gpg --quiet --output .env --decrypt .env.gpg
-if errorlevel 1 (
-  call :falla "No se pudo descifrar .env.gpg (passphrase incorrecta, o se cancelo)."
-  call :info "Volve a correr este script para intentarlo de nuevo."
-  goto :fin_error
-)
-call :ok ".env descifrado adentro del contenedor global, no queda en esta carpeta"
-:env_listo
 
 REM --- 3. Analisis de seguridad (el mismo que corre en CI) ------------------
 REM LIVEMETRIC_DESDE_START: que pipeline-local.sh no repita su encabezado,
@@ -215,6 +201,12 @@ if errorlevel 1 (
   echo %ROJO%%RAYA%%RESET%
   goto :fin_error
 )
+
+REM Primer administrador: en una base nueva no hay ninguno (el repositorio
+REM no trae credenciales), asi que se ofrece crearlo aca mismo. Si ya hay
+REM alguno, crearAdmin.js --si-no-hay no hace nada.
+echo.
+docker exec -it %NOMBRE% docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay
 
 REM URL para otras PCs de la red: la IP de ESTA PC (la de la ruta hacia
 REM afuera). Se calcula aca porque adentro del contenedor solo se ve la suya.
@@ -286,10 +278,20 @@ REM vuelve solo la proxima vez que arranque un contenedor global.
 docker exec %NOMBRE% docker compose down --remove-orphans >nul 2>nul
 docker rm -f %NOMBRE% >nul
 echo.
-call :ok "Contenedor global apagado. La cache de imagenes queda en el volumen %VOLUMEN%."
+call :ok "Contenedor global apagado. La base de datos y la cache de imagenes quedan en el volumen %VOLUMEN%."
 exit /b 0
 
 :borrar
+REM El volumen guarda la base de datos del stack de adentro: pedir confirmacion.
+call :aviso "Esto borra tambien la base de datos de esta instalacion (elecciones, padron, actas)."
+set "RESPUESTA="
+set /p "RESPUESTA=     Seguro? [s/N] "
+if /i "%RESPUESTA%"=="s" goto :borrar_si
+if /i "%RESPUESTA%"=="si" goto :borrar_si
+call :info "No se borro nada."
+exit /b 0
+
+:borrar_si
 call :detener
 if errorlevel 1 exit /b 1
 docker volume rm %VOLUMEN% >nul 2>nul && call :ok "Volumen %VOLUMEN% borrado"

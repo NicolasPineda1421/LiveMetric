@@ -11,17 +11,18 @@
 # Como funciona (ver tambien infra/contenedor-global/Dockerfile):
 #   - La imagen "livemetric-global" lleva una copia del codigo actual (sin
 #     el .env real ni node_modules) y las herramientas que el analisis usa
-#     (Node.js, gpg, etc.), que asi no hace falta instalar en el host.
+#     (Node.js, etc.), que asi no hace falta instalar en el host.
 #   - El contenedor corre con --privileged: es lo que exige un motor de
 #     Docker dentro de un contenedor (redes, capas, cgroups). Es la contra
 #     de este modo: ese contenedor tiene acceso amplio al kernel del host.
-#   - Las imagenes que se construyen adentro quedan en el volumen
-#     "livemetric-global-docker", asi la proxima vez no se rehace todo.
+#   - Las imagenes que se construyen adentro y la base de datos del stack
+#     quedan en el volumen "livemetric-global-docker": la proxima vez no se
+#     rehace todo, y los datos sobreviven a "detener".
 #   - El frontend de adentro se publica en el puerto LIVEMETRIC_PUERTO del
 #     host (3000 por defecto), abierto a la red local igual que con start.sh.
-#   - El .env de esta carpeta, si existe, se monta en solo lectura (nunca
-#     queda dentro de la imagen); si no, se descifra adentro desde .env.gpg
-#     (te pide la passphrase).
+#   - El .env queda en esta carpeta (se genera con secretos aleatorios la
+#     primera vez) y se monta en solo lectura: nunca entra en la imagen, y
+#     sobrevive a que se recree el contenedor global, igual que la base.
 #   - --restart unless-stopped: si la PC se reinicia, el contenedor global
 #     vuelve solo, y con el los microservicios.
 #
@@ -31,7 +32,7 @@
 #   ./scripts/contenedor.sh logs [servicio]         logs en vivo del stack de adentro
 #   ./scripts/contenedor.sh shell                   terminal dentro del contenedor global
 #   ./scripts/contenedor.sh detener                 apaga el contenedor global y todo lo de adentro
-#   ./scripts/contenedor.sh borrar                  ademas borra su imagen y el volumen de cache
+#   ./scripts/contenedor.sh borrar                  ademas borra su imagen y su volumen (con la BASE DE DATOS)
 #
 #   LIVEMETRIC_PUERTO=3100 ./scripts/contenedor.sh   usa otro puerto del host
 
@@ -152,10 +153,21 @@ iniciar() {
   fi
   ok "Imagen $IMAGEN construida con el código actual (sin el .env)"
 
-  local args_env=()
-  [ -f .env ] && args_env=(-v "$PWD/.env:/livemetric/.env:ro")
+  # El .env tiene que quedar en ESTA carpeta y no solo dentro del contenedor:
+  # la base vive en el volumen y sobrevive a que se recree el contenedor, y
+  # con claves nuevas quedaría con otra contraseña y el padrón ilegible. Se
+  # genera con la misma imagen (en el host no hace falta Node.js), con el
+  # usuario de esta PC como dueño del archivo.
+  local resultado_env
+  if ! resultado_env="$(docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/destino" \
+      --entrypoint node "$IMAGEN" scripts/lib/generar-env.js /destino/.env)"; then
+    falla "No se pudo preparar el .env."
+    exit 1
+  fi
+  ok "$resultado_env"
+
   if ! docker run -d --name "$NOMBRE" --privileged --restart unless-stopped \
-      -p "$PUERTO:3000" -v "$VOLUMEN:/var/lib/docker" "${args_env[@]}" "$IMAGEN" > /dev/null; then
+      -p "$PUERTO:3000" -v "$VOLUMEN:/var/lib/docker" -v "$PWD/.env:/livemetric/.env:ro" "$IMAGEN" > /dev/null; then
     falla "No se pudo arrancar el contenedor global."
     exit 1
   fi
@@ -176,22 +188,6 @@ iniciar() {
     ok "Stack anterior bajado: solo se levanta de nuevo si el análisis pasa"
   fi
 
-  if [ -f .env ]; then
-    ok ".env de esta carpeta, montado adentro en solo lectura"
-  elif [ -f .env.gpg ]; then
-    info "No hay .env, pero sí .env.gpg: descifrándolo adentro (te va a pedir la passphrase)..."
-    if ! adentro gpg --quiet --output .env --decrypt .env.gpg; then
-      falla "No se pudo descifrar .env.gpg (¿passphrase incorrecta, o se canceló?)."
-      info "Volvé a correr este script para intentarlo de nuevo."
-      exit 1
-    fi
-    ok ".env descifrado adentro del contenedor global (no queda en esta carpeta)"
-  else
-    falla "No hay .env ni .env.gpg en $(pwd)."
-    info "Copiá .env.example a .env y completá los valores (ver README, «Inicio rápido»),"
-    info "o pedí el .env.gpg + la passphrase a quien te comparta el proyecto."
-    exit 1
-  fi
 
   # 3. Analisis de seguridad (el mismo que corre en CI) ------------------------
   fase 3 4 "Análisis de seguridad (adentro del contenedor global)"
@@ -232,6 +228,18 @@ iniciar() {
     exit 1
   fi
 
+  # Primer administrador: en una base nueva no hay ninguno (el repositorio no
+  # trae credenciales), así que se ofrece crearlo acá mismo; si ya hay
+  # alguno, crearAdmin.js --si-no-hay no hace nada. Necesita una terminal
+  # para pedir la contraseña.
+  echo ""
+  if [ -t 0 ] && [ -t 1 ]; then
+    docker exec -it "$NOMBRE" docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay || true
+  else
+    info "Si todavía no hay ningún administrador, créalo desde ./scripts/contenedor.sh shell con:"
+    info "  docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay"
+  fi
+
   local url_lan
   url_lan="$(url_red)"
   banner "$C_VERDE" "✔ LiveMetric está arriba (dentro del contenedor global)" \
@@ -266,10 +274,20 @@ detener() {
       docker exec "$NOMBRE" docker compose down --remove-orphans
   fi
   correr /dev/null "Apagando el contenedor global" docker rm -f "$NOMBRE"
-  ok "Contenedor global apagado. La caché de imágenes queda en el volumen $VOLUMEN."
+  ok "Contenedor global apagado. La base de datos y la caché de imágenes quedan en el volumen $VOLUMEN."
 }
 
 borrar() {
+  # El volumen guarda la base de datos del stack de adentro: pedir
+  # confirmación si hay alguien para darla.
+  if [ -t 0 ]; then
+    aviso "Esto borra también la base de datos de esta instalación (elecciones, padrón, actas)."
+    read -r -p "     ¿Seguro? [s/N] " respuesta
+    case "$respuesta" in
+      [sS] | [sS][iIíÍ]) ;;
+      *) info "No se borró nada."; return 0 ;;
+    esac
+  fi
   detener
   docker volume rm "$VOLUMEN" &> /dev/null && ok "Volumen $VOLUMEN borrado"
   docker image rm "$IMAGEN" &> /dev/null && ok "Imagen $IMAGEN borrada"
