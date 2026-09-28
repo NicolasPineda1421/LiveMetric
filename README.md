@@ -3,6 +3,7 @@
 [![Pipeline DevSecOps](https://github.com/NicolasPineda1421/LiveMetric/actions/workflows/devsecops.yml/badge.svg?branch=main)](https://github.com/NicolasPineda1421/LiveMetric/actions/workflows/devsecops.yml)
 [![Cobertura de pruebas](https://img.shields.io/endpoint?url=https%3A%2F%2Fnicolaspineda1421.github.io%2FLiveMetric%2Fcoverage.json)](https://nicolaspineda1421.github.io/LiveMetric/)
 [![Versión](https://img.shields.io/github/v/release/NicolasPineda1421/LiveMetric?label=versi%C3%B3n)](https://github.com/NicolasPineda1421/LiveMetric/releases)
+[![Docker Hub](https://img.shields.io/docker/v/nicolaspineda1421/livemetric-auth?sort=semver&label=docker%20hub)](https://hub.docker.com/u/nicolaspineda1421)
 [![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-blue)](LICENSE)
 
 **Sistema de elecciones y votación en tiempo real**, construido con microservicios y un ciclo DevSecOps completo.
@@ -27,7 +28,8 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 | Backend | Node.js 20, Express, node-cron (4 microservicios y un worker) |
 | Base de datos | PostgreSQL gestionado en Supabase (conexión TLS verificada) |
 | Seguridad en la aplicación | JWT, bcrypt, AES-256-GCM (padrón cifrado), cadena de hashes SHA-256, helmet, rate limiting |
-| Contenedores e infraestructura | Docker, Docker Compose, Terraform (provider `kreuzwerker/docker`), Docker-in-Docker |
+| Contenedores e infraestructura | Docker, Docker Compose, Docker Hub, Terraform (provider `kreuzwerker/docker`), Docker-in-Docker |
+| Orquestación y observabilidad | Docker Swarm, Prometheus, Grafana, Loki + Promtail, Falco |
 | CI/CD y seguridad | GitHub Actions, Gitleaks, Semgrep, npm audit, Trivy, Checkov, OWASP ZAP |
 | Pruebas | Jest, Supertest |
 | Modelado de amenazas | OWASP Threat Dragon, STRIDE |
@@ -61,6 +63,25 @@ La primera vez tarda varios minutos (construye y analiza las 6 imágenes). Al te
 ```
 
 **3. Primer ingreso.** Entra con tu cuenta de administrador; el repositorio no trae ninguna. Si la base es nueva, crea la primera con `docker compose run --rm auth-service node src/scripts/crearAdmin.js <usuario>`, que pide la contraseña sin mostrarla; las demás se crean desde **Usuarios**. Hay un padrón y plantillas de demostración para probar el ciclo completo (los votantes necesitan un PIN que se genera en **Padrón**) (ver el [recorrido por la interfaz](docs/instalacion-y-despliegue.md#recorrido-por-la-interfaz)).
+
+## Imágenes en Docker Hub
+
+Las 6 imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspineda1421) con cada versión de git (`vX.Y.Z`), etiquetadas con la versión exacta (`1.1.0`), la línea menor (`1.1`) y `latest`. Antes de subirse, cada una se escanea con Trivy: si tiene CVE críticas o altas, no se publica (ver [`release.yml`](.github/workflows/release.yml)). Son las que usa el [despliegue con Docker Swarm](orquestacion/README.md).
+
+| Servicio | Imagen |
+|---|---|
+| Frontend | [`nicolaspineda1421/livemetric-frontend`](https://hub.docker.com/r/nicolaspineda1421/livemetric-frontend) |
+| Auth | [`nicolaspineda1421/livemetric-auth`](https://hub.docker.com/r/nicolaspineda1421/livemetric-auth) |
+| Voting | [`nicolaspineda1421/livemetric-voting`](https://hub.docker.com/r/nicolaspineda1421/livemetric-voting) |
+| Analytics | [`nicolaspineda1421/livemetric-analytics`](https://hub.docker.com/r/nicolaspineda1421/livemetric-analytics) |
+| Scrutiny | [`nicolaspineda1421/livemetric-scrutiny`](https://hub.docker.com/r/nicolaspineda1421/livemetric-scrutiny) |
+| Scheduler (worker) | [`nicolaspineda1421/livemetric-scheduler`](https://hub.docker.com/r/nicolaspineda1421/livemetric-scheduler) |
+
+```bash
+docker pull nicolaspineda1421/livemetric-auth:1.1.0
+```
+
+Para publicar una versión nueva basta con crear el tag: `git tag -a v1.2.0 -m "..." && git push origin v1.2.0`.
 
 ## Documentación
 
