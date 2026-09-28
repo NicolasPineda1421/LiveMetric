@@ -11,6 +11,7 @@
 // Misma política que POST /admin/users: usuario de 3 a 50 caracteres,
 // contraseña de 10 a 128, bcrypt con costo 12, y queda en la auditoría.
 require('dotenv').config({ path: require('path').resolve(__dirname, '..', '..', '..', '..', '.env') });
+const crypto = require('crypto');
 const readline = require('readline');
 const bcrypt = require('bcryptjs');
 const pool = require('../db');
@@ -48,6 +49,15 @@ function createHiddenPrompter() {
   };
 }
 
+// Compara en tiempo constante. Aquí nadie puede medir tiempos (es la misma
+// persona escribiendo dos veces en su terminal), pero es la forma correcta
+// de comparar secretos y no cuesta nada.
+function sameSecret(a, b) {
+  const x = Buffer.from(String(a));
+  const y = Buffer.from(String(b));
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+}
+
 function fail(message) {
   console.error(`Error: ${message}`);
   process.exit(1);
@@ -62,9 +72,9 @@ function fail(message) {
 
   const prompter = createHiddenPrompter();
   const password = await prompter.ask(`Contraseña para "${username.trim()}" (mínimo 10 caracteres): `);
-  if (password === null) fail('no se recibió ninguna contraseña.');
+  if (typeof password !== 'string') fail('no se recibió ninguna contraseña.');
   if (password.length < 10 || password.length > 128) fail('la contraseña debe tener entre 10 y 128 caracteres.');
-  if ((await prompter.ask('Repítela: ')) !== password) fail('las contraseñas no coinciden.');
+  if (!sameSecret(await prompter.ask('Repítela: '), password)) fail('las contraseñas no coinciden.');
   prompter.close();
 
   try {

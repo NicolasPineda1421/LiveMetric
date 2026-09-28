@@ -67,9 +67,16 @@ jobs:
     steps:
       - name: Determinar y validar la version
         id: resolve
+        # La version escrita a mano en workflow_dispatch entra por variable de
+        # entorno y no con ${{ }} dentro del script: interpolada ahi, un valor
+        # como 'v1.0.0"; <comando>; "' se ejecutaria en el runner ANTES de
+        # llegar a la validacion de abajo (inyeccion de comandos).
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.version }}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="$INPUT_VERSION"
           else
             VERSION="${GITHUB_REF_NAME}"
           fi
