@@ -5,6 +5,9 @@
 # "exec ...: no such file or directory". Se fuerza LF sin importar el SO
 # donde se clone o el core.autocrlf de quien clona.
 *.sh              text eol=lf
+# Plantilla del .env: la lee scripts/lib/generar-env.js, también dentro del
+# contenedor global (que copia la carpeta tal como la bajó Windows).
+.env.example      text eol=lf
 scripts/git-hooks/* text eol=lf
 
 # Los scripts .bat/.cmd son para cmd.exe de Windows: al reves, se fuerza
