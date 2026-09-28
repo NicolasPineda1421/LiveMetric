@@ -43,6 +43,7 @@ Estilo arquitectónico resumido:
 |---|---|---|
 | **Append-only ledger** (libro contable inmutable) | `scrutiny_ledger`, `audit_log` (trigger de PostgreSQL que rechaza `UPDATE`/`DELETE`) | Un acta certificada o un evento de auditoría no debe poder reescribirse ni siquiera con acceso directo a la base de datos |
 | **Hash chain** (cadena de hashes, patrón simplificado de blockchain) | Certificación en `scrutiny-service`: `record_hash = SHA256(previous_hash + resultados)` | Permite detectar si un acta antigua fue alterada: la alteración rompe visiblemente la cadena hacia adelante |
+| **Firma digital** (Ed25519) | `scrutiny-service` firma el `record_hash` de cada acta con su clave privada; `analytics-service` la verifica con la pública | La cadena de hashes no usa secretos: quien pudiera escribir en la base podría rehacerla. La firma prueba además **quién** emitió el acta, y alimenta el indicador de veracidad |
 | **Snapshot / copia en el momento de creación** | `election_options` copia `label`/`candidate_number`/`logo` desde `template_options` al instanciar la elección | Si la plantilla se edita después, las elecciones ya creadas no cambian retroactivamente |
 | **Defensa en profundidad** | Anti-doble-voto: validación de tipos + transacción + `UNIQUE(election_id, voter_id_hash)` en BD | Ninguna capa individual es el único punto de falla |
 | **Identidad pseudonimizada** | `voter_id_hash = SHA256(cedula + salt privado de Auth)` | Ningún otro servicio ve la cédula en texto plano; el salt nunca sale de Auth |
@@ -357,6 +358,7 @@ flowchart TB
 | ADR-006 | El proceso maestro de nginx (frontend) corre como `root` | Forzar `USER` no-root en toda la imagen (como en los demás servicios) | Se intentó primero forzar no-root y rompió dos veces (permisos de escritura, apertura de puerto 80); se revirtió al modelo estándar de nginx, donde los *workers* que procesan tráfico externo sí corren sin privilegios |
 | ADR-007 | Terminología del dominio: "elección", nunca "encuesta" | Mantener "poll/encuesta" como en la primera iteración del proyecto | El valor del sistema es la integridad electoral, no la recolección de opiniones; el lenguaje del código y la UI debe reflejar ese dominio para evitar decisiones de diseño "de encuesta" (ej. permitir cambiar el voto) que serían incorrectas en un contexto electoral |
 | ADR-008 | El Acta de Escrutinio se genera como PDF real (`pdfkit`) | Mostrar solo un JSON/tabla en el panel de administración | El escrutinio de una elección real termina en un documento firmable; un JSON en pantalla no cumple esa función simbólica ni práctica (no se puede archivar, imprimir ni entregar) |
+| ADR-009 | Cada acta se firma con Ed25519, además de encadenarse por hash | Solo la cadena de hashes (como hasta la v1.2.0) | La cadena detecta cambios sueltos, pero no a quien reescribe el acta y recalcula todos los hashes; la firma solo la puede producir quien tiene la clave privada (solo Scrutiny). Ed25519 viene en el módulo `crypto` de Node, sin dependencias nuevas, con claves y firmas cortas (32 y 64 bytes) |
 
 ---
 
@@ -429,6 +431,8 @@ erDiagram
         jsonb results
         string previous_hash
         string record_hash
+        string signature
+        string signing_key_id
     }
     AUDIT_LOG {
         bigint id PK

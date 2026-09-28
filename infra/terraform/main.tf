@@ -82,6 +82,20 @@ variable "internal_service_token" {
   # Nunca debe salir de la red interna "app_net".
 }
 
+variable "acta_signing_key" {
+  type      = string
+  sensitive = true
+  # Clave PRIVADA Ed25519 (32 bytes en base64) con la que scrutiny-service
+  # firma cada acta. Solo la recibe ese servicio. Se genera en pareja con
+  # acta_public_key: node scripts/lib/generar-env.js (ver .env.example).
+}
+
+variable "acta_public_key" {
+  type = string
+  # Clave publica que corresponde a acta_signing_key: con ella
+  # analytics-service verifica la firma de las actas.
+}
+
 variable "scheduler_cron" {
   type    = string
   default = "* * * * *"
@@ -262,6 +276,7 @@ resource "docker_container" "analytics" {
     "PORT=3003",
     "JWT_SECRET=${var.jwt_secret}",
     "VOTERS_ENCRYPTION_KEY=${var.voters_encryption_key}",
+    "ACTA_PUBLIC_KEY=${var.acta_public_key}",
     "FRONTEND_ORIGIN=${var.frontend_origin}",
     "DB_HOST=livemetric-postgres",
     "DB_PORT=5432",
@@ -306,6 +321,8 @@ resource "docker_container" "scrutiny" {
     "PORT=3004",
     "JWT_SECRET=${var.jwt_secret}",
     "INTERNAL_SERVICE_TOKEN=${var.internal_service_token}",
+    "ACTA_SIGNING_KEY=${var.acta_signing_key}",
+    "ACTA_PUBLIC_KEY=${var.acta_public_key}",
     "FRONTEND_ORIGIN=${var.frontend_origin}",
     "DB_HOST=livemetric-postgres",
     "DB_PORT=5432",

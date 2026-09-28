@@ -9,5 +9,11 @@ jwt_expires_in    = "1h"
 voter_jwt_expires_in = "10m"
 voter_id_salt     = "CAMBIA_ESTE_VALOR_LOCALMENTE"
 internal_service_token = "CAMBIA_ESTE_VALOR_LOCALMENTE"
+# Clave AES-256 del padron: exactamente 32 bytes en base64 (openssl rand -base64 32).
+voters_encryption_key = "CAMBIA_ESTE_VALOR_LOCALMENTE"
+# Firma de las actas: van en pareja. Copialas de un .env generado con
+# node scripts/lib/generar-env.js (ACTA_SIGNING_KEY y ACTA_PUBLIC_KEY).
+acta_signing_key  = "CAMBIA_ESTE_VALOR_LOCALMENTE"
+acta_public_key   = "CAMBIA_ESTE_VALOR_LOCALMENTE"
 scheduler_cron    = "* * * * *"
 frontend_origin   = "http://localhost:3000"

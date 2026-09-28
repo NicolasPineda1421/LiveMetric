@@ -56,11 +56,13 @@ docker swarm init
 # 2. Desplegar la versión publicada
 cd orquestacion
 chmod +x deploy.sh
-./deploy.sh v1.2.0
+./deploy.sh v1.3.0
 ```
 
-Desde **v1.2.0**: las versiones anteriores de las imágenes se conectaban a Supabase y no
-traen lo que este stack espera de la base local (el cifrado del padrón al arrancar y
+Desde **v1.3.0**: las imágenes anteriores no firman las actas (Scrutiny) ni verifican
+esa firma (Analytics), así que el indicador de veracidad no puede mostrar ninguna acta
+como verificada. Las anteriores a v1.2.0, además, se conectaban a Supabase y no traen lo
+que este stack espera de la base local (el cifrado del padrón al arrancar y
 `crearAdmin.js --si-no-hay`).
 
 El script valida, antes de desplegar, que Swarm esté activo, que el `.env` exista con
@@ -94,7 +96,7 @@ docker stack rm livemetric                # retirar el stack
 ### Actualizar a una versión nueva
 
 ```bash
-./deploy.sh v1.3.0     # la versión nueva, una vez publicada por release.yml
+./deploy.sh v1.4.0     # la versión nueva, una vez publicada por release.yml
 ```
 
 Swarm reemplaza las réplicas de a una, esperando 10 segundos entre cada una y verificando

@@ -8,6 +8,9 @@ const pool = require('./db');
 const { requireAuth } = require('./middleware/auth');
 const { requireInternalToken } = require('./middleware/internalAuth');
 const { GENESIS_HASH, computeRecordHash } = require('./hashChain');
+const { signRecordHash } = require('./actaSignature');
+const { privateKey, publicKey, keyId } = require('./actaKeys');
+const { verifyLedger } = require('./ledgerVerification');
 const { streamActaPdf } = require('./actaPdf');
 
 const app = express();
@@ -19,6 +22,19 @@ app.use(express.json({ limit: '10kb' }));
 
 const readLimiter = rateLimit({ windowMs: 60 * 1000, max: 60 });
 const internalLimiter = rateLimit({ windowMs: 60 * 1000, max: 30 });
+
+// El libro de actas completo, en el orden en que se certificó: verificar
+// una sola acta exige recorrer la cadena desde el origen.
+async function loadLedger() {
+  const { rows } = await pool.query(
+    `SELECT l.election_id, l.total_votes, l.results, l.previous_hash, l.record_hash,
+            l.signature, l.signing_key_id, l.certified_at, e.title
+       FROM scrutiny_ledger l
+       LEFT JOIN elections e ON e.id = l.election_id
+      ORDER BY l.id ASC`
+  );
+  return rows;
+}
 
 app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', service: 'scrutiny' }));
 
@@ -164,16 +180,19 @@ app.post(
       const previousHash = lastRecord.rows[0]?.record_hash || GENESIS_HASH;
 
       const recordHash = computeRecordHash({ previousHash, electionId, totalVotes, results });
+      // Firma digital del acta (ver actaSignature.js): prueba que la emitió
+      // este servicio, aunque alguien reescriba la cadena de hashes.
+      const signature = signRecordHash(privateKey, recordHash);
 
       await client.query(
-        `INSERT INTO scrutiny_ledger (election_id, total_votes, results, previous_hash, record_hash)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [electionId, totalVotes, JSON.stringify(results), previousHash, recordHash]
+        `INSERT INTO scrutiny_ledger (election_id, total_votes, results, previous_hash, record_hash, signature, signing_key_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [electionId, totalVotes, JSON.stringify(results), previousHash, recordHash, signature, keyId]
       );
 
       await client.query('COMMIT');
-      console.log(`[scrutiny-service] Elección ${electionId} certificada. hash=${recordHash}`);
-      return res.status(201).json({ electionId, totalVotes, recordHash, previousHash, winner });
+      console.log(`[scrutiny-service] Elección ${electionId} certificada y firmada. hash=${recordHash}`);
+      return res.status(201).json({ electionId, totalVotes, recordHash, previousHash, signature, signingKeyId: keyId, winner });
     } catch (err) {
       await client.query('ROLLBACK');
       console.error('Error en /internal/certify:', err.message);
@@ -199,15 +218,14 @@ app.get(
       return res.status(400).json({ error: 'electionId inválido' });
     }
     try {
-      const record = await pool.query(
-        `SELECT election_id, total_votes, results, previous_hash, record_hash, certified_at
-           FROM scrutiny_ledger WHERE election_id = $1`,
-        [req.params.electionId]
-      );
-      if (record.rows.length === 0) {
+      const ledger = await loadLedger();
+      const index = ledger.findIndex((row) => Number(row.election_id) === req.params.electionId);
+      if (index === -1) {
         return res.status(404).json({ error: 'Esta elección aún no tiene acta de escrutinio' });
       }
-      return res.status(200).json(record.rows[0]);
+      const { title: _title, ...record } = ledger[index];
+      const verification = verifyLedger(ledger, publicKey, keyId)[index];
+      return res.status(200).json({ ...record, verification: { ...verification, publicKeyId: keyId } });
     } catch (err) {
       console.error('Error en /certifications/:electionId:', err.message);
       return res.status(500).json({ error: 'Error interno del servidor' });
@@ -217,9 +235,10 @@ app.get(
 
 // Genera el ACTA DE ESCRUTINIO en PDF: el mismo dato certificado en
 // scrutiny_ledger, con formato de documento electoral oficial (resultados
-// consolidados, ganador, desglose por mesa, hash de verificación y espacio
-// de firmas). No recalcula nada: solo da forma imprimible al acta ya
-// certificada, protegida por la misma cadena de hashes.
+// consolidados, ganador, desglose por mesa, hash, firma digital y espacio
+// de firmas). No recalcula los resultados: solo da forma imprimible al acta
+// ya certificada, con el resultado de verificarla (cadena de hashes y firma)
+// en el momento de generar el documento.
 app.get(
   '/certifications/:electionId/acta.pdf',
   requireAuth,
@@ -231,23 +250,19 @@ app.get(
       return res.status(400).json({ error: 'electionId inválido' });
     }
     try {
-      const certification = await pool.query(
-        `SELECT election_id, total_votes, results, previous_hash, record_hash, certified_at
-           FROM scrutiny_ledger WHERE election_id = $1`,
-        [req.params.electionId]
-      );
-      if (certification.rows.length === 0) {
+      const ledger = await loadLedger();
+      const index = ledger.findIndex((row) => Number(row.election_id) === req.params.electionId);
+      if (index === -1) {
         return res.status(404).json({ error: 'Esta elección aún no tiene acta de escrutinio' });
       }
+      const certification = ledger[index];
 
-      const election = await pool.query('SELECT id, title FROM elections WHERE id = $1', [
-        req.params.electionId,
-      ]);
-      if (election.rows.length === 0) {
-        return res.status(404).json({ error: 'Elección no encontrada' });
-      }
-
-      streamActaPdf(res, { election: election.rows[0], certification: certification.rows[0] });
+      streamActaPdf(res, {
+        election: { id: req.params.electionId, title: certification.title },
+        certification,
+        verification: verifyLedger(ledger, publicKey, keyId)[index],
+        publicKeyId: keyId,
+      });
     } catch (err) {
       console.error('Error en /certifications/:electionId/acta.pdf:', err.message);
       return res.status(500).json({ error: 'Error interno del servidor' });
@@ -255,45 +270,30 @@ app.get(
   }
 );
 
-// Verifica la integridad de TODA la cadena de actas: recalcula cada
-// record_hash desde cero (en el mismo orden en que se certificaron) y
-// confirma que coincide con lo almacenado y que el encadenamiento
-// previous_hash -> record_hash es consistente de principio a fin.
-// Si alguien alteró una fila directamente en la base de datos (bypaseando
-// el trigger de append-only, por ejemplo con un rol distinto), esta
-// verificación lo detecta porque la cadena se rompe a partir de ese punto.
+// Verifica TODA la cadena de actas (ver ledgerVerification.js): recalcula
+// cada record_hash desde el origen, en el orden en que se certificaron,
+// comprueba el encadenamiento previous_hash -> record_hash y la firma
+// digital de cada acta. Si alguien alteró una fila directamente en la base
+// (saltándose el trigger de append-only, por ejemplo con otro rol), la
+// cadena o la firma dejan de cuadrar desde ese punto. Rehacer los hashes no
+// alcanza: sin la clave privada de este servicio no puede volver a firmar.
 app.get('/verify', requireAuth, readLimiter, async (_req, res) => {
   try {
-    const records = await pool.query(
-      `SELECT election_id, total_votes, results, previous_hash, record_hash, certified_at
-         FROM scrutiny_ledger ORDER BY id ASC`
-    );
+    const ledger = await loadLedger();
+    const records = verifyLedger(ledger, publicKey, keyId).map((record, i) => ({
+      ...record,
+      title: ledger[i].title,
+      certifiedAt: ledger[i].certified_at,
+    }));
+    const broken = records.filter((r) => r.verdict === 'alterada');
 
-    let expectedPrevious = GENESIS_HASH;
-    const brokenAt = [];
-
-    for (const row of records.rows) {
-      const recomputed = computeRecordHash({
-        previousHash: row.previous_hash,
-        electionId: row.election_id,
-        totalVotes: row.total_votes,
-        results: row.results,
-      });
-
-      const chainOk = row.previous_hash === expectedPrevious;
-      const hashOk = recomputed === row.record_hash;
-
-      if (!chainOk || !hashOk) {
-        brokenAt.push({ electionId: row.election_id, chainOk, hashOk });
-      }
-      expectedPrevious = row.record_hash;
-    }
-
-    const isValid = brokenAt.length === 0;
     return res.status(200).json({
-      valid: isValid,
-      totalRecords: records.rows.length,
-      brokenAt: isValid ? [] : brokenAt,
+      valid: broken.length === 0,
+      totalRecords: records.length,
+      unsigned: records.filter((r) => r.verdict === 'sin_firma').length,
+      publicKeyId: keyId,
+      brokenAt: broken.map((r) => ({ electionId: r.electionId, chainOk: r.linkOk, hashOk: r.hashOk, signature: r.signature })),
+      records,
     });
   } catch (err) {
     console.error('Error en /verify:', err.message);

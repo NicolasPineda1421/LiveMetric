@@ -183,6 +183,12 @@ CREATE TABLE IF NOT EXISTS scrutiny_ledger (
     results         JSONB NOT NULL,
     previous_hash   CHAR(64) NOT NULL,        -- hash del registro anterior (o "genesis")
     record_hash     CHAR(64) NOT NULL,        -- sha256(previous_hash + election_id + results + total_votes)
+    -- Firma digital Ed25519 del record_hash, hecha por scrutiny-service con
+    -- su clave privada (ACTA_SIGNING_KEY), y el id de la clave pública que
+    -- la verifica (ver services/scrutiny/src/actaSignature.js y la migración
+    -- 005). NULL solo en actas certificadas antes de la firma digital.
+    signature       TEXT,
+    signing_key_id  CHAR(16),
     certified_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

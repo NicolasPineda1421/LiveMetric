@@ -409,20 +409,79 @@ function ElectionsTab({ session }) {
 
 /* ============================================================ Resultados */
 
+// Indicador de veracidad del acta. Lo calcula analytics-service por su
+// cuenta, sin preguntarle al servicio que la certificó: firma digital,
+// cadena de hashes y reconteo de los votos guardados (ver
+// buildIntegrityReport). Solo queda en verde si todo cuadra.
+const SEAL = {
+  integra: { tone: 'ok', title: '✓ Acta verificada' },
+  sin_firma: { tone: 'warn', title: '⚠ Acta sin firma digital' },
+  alterada: { tone: 'bad', title: '✘ Acta alterada' },
+};
+
+function ActaSeal({ integrity }) {
+  if (!integrity || integrity.loading) {
+    return <div className="acta-seal">Verificando la firma y la integridad del acta…</div>;
+  }
+  if (integrity.error) {
+    return (
+      <div className="acta-seal tone-bad">
+        <strong>✘ No se pudo verificar el acta</strong>
+        <div>{integrity.error}</div>
+      </div>
+    );
+  }
+  const { report } = integrity;
+  const seal = SEAL[report.state];
+  if (!seal) return null;
+  return (
+    <div className={`acta-seal tone-${seal.tone}`}>
+      <strong>{seal.title}</strong>
+      {report.state === 'integra' && (
+        <div>
+          Firma digital válida (clave <span className="mono">{report.publicKeyId}</span>), el contenido no cambió desde
+          que se certificó y los votos guardados coinciden con el acta ({report.votes.storedTotal}).
+        </div>
+      )}
+      {report.state === 'sin_firma' && (
+        <div>
+          El contenido coincide con la cadena de hashes y con los votos guardados, pero el acta se certificó antes de la
+          firma digital: no se puede probar que la emitió esta instalación.
+        </div>
+      )}
+      {report.state === 'alterada' && (
+        <>
+          <ul>{report.problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>
+          <div>Los resultados de abajo son los del acta tal como está guardada: no deben tomarse como oficiales.</div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function ResultsTab({ session }) {
   const [elections, setElections] = useState([]);
   const [electionId, setElectionId] = useState('');
   const [result, setResult] = useState(null);
+  const [integrity, setIntegrity] = useState(null);
   const [error, setError] = useState('');
   const [downloading, setDownloading] = useState(false);
 
   useEffect(() => { api.listAllElections(session.token).then(setElections).catch(() => {}); }, [session.token]);
 
   async function fetchResults(id) {
-    setError(''); setResult(null);
+    setError(''); setResult(null); setIntegrity(null);
     try {
       const data = await api.getResults(session.token, id);
       setResult(data);
+      if (data.certified) {
+        // "electionId" en el estado: si se cambia de elección antes de que
+        // llegue la respuesta, no se muestra el sello de otra.
+        setIntegrity({ electionId: id, loading: true });
+        api.getIntegrity(session.token, id)
+          .then((report) => setIntegrity((prev) => (prev?.electionId === id ? { electionId: id, report } : prev)))
+          .catch((err) => setIntegrity((prev) => (prev?.electionId === id ? { electionId: id, error: err.message } : prev)));
+      }
     } catch (err) {
       setError(err.message);
     }
@@ -444,7 +503,10 @@ export function ResultsTab({ session }) {
   return (
     <div>
       <h2 className="section-title">Resultados</h2>
-      <p className="section-desc">En vivo mientras la elección está activa; certificados (con acta y hash) una vez cerrada.</p>
+      <p className="section-desc">
+        En vivo mientras la elección está activa; certificados una vez cerrada, con un acta firmada digitalmente cuya
+        veracidad se comprueba cada vez que se consulta.
+      </p>
 
       <div className="panel">
         <div className="field-dark">
@@ -460,7 +522,7 @@ export function ResultsTab({ session }) {
         {result && (
           <div style={{ marginTop: '1rem' }}>
             {result.certified ? (
-              <span className="certified-stamp">✓ Certificado</span>
+              <ActaSeal integrity={integrity?.electionId === electionId ? integrity : null} />
             ) : (
               <span><span className="live-dot" />En vivo</span>
             )}
@@ -468,7 +530,6 @@ export function ResultsTab({ session }) {
             {result.certified && session.role === 'admin' && (
               <button
                 className="btn btn-gold"
-                style={{ marginLeft: '0.75rem' }}
                 onClick={downloadActa}
                 disabled={downloading}
               >
@@ -542,6 +603,18 @@ export function ResultsTab({ session }) {
 
 /* ============================================================ Escrutinio */
 
+const SIGNATURE_LABEL = {
+  valida: '✓ Válida',
+  invalida: '✘ No corresponde al acta',
+  otra_clave: '✘ De una clave desconocida',
+  sin_firma: '⚠ Sin firma',
+};
+const VERDICT = {
+  verificada: { tone: 'ok', label: 'Verificada' },
+  sin_firma: { tone: 'warn', label: 'Sin firma digital' },
+  alterada: { tone: 'bad', label: 'Alterada' },
+};
+
 function ScrutinyTab({ session }) {
   const [status, setStatus] = useState(null);
   const [error, setError] = useState('');
@@ -559,32 +632,68 @@ function ScrutinyTab({ session }) {
     }
   }
 
+  const altered = status ? status.records.filter((r) => r.verdict === 'alterada') : [];
+
   return (
     <div>
       <h2 className="section-title">Escrutinio</h2>
       <p className="section-desc">
-        Verifica que la cadena completa de actas certificadas no haya sido alterada, recalculando
-        cada hash desde el origen.
+        Verifica acta por acta que ninguna haya sido alterada: recalcula cada hash desde el origen, comprueba que la
+        cadena no se rompa y que cada acta tenga la firma digital del módulo de escrutinio.
       </p>
 
       <div className="panel">
         <button className="btn btn-gold" onClick={verify} disabled={loading}>
-          {loading ? 'Verificando…' : 'Verificar cadena de escrutinio'}
+          {loading ? 'Verificando…' : 'Verificar actas'}
         </button>
 
         {error && <div className="error-banner" style={{ marginTop: '1rem' }}>{error}</div>}
 
         {status && (
           <div style={{ marginTop: '1.25rem' }}>
-            {status.valid ? (
+            {status.totalRecords === 0 ? (
+              <div className="empty-state">Todavía no hay actas certificadas.</div>
+            ) : status.valid ? (
               <div className="success-banner">
-                Cadena íntegra: {status.totalRecords} acta(s) certificada(s), sin alteraciones detectadas.
+                Ninguna acta fue alterada: {status.totalRecords} acta(s) certificada(s)
+                {status.unsigned ? `, ${status.unsigned} de ellas sin firma digital (anteriores a la firma).` : ', todas con firma digital válida.'}
               </div>
             ) : (
               <div className="error-banner">
-                Se detectó una ruptura en la cadena. Elecciones afectadas: {status.brokenAt.map((b) => b.electionId).join(', ')}
+                Se detectaron actas alteradas: {altered.map((r) => `#${r.electionId}`).join(', ')}. No deben tomarse como oficiales.
               </div>
             )}
+
+            {status.totalRecords > 0 && (
+              <table className="table">
+                <thead>
+                  <tr><th>Elección</th><th>Certificada</th><th>Contenido</th><th>Cadena</th><th>Firma digital</th><th>Veredicto</th></tr>
+                </thead>
+                <tbody>
+                  {status.records.map((r) => (
+                    <tr key={r.electionId}>
+                      <td>#{r.electionId} {r.title}</td>
+                      <td>{new Date(r.certifiedAt).toLocaleString()}</td>
+                      <td>{r.hashOk ? '✓ Coincide con su hash' : '✘ Modificado'}</td>
+                      <td>{r.linkOk ? '✓ Enlazada' : '✘ Rota'}</td>
+                      <td>{SIGNATURE_LABEL[r.signature]}</td>
+                      <td>
+                        <span className={`verdict tone-${VERDICT[r.verdict].tone}`}>{VERDICT[r.verdict].label}</span>
+                        {r.problems.length > 0 && (
+                          <ul className="verdict-problems">{r.problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            <p className="section-desc" style={{ marginTop: '0.9rem' }}>
+              Clave pública de esta instalación: <span className="mono">{status.publicKeyId}</span>. La firma solo la
+              puede producir el módulo de escrutinio con su clave privada: modificar un acta, aunque se rehagan los
+              hashes, la invalida.
+            </p>
           </div>
         )}
       </div>

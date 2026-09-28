@@ -8,7 +8,9 @@ const {
   buildIntegrityReport,
   detectSuspiciousAccess,
 } = require('../advancedStats');
+const crypto = require('crypto');
 const { GENESIS_HASH, computeRecordHash } = require('../hashChain');
+const { keyIdOf, signRecordHash } = require('../actaSignature');
 
 const START = new Date('2026-03-01T08:00:00Z');
 const at = (minutes) => new Date(START.getTime() + minutes * 60 * 1000);
@@ -170,8 +172,18 @@ describe('leadTimeline', () => {
 });
 
 describe('buildIntegrityReport', () => {
-  // Arma un libro de 2 actas encadenadas correctamente, como lo haría
-  // scrutiny-service al certificar.
+  // Par de claves propio de estas pruebas (son puras: no usan el del
+  // entorno). "keys" es lo que analytics recibe: solo la pública.
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
+  const keys = { publicKey, keyId: keyIdOf(publicKey) };
+  const sign = (row, key = privateKey) => ({
+    ...row,
+    signature: signRecordHash(key, row.record_hash),
+    signing_key_id: keyIdOf(crypto.createPublicKey(key)),
+  });
+
+  // Arma un libro de 2 actas encadenadas y firmadas correctamente, como lo
+  // haría scrutiny-service al certificar.
   function ledger() {
     const results1 = {
       overall: [{ optionId: 1, label: 'A', votes: 3 }, { optionId: 2, label: 'B', votes: 2 }],
@@ -186,8 +198,8 @@ describe('buildIntegrityReport', () => {
     const hash1 = computeRecordHash({ previousHash: GENESIS_HASH, electionId: 10, totalVotes: 5, results: results1 });
     const hash2 = computeRecordHash({ previousHash: hash1, electionId: 11, totalVotes: 4, results: results2 });
     return [
-      { election_id: 10, total_votes: 5, results: results1, previous_hash: GENESIS_HASH, record_hash: hash1 },
-      { election_id: 11, total_votes: 4, results: results2, previous_hash: hash1, record_hash: hash2 },
+      sign({ election_id: 10, total_votes: 5, results: results1, previous_hash: GENESIS_HASH, record_hash: hash1 }),
+      sign({ election_id: 11, total_votes: 4, results: results2, previous_hash: hash1, record_hash: hash2 }),
     ];
   }
   const storedFor10 = () => ({
@@ -197,20 +209,58 @@ describe('buildIntegrityReport', () => {
   });
 
   it('una elección sin acta queda "sin_certificar"', () => {
-    expect(buildIntegrityReport({ electionId: 99, ledgerRows: ledger(), stored: storedFor10() }).state).toBe('sin_certificar');
+    expect(buildIntegrityReport({ electionId: 99, ledgerRows: ledger(), stored: storedFor10(), ...keys }).state).toBe('sin_certificar');
   });
 
-  it('acta intacta y votos iguales a los certificados → "integra"', () => {
-    const r = buildIntegrityReport({ electionId: 10, ledgerRows: ledger(), stored: storedFor10() });
+  it('acta intacta, firmada y con los votos iguales a los certificados → "integra"', () => {
+    const r = buildIntegrityReport({ electionId: 10, ledgerRows: ledger(), stored: storedFor10(), ...keys });
     expect(r.state).toBe('integra');
     expect(r.problems).toEqual([]);
+    expect(r.record).toEqual({ hashOk: true, linkOk: true, signature: 'valida' });
+    expect(r.publicKeyId).toBe(keys.keyId);
     expect(r.chain).toEqual({ valid: true, totalRecords: 2, brokenElectionIds: [] });
+  });
+
+  it('reescribir un acta y rehacer todos los hashes no alcanza: la firma deja de corresponder', () => {
+    // Lo que haría alguien con acceso a la base pero sin la clave privada:
+    // cambia el resultado, recalcula los hashes y los enlaces siguientes, y
+    // deja las firmas como estaban (no puede fabricar otras).
+    const rows = ledger();
+    rows[0].results.overall[0].votes = 30;
+    rows[0].record_hash = computeRecordHash({ previousHash: GENESIS_HASH, electionId: 10, totalVotes: 5, results: rows[0].results });
+    rows[1].previous_hash = rows[0].record_hash;
+    rows[1].record_hash = computeRecordHash({ previousHash: rows[1].previous_hash, electionId: 11, totalVotes: 4, results: rows[1].results });
+
+    const r = buildIntegrityReport({ electionId: 10, ledgerRows: rows, stored: storedFor10(), ...keys });
+    expect(r.state).toBe('alterada');
+    expect(r.record).toEqual({ hashOk: true, linkOk: true, signature: 'invalida' });
+    expect(r.chain.brokenElectionIds).toEqual([10, 11]);
+    expect(r.problems.join(' ')).toMatch(/firma digital no corresponde/);
+  });
+
+  it('un acta firmada con una clave que no es la de esta instalación → "alterada"', () => {
+    const rows = ledger();
+    rows[0] = sign(rows[0], crypto.generateKeyPairSync('ed25519').privateKey);
+    const r = buildIntegrityReport({ electionId: 10, ledgerRows: rows, stored: storedFor10(), ...keys });
+    expect(r.state).toBe('alterada');
+    expect(r.record.signature).toBe('otra_clave');
+    expect(r.problems.join(' ')).toMatch(/clave que esta instalación no reconoce/);
+  });
+
+  it('un acta sin firma (certificada antes de la firma digital) queda "sin_firma", no "integra"', () => {
+    const rows = ledger();
+    rows[0].signature = null;
+    rows[0].signing_key_id = null;
+    const r = buildIntegrityReport({ electionId: 10, ledgerRows: rows, stored: storedFor10(), ...keys });
+    expect(r.state).toBe('sin_firma');
+    expect(r.problems).toEqual([]);
+    expect(r.chain.valid).toBe(true);
   });
 
   it('detecta un acta modificada en la base después de certificarse', () => {
     const rows = ledger();
     rows[0].results.overall[0].votes = 30; // se cambia el resultado sin recalcular el hash
-    const r = buildIntegrityReport({ electionId: 10, ledgerRows: rows, stored: storedFor10() });
+    const r = buildIntegrityReport({ electionId: 10, ledgerRows: rows, stored: storedFor10(), ...keys });
     expect(r.state).toBe('alterada');
     expect(r.record.hashOk).toBe(false);
   });
@@ -222,6 +272,7 @@ describe('buildIntegrityReport', () => {
       electionId: 11,
       ledgerRows: rows,
       stored: { totalVotes: 4, byOption: new Map([[3, 4]]), byTable: new Map([['Norte|Mesa 1', 4]]) },
+      ...keys,
     });
     expect(r.state).toBe('alterada');
     expect(r.record.hashOk).toBe(true);
@@ -233,11 +284,18 @@ describe('buildIntegrityReport', () => {
     stored.totalVotes = 6;
     stored.byOption.set(2, 3);
     stored.byTable.set('Central|Mesa 1', 6);
-    const r = buildIntegrityReport({ electionId: 10, ledgerRows: ledger(), stored });
+    const r = buildIntegrityReport({ electionId: 10, ledgerRows: ledger(), stored, ...keys });
     expect(r.state).toBe('alterada');
-    expect(r.record).toEqual({ hashOk: true, linkOk: true });
+    expect(r.record).toEqual({ hashOk: true, linkOk: true, signature: 'valida' });
     expect(r.votes.optionDiffs).toEqual([{ optionId: 2, label: 'B', certified: 2, stored: 3 }]);
     expect(r.problems.join(' ')).toMatch(/aparecieron 1 después de certificar/);
+  });
+
+  it('actaSignature de analytics coincide con el de scrutiny-service (verifica por su cuenta, con el mismo algoritmo)', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const read = (service) => fs.readFileSync(path.join(__dirname, '..', '..', '..', service, 'src', 'actaSignature.js'), 'utf8');
+    expect(read('analytics')).toBe(read('scrutiny'));
   });
 
   it('el hashChain de analytics coincide con el de scrutiny-service (la verificación es independiente pero con el mismo algoritmo)', () => {

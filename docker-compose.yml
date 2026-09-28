@@ -141,6 +141,8 @@ services:
       PORT: 3003
       JWT_SECRET: ${JWT_SECRET}
       VOTERS_ENCRYPTION_KEY: ${VOTERS_ENCRYPTION_KEY}
+      # Solo la pública: verifica la firma de las actas, no puede firmar.
+      ACTA_PUBLIC_KEY: ${ACTA_PUBLIC_KEY}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       DB_HOST: postgres
       DB_PORT: 5432
@@ -177,6 +179,10 @@ services:
       PORT: 3004
       JWT_SECRET: ${JWT_SECRET}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      # La privada firma cada acta al certificarla; es el único servicio que
+      # la tiene. Con la pública comprueba al arrancar que sean pareja.
+      ACTA_SIGNING_KEY: ${ACTA_SIGNING_KEY}
+      ACTA_PUBLIC_KEY: ${ACTA_PUBLIC_KEY}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       DB_HOST: postgres
       DB_PORT: 5432

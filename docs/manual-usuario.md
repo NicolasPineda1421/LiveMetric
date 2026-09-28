@@ -213,7 +213,17 @@ Para crear otros administradores o auditores.
 ### 4.6 Resultados
 
 Muestra el conteo de cada elección. Mientras la votación está abierta, los resultados son
-**preliminares y en vivo**. Una vez cerrada, se muestran los **certificados**.
+**preliminares y en vivo**. Una vez cerrada, se muestran los **certificados**, encabezados
+por el **indicador de veracidad del acta**, que se comprueba cada vez que se consulta:
+
+| Indicador | Qué significa |
+|---|---|
+| ✓ **Acta verificada** (verde) | La firma digital del acta es válida, su contenido no cambió desde que se certificó y los votos guardados coinciden con ella. Es el único estado confiable. |
+| ⚠ **Acta sin firma digital** (dorado) | El acta coincide con la cadena y con los votos, pero se certificó antes de que existiera la firma digital: no se puede probar quién la emitió. |
+| ✘ **Acta alterada** (rojo) | Algo no cuadra: se indica qué (la firma no corresponde, el contenido cambió, la cadena se rompió o los votos no coinciden). Esos resultados no deben tomarse como oficiales. |
+
+El administrador puede **descargar el acta en PDF** desde aquí; el documento lleva el
+mismo veredicto en su encabezado, comprobado en el momento de generarlo.
 
 > 📸 **Captura 15 — `15-resultados-vivo.png`**
 > Resultados de una elección activa, con las gráficas de conteo.
@@ -236,19 +246,20 @@ Los tableros se pueden **exportar a PDF**.
 Es la pestaña que diferencia a LiveMetric de un sistema de encuestas cualquiera.
 
 Cuando una elección se cierra, el sistema **recuenta los votos desde cero**, de forma
-independiente, genera un **acta por mesa de votación** y la sella con una huella digital
-(un código llamado *hash*). Cada acta incluye además la huella de la anterior, formando
-una **cadena**.
+independiente, genera un **acta con el desglose por mesa de votación** y la sella con una
+huella digital (un código llamado *hash*). Cada acta incluye además la huella de la
+anterior, formando una **cadena**, y el módulo de escrutinio la **firma digitalmente** con
+una clave que solo él tiene.
 
 Esto significa que si alguien alterara un acta, su huella cambiaría y **la cadena se
-rompería de forma visible**. No hace falta confiar en el sistema: se puede comprobar.
+rompería de forma visible**. Y aunque recalculara todas las huellas, no podría rehacer la
+firma: el acta aparecería como alterada igual. No hace falta confiar en el sistema: se
+puede comprobar.
 
-Desde esta pestaña usted puede:
-
-- Ver el acta de cada mesa, con su desglose de votos.
-- **Verificar la integridad de la cadena**: el sistema recorre todas las actas y confirma
-  que ninguna fue alterada.
-- **Descargar el acta en PDF** para archivarla o imprimirla.
+Desde esta pestaña (solo administradores) usted puede **verificar las actas**: el sistema
+recorre toda la cadena y muestra, acta por acta, si su contenido, su enlace con la
+anterior y su firma digital están en orden, con un veredicto (verificada, sin firma o
+alterada) y la explicación de cualquier problema.
 
 > 📸 **Captura 18 — `18-escrutinio-actas.png`**
 > El listado de actas por mesa, con sus huellas digitales visibles.
@@ -357,8 +368,8 @@ Resumen del recorrido de punta a punta:
 | 7 | Seguir los resultados preliminares | Administrador / Auditor | Resultados |
 | 8 | **Cierre automático** al vencer la hora | Sistema | — |
 | 9 | **Recuento y certificación automáticos** | Sistema | — |
-| 10 | Consultar actas y verificar la cadena | Administrador / Auditor | Escrutinio |
-| 11 | Descargar el acta en PDF | Administrador / Auditor | Escrutinio |
+| 10 | Revisar el indicador de veracidad del acta | Administrador / Auditor | Resultados |
+| 11 | Verificar todas las actas y descargar el acta en PDF | Administrador | Escrutinio / Resultados |
 
 Los pasos 5, 8 y 9 no requieren intervención humana. Que la certificación ocurra sola, y
 que ningún usuario pueda dispararla, es parte del diseño: el resultado no depende de que
@@ -390,9 +401,10 @@ ingresar con su cédula y PIN; si no alcanzó a confirmar, su voto no quedó reg
 puede emitirlo de nuevo.
 
 **¿Cómo sé que los resultados no fueron alterados?**
-En la pestaña Escrutinio, use **Verificar integridad**. El sistema recorre toda la cadena
-de actas y confirma que ninguna fue modificada. Si algo hubiera cambiado, la verificación
-fallaría señalando el punto exacto.
+Mire el indicador de veracidad en **Resultados**: solo "✓ Acta verificada" garantiza que
+el acta tiene la firma digital del módulo de escrutinio, que no cambió y que coincide con
+los votos guardados. El administrador puede además usar **Verificar actas** en la pestaña
+Escrutinio, que revisa todas las actas y señala exactamente cuál y qué falló.
 
 ---
 

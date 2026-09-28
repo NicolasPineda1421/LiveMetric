@@ -14,7 +14,8 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 
 - **Elecciones programadas**: plantillas genéricas o presidenciales (con candidatos, número y foto) que se abren y cierran solas según su horario, o se detienen a mano.
 - **Voto único por identidad**: el doble voto se impide por la identidad del votante, no por su navegador; el padrón se guarda cifrado.
-- **Escrutinio independiente**: al cerrar, un servicio aparte recuenta los votos, consolida por mesa, determina el ganador y encadena el acta con hashes SHA-256 (también en PDF).
+- **Escrutinio independiente**: al cerrar, un servicio aparte recuenta los votos, consolida por mesa, determina el ganador, encadena el acta con hashes SHA-256 y la **firma digitalmente** (Ed25519); también en PDF.
+- **Indicador de veracidad del acta**: cada vez que se consulta un resultado certificado, se comprueba su firma, su hash y los votos guardados, y se muestra si el acta está **verificada**, **alterada** o **sin firma**, en el panel y en el PDF.
 - **Reportes con estadística avanzada**: tableros configurables con proyección de participación, momento de definición del resultado, verificación de integridad del acta y detección de accesos sospechosos.
 - **Auditoría**: cada intento de ingreso, exitoso o fallido, queda en un registro que no se puede modificar. Roles de administrador, auditor (solo lectura) y votante.
 
@@ -27,7 +28,7 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 | Frontend | React 18, Vite, Recharts, react-grid-layout, jsPDF; servido por nginx |
 | Backend | Node.js 20, Express, node-cron (4 microservicios y un worker) |
 | Base de datos | PostgreSQL 16 en su propio contenedor, en una red interna sin puerto a la PC |
-| Seguridad en la aplicación | JWT, bcrypt, AES-256-GCM (padrón cifrado), cadena de hashes SHA-256, helmet, rate limiting |
+| Seguridad en la aplicación | JWT, bcrypt, AES-256-GCM (padrón cifrado), cadena de hashes SHA-256, firma digital Ed25519 de las actas, helmet, rate limiting |
 | Contenedores e infraestructura | Docker, Docker Compose, Docker Hub, Terraform (provider `kreuzwerker/docker`), Docker-in-Docker |
 | Orquestación y observabilidad | Docker Swarm, Prometheus, Grafana, Loki + Promtail, Falco |
 | CI/CD y seguridad | GitHub Actions, Gitleaks, Semgrep, npm audit, Trivy, Checkov, OWASP ZAP |
@@ -66,7 +67,7 @@ La primera vez tarda varios minutos (construye y analiza las 6 imágenes). Al te
 
 ## Imágenes en Docker Hub
 
-Las 6 imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspineda1421) con cada versión de git (`vX.Y.Z`), etiquetadas con la versión exacta (`1.2.0`), la línea menor (`1.2`) y `latest`. Antes de subirse, cada una se escanea con Trivy: si tiene CVE críticas o altas, no se publica (ver [`release.yml`](.github/workflows/release.yml)). Son las que usa el [despliegue con Docker Swarm](orquestacion/README.md).
+Las 6 imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspineda1421) con cada versión de git (`vX.Y.Z`), etiquetadas con la versión exacta (`1.3.0`), la línea menor (`1.3`) y `latest`. Antes de subirse, cada una se escanea con Trivy: si tiene CVE críticas o altas, no se publica (ver [`release.yml`](.github/workflows/release.yml)). Son las que usa el [despliegue con Docker Swarm](orquestacion/README.md).
 
 | Servicio | Imagen |
 |---|---|
@@ -78,10 +79,10 @@ Las 6 imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspine
 | Scheduler (worker) | [`nicolaspineda1421/livemetric-scheduler`](https://hub.docker.com/r/nicolaspineda1421/livemetric-scheduler) |
 
 ```bash
-docker pull nicolaspineda1421/livemetric-auth:1.2.0
+docker pull nicolaspineda1421/livemetric-auth:1.3.0
 ```
 
-Para publicar una versión nueva basta con crear el tag: `git tag -a v1.2.0 -m "..." && git push origin v1.2.0`.
+Para publicar una versión nueva basta con crear el tag: `git tag -a v1.4.0 -m "..." && git push origin v1.4.0`.
 
 ## Documentación
 

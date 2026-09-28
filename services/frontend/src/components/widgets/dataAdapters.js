@@ -247,20 +247,36 @@ export function adaptForWidgets(dataSource, raw) {
           table: { columns: ['Verificación', 'Resultado'], rows: [], emptyMessage: why },
         };
       }
-      const intact = raw.state === 'integra';
       const votes = raw.votes;
       const check = (passed, okText, badText) => (passed ? `✔ ${okText}` : `✘ ${badText}`);
-      return {
-        kpi: {
-          label: 'Integridad del acta',
-          value: intact ? '✔ Íntegra' : '✘ Alterada',
-          tone: intact ? 'ok' : 'bad',
-          note: intact ? 'El acta no cambió y los votos guardados coinciden con lo certificado.' : raw.problems[0],
+      // Veredicto: verde solo con la firma digital válida y todo lo demás
+      // en orden; un acta sin firma queda en el dorado de "atención".
+      const verdict = {
+        integra: {
+          value: '✔ Verificada',
+          tone: 'ok',
+          note: 'Firma digital válida, el acta no cambió y los votos guardados coinciden con lo certificado.',
         },
+        sin_firma: {
+          value: '⚠ Sin firma',
+          tone: undefined,
+          note: 'Íntegra frente a la cadena de hashes, pero se certificó antes de la firma digital.',
+        },
+        alterada: { value: '✘ Alterada', tone: 'bad', note: raw.problems[0] },
+      }[raw.state];
+      const signatureText = {
+        valida: `✔ Válida (clave ${raw.publicKeyId})`,
+        invalida: '✘ No corresponde al acta',
+        otra_clave: `✘ De una clave desconocida (${raw.signingKeyId})`,
+        sin_firma: '⚠ Sin firma (certificada antes de la firma digital)',
+      }[raw.record.signature];
+      return {
+        kpi: { label: 'Integridad del acta', value: verdict.value, tone: verdict.tone, note: verdict.note },
         items: [],
         table: {
           columns: ['Verificación', 'Resultado'],
           rows: [
+            ['Firma digital del acta', signatureText],
             ['Contenido del acta contra su hash', check(raw.record.hashOk, 'Coincide', 'No coincide: el acta fue modificada')],
             ['Enlace con el acta anterior', check(raw.record.linkOk, 'Correcto', 'Roto')],
             [

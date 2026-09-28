@@ -2,7 +2,7 @@
 # =============================================================================
 # LiveMetric — Despliegue orquestado en Docker Swarm
 #
-# Uso:  ./deploy.sh v1.2.0
+# Uso:  ./deploy.sh v1.3.0
 #
 # Requisitos previos:
 #   - Docker Swarm inicializado:  docker swarm init
@@ -22,7 +22,7 @@ REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 # -----------------------------------------------------------------------------
 VERSION="${1:-}"
 if [ -z "$VERSION" ]; then
-  echo "❌ Falta la version. Uso: ./deploy.sh v1.2.0"
+  echo "❌ Falta la version. Uso: ./deploy.sh v1.3.0"
   exit 1
 fi
 
@@ -65,7 +65,7 @@ set +a
 # -----------------------------------------------------------------------------
 # 4) Validar variables obligatorias
 # -----------------------------------------------------------------------------
-REQUIRED=(DOCKERHUB_NAMESPACE JWT_SECRET VOTER_ID_SALT VOTERS_ENCRYPTION_KEY INTERNAL_SERVICE_TOKEN POSTGRES_PASSWORD)
+REQUIRED=(DOCKERHUB_NAMESPACE JWT_SECRET VOTER_ID_SALT VOTERS_ENCRYPTION_KEY INTERNAL_SERVICE_TOKEN POSTGRES_PASSWORD ACTA_SIGNING_KEY ACTA_PUBLIC_KEY)
 MISSING=()
 for var in "${REQUIRED[@]}"; do
   if [ -z "${!var:-}" ]; then

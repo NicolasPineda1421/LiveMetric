@@ -7,6 +7,7 @@ const { param, query, body, validationResult } = require('express-validator');
 const pool = require('./db');
 const { requireRole } = require('./middleware/auth');
 const { decryptField } = require('./voterCrypto');
+const actaKeys = require('./actaKeys');
 const { projectTurnout, leadTimeline, buildIntegrityReport, detectSuspiciousAccess } = require('./advancedStats');
 
 const app = express();
@@ -474,8 +475,10 @@ app.get(
 );
 
 // Integridad del acta: recalcula la cadena de hashes del libro de
-// escrutinio (independiente de scrutiny-service) y vuelve a contar los
-// votos guardados contra lo que el acta certificó. Ver buildIntegrityReport.
+// escrutinio y comprueba la firma digital de cada acta (independiente de
+// scrutiny-service, con la clave pública), y vuelve a contar los votos
+// guardados contra lo que el acta certificó. Ver buildIntegrityReport. Es
+// la fuente del indicador de veracidad del acta en Resultados y Reportes.
 app.get(
   '/api/elections/:id/metrics/integrity',
   [param('id').isInt({ min: 1 }).toInt()],
@@ -486,7 +489,7 @@ app.get(
 
     const [ledger, stored] = await Promise.all([
       pool.query(
-        `SELECT election_id, total_votes, results, previous_hash, record_hash, certified_at
+        `SELECT election_id, total_votes, results, previous_hash, record_hash, signature, signing_key_id, certified_at
            FROM scrutiny_ledger ORDER BY id ASC`
       ),
       pool.query(
@@ -514,6 +517,8 @@ app.get(
         electionId: req.params.id,
         ledgerRows: ledger.rows,
         stored: { totalVotes, byOption, byTable },
+        publicKey: actaKeys.publicKey,
+        keyId: actaKeys.keyId,
       }),
     });
   })

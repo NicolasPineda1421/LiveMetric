@@ -20,6 +20,8 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const app = require('../app');
 const pool = require('../db');
+const { computeRecordHash } = require('../hashChain');
+const { keyIdOf, loadPublicKey } = require('../actaSignature');
 
 const RUN_ID = `CITEST-SCRUTINY-${Date.now()}`;
 const INTERNAL_TOKEN = process.env.INTERNAL_SERVICE_TOKEN;
@@ -154,6 +156,9 @@ describe('POST /internal/certify/:electionId', () => {
     expect(res.body.winner).toBeDefined();
     expect(res.body.winner.optionId).toBe(optionAId);
     expect(res.body.winner.votes).toBe(2);
+    // Firmada con la clave de esta instalación (la pareja de ACTA_PUBLIC_KEY).
+    expect(res.body.signature).toEqual(expect.any(String));
+    expect(res.body.signingKeyId).toBe(keyIdOf(loadPublicKey(process.env.ACTA_PUBLIC_KEY)));
   });
 
   it('una segunda llamada sobre la MISMA elección es idempotente (200, no crea un acta nueva)', async () => {
@@ -189,6 +194,13 @@ describe('GET /certifications/:electionId', () => {
     expect(res.body.election_id).toBe(closedElectionId);
     expect(res.body.total_votes).toBe(3);
     expect(res.body.record_hash).toEqual(expect.any(String));
+    expect(res.body.verification).toMatchObject({
+      verdict: 'verificada',
+      hashOk: true,
+      linkOk: true,
+      signature: 'valida',
+      problems: [],
+    });
   });
 
   it('devuelve 404 para una elección que aún no tiene acta', async () => {
@@ -229,5 +241,68 @@ describe('GET /verify', () => {
     expect(res.body.brokenAt).toEqual([]);
     expect(typeof res.body.totalRecords).toBe('number');
     expect(res.body.totalRecords).toBeGreaterThanOrEqual(1);
+    const record = res.body.records.find((r) => r.electionId === closedElectionId);
+    expect(record).toMatchObject({ verdict: 'verificada', signature: 'valida', title: `${RUN_ID}-closed` });
+  });
+});
+
+// Simula a alguien con acceso directo a la base: se salta el trigger de
+// append-only, cambia el resultado del acta y rehace su hash (la cadena de
+// hashes no usa ningún secreto). Lo que no puede rehacer es la firma. Solo
+// corre contra la base desechable de las pruebas (scripts/lib/jest-db-setup.js),
+// nunca contra una base que venga de DB_HOST: la deja con un acta alterada.
+const conBaseDesechable = process.env.LIVEMETRIC_DB_PRUEBAS ? describe : describe.skip;
+conBaseDesechable('un acta alterada directo en la base, con su hash rehecho', () => {
+  beforeAll(async () => {
+    const { rows } = await pool.query(
+      'SELECT results, total_votes, previous_hash FROM scrutiny_ledger WHERE election_id = $1',
+      [closedElectionId]
+    );
+    const results = rows[0].results;
+    results.overall.find((o) => o.optionId === optionBId).votes += 100; // el que perdió, ahora "gana"
+    const recordHash = computeRecordHash({
+      previousHash: rows[0].previous_hash,
+      electionId: closedElectionId,
+      totalVotes: rows[0].total_votes,
+      results,
+    });
+    await pool.query('ALTER TABLE scrutiny_ledger DISABLE TRIGGER trg_scrutiny_no_update');
+    try {
+      await pool.query('UPDATE scrutiny_ledger SET results = $1, record_hash = $2 WHERE election_id = $3', [
+        JSON.stringify(results),
+        recordHash,
+        closedElectionId,
+      ]);
+    } finally {
+      await pool.query('ALTER TABLE scrutiny_ledger ENABLE TRIGGER trg_scrutiny_no_update');
+    }
+  });
+
+  it('GET /verify lo detecta por la firma, aunque la cadena de hashes cuadre', async () => {
+    const res = await request(app).get('/verify').set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.valid).toBe(false);
+    const record = res.body.records.find((r) => r.electionId === closedElectionId);
+    expect(record).toMatchObject({ hashOk: true, linkOk: true, signature: 'invalida', verdict: 'alterada' });
+    expect(res.body.brokenAt).toEqual([
+      expect.objectContaining({ electionId: closedElectionId, hashOk: true, signature: 'invalida' }),
+    ]);
+  });
+
+  it('GET /certifications/:id marca el acta como alterada', async () => {
+    const res = await request(app)
+      .get(`/certifications/${closedElectionId}`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.verification.verdict).toBe('alterada');
+    expect(res.body.verification.problems.join(' ')).toMatch(/firma digital no corresponde/);
+  });
+
+  it('el PDF del acta alterada se sigue generando (encabezado con la advertencia)', async () => {
+    const res = await request(app)
+      .get(`/certifications/${closedElectionId}/acta.pdf`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
   });
 });

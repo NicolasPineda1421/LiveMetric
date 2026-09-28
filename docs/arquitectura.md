@@ -40,7 +40,7 @@ Los puertos 3001–3004 se publican solo en `127.0.0.1` (para probar las APIs de
 | **Microservicio A — Auth** | Login dual (admin y votante), padrón electoral, usuarios, auditoría | Node.js 20 / Express | `bcrypt` para contraseñas y PIN, hash SHA-256 de la cédula, padrón cifrado en reposo (AES-256-GCM), JWT de votante de vida corta, rate limiting, log de auditoría append-only |
 | **Microservicio B — Voting** | Votación **+** administración de plantillas (genéricas o **presidenciales** con candidatos) y elecciones, incluido detenerlas manualmente | Node.js 20 / Express | Exige JWT de **votante** para votar; el anti-doble-voto se ancla a la identidad (`voter_id_hash`), no a IP/navegador; ventana de tiempo verificada en la propia query |
 | **Microservicio C — Analytics** | Resultados (en vivo o certificados), métricas y estadística avanzada de los reportes, tableros configurables | Node.js 20 / Express | Solo lectura para admin/auditor; en elecciones cerradas sirve el acta certificada, nunca un recálculo. Verifica por su cuenta la integridad de las actas |
-| **Microservicio D — Scrutiny** | Recuento **independiente** desde los votos, consolidación por **mesa**, **ganador**, y certificación con cadena de hashes SHA-256; acta en PDF | Node.js 20 / Express | `/internal/certify` solo acepta un token de servicio (`X-Internal-Token`, comparación *timing-safe*), nunca un JWT de usuario |
+| **Microservicio D — Scrutiny** | Recuento **independiente** desde los votos, consolidación por **mesa**, **ganador**, y certificación con cadena de hashes SHA-256 y **firma digital Ed25519**; acta en PDF | Node.js 20 / Express | Es el único con la clave privada que firma las actas (`ACTA_SIGNING_KEY`). `/internal/certify` solo acepta un token de servicio (`X-Internal-Token`, comparación *timing-safe*), nunca un JWT de usuario |
 | **Worker — Scheduler** | Activa/cierra elecciones según su horario y dispara la certificación | Node.js 20 + `node-cron` | Sin puerto publicado; solo habla con Scrutiny dentro de `app-net` |
 | **PostgreSQL** (`postgres`) | Persistencia, incluidos el libro de escrutinio y el log de auditoría | PostgreSQL 16 (`postgres:16-alpine`), volumen `db-data` | Solo en la red interna `db-net`, sin puerto en la PC; sistema de archivos de solo lectura salvo sus datos. Triggers que bloquean `UPDATE`/`DELETE` sobre `scrutiny_ledger` y `audit_log` |
 
@@ -53,7 +53,7 @@ Los puertos 3001–3004 se publican solo en `127.0.0.1` (para probar las APIs de
 
 ## Gestión de secretos
 
-Ningún secreto (`POSTGRES_PASSWORD`, `JWT_SECRET`, `VOTER_ID_SALT`, `VOTERS_ENCRYPTION_KEY`, `INTERNAL_SERVICE_TOKEN`) está en `docker-compose.yml`, `main.tf` ni en el código. Todos se inyectan por variables de entorno desde un `.env` **local**, excluido por `.gitignore`:
+Ningún secreto (`POSTGRES_PASSWORD`, `JWT_SECRET`, `VOTER_ID_SALT`, `VOTERS_ENCRYPTION_KEY`, `INTERNAL_SERVICE_TOKEN`, `ACTA_SIGNING_KEY`) está en `docker-compose.yml`, `main.tf` ni en el código. Todos se inyectan por variables de entorno desde un `.env` **local**, excluido por `.gitignore`:
 
 - `.env.example`: plantilla sin valores reales.
 - `.env`: lo genera `scripts/lib/generar-env.js` la primera vez que corre `start.sh`/`start.bat`/`contenedor.sh`, con valores aleatorios propios de esa instalación. Como cada instalación tiene su propia base, no hay ningún secreto que compartir entre personas o PCs.
@@ -90,16 +90,22 @@ Tampoco hay credenciales de la aplicación en el repositorio: `db/init.sql` no c
    - recuenta los votos DIRECTO desde la tabla "votes" (recuento independiente)
    - consolida por mesa y determina el ganador (los empates se reportan)
    - calcula record_hash = SHA256(previous_hash + resultados)
-   - inserta el acta en "scrutiny_ledger" (append-only, no editable ni borrable)
+   - firma el record_hash con su clave privada Ed25519 (ACTA_SIGNING_KEY)
+   - inserta el acta y su firma en "scrutiny_ledger" (append-only, no editable
+     ni borrable)
 
 7) Analytics, al pedir resultados:
    - si sigue "active"  → conteo en vivo (recalculado siempre)
-   - si ya está "closed" → el acta CERTIFICADA de Scrutiny, nunca un recálculo propio
+   - si ya está "closed" → el acta CERTIFICADA de Scrutiny, nunca un recálculo
+     propio, con su indicador de veracidad: Analytics verifica por su cuenta la
+     firma (con la clave PÚBLICA), la cadena y el recuento → verificada /
+     sin firma / alterada
    - en Reportes: proyección de participación, momento de definición,
-     integridad del acta (cadena + recuento) y accesos sospechosos
+     integridad del acta (firma + cadena + recuento) y accesos sospechosos
 
-8) GET /verify en Scrutiny confirma que TODA la cadena de actas es íntegra,
-   y GET /admin/audit-log en Auth muestra quién intentó entrar y cuándo.
+8) GET /verify en Scrutiny verifica acta por acta toda la cadena y cada firma,
+   el PDF del acta lleva ese veredicto en el encabezado, y GET /admin/audit-log
+   en Auth muestra quién intentó entrar y cuándo.
 ```
 
 ## Estructura del repositorio
@@ -113,13 +119,13 @@ LiveMetric/
 ├── .gitleaks.toml, .trivyignore  # Configuración de los escáneres
 ├── db/
 │   ├── init.sql                  # Esquema completo + datos de demostración (lo carga Postgres)
-│   └── migrations/               # 002–004, solo para bases creadas con un init.sql anterior
+│   └── migrations/               # 002–005, solo para bases creadas con un init.sql anterior
 ├── services/
 │   ├── frontend/                 # SPA React + nginx (proxy reverso)
 │   ├── auth/                     # A: login dual, padrón, usuarios, auditoría
 │   ├── voting/                   # B: votación + administración de plantillas y elecciones
 │   ├── analytics/                # C: resultados, métricas, estadística avanzada, tableros
-│   ├── scrutiny/                 # D: certificación con cadena de hashes, acta en PDF
+│   ├── scrutiny/                 # D: certificación con cadena de hashes y firma digital, acta en PDF
 │   └── scheduler/                # Worker: abre/cierra elecciones y dispara la certificación
 ├── infra/
 │   ├── terraform/                # El mismo stack como código (provider Docker)

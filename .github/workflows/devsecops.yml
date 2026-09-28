@@ -350,6 +350,12 @@ jobs:
           set_secret voter_id_salt "$(openssl rand -hex 32)"
           set_secret internal_service_token "$(openssl rand -hex 32)"
           set_secret voters_encryption_key "$(openssl rand -base64 32)"
+          # Par Ed25519 de la firma de las actas: la publica se deriva de
+          # la privada, asi que las dos salen de un .env generado a proposito.
+          node scripts/lib/generar-env.js "$RUNNER_TEMP/claves.env" > /dev/null
+          set_secret acta_signing_key "$(sed -n 's/^ACTA_SIGNING_KEY=//p' "$RUNNER_TEMP/claves.env")"
+          set_secret acta_public_key "$(sed -n 's/^ACTA_PUBLIC_KEY=//p' "$RUNNER_TEMP/claves.env")"
+          rm -f "$RUNNER_TEMP/claves.env"
 
       - name: Configurar Terraform
         uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3

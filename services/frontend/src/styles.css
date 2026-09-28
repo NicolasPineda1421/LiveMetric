@@ -398,6 +398,39 @@ input, select, textarea {
   font-weight: 600;
 }
 
+/* Indicador de veracidad del acta (Resultados) y veredicto de cada acta
+   (Escrutinio): verde verificada, dorado sin firma, rojo alterada. */
+.acta-seal {
+  border: 1px solid var(--color-border);
+  border-left-width: 4px;
+  background: var(--color-panel-raised);
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin-bottom: 0.9rem;
+}
+.acta-seal strong { display: block; font-size: 0.95rem; margin-bottom: 0.2rem; }
+.acta-seal ul { margin: 0.35rem 0; padding-left: 1.1rem; }
+.acta-seal.tone-ok { border-color: var(--color-success); background: var(--color-success-soft); }
+.acta-seal.tone-ok strong { color: var(--color-success); }
+.acta-seal.tone-warn { border-color: var(--color-accent); background: var(--color-accent-soft); }
+.acta-seal.tone-warn strong { color: var(--color-accent); }
+.acta-seal.tone-bad { border-color: var(--color-danger); background: var(--color-danger-soft); }
+.acta-seal.tone-bad strong { color: var(--color-danger); }
+
+.verdict {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.verdict.tone-ok { background: var(--color-success-soft); color: var(--color-success); }
+.verdict.tone-warn { background: var(--color-accent-soft); color: var(--color-accent); }
+.verdict.tone-bad { background: var(--color-danger-soft); color: var(--color-danger); }
+.verdict-problems { margin: 0.35rem 0 0; padding-left: 1rem; font-size: 0.78rem; color: var(--color-text-muted); }
+
 .live-dot {
   display: inline-block;
   width: 7px;

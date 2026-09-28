@@ -264,7 +264,7 @@
                 "status": "Mitigated",
                 "severity": "Critical",
                 "description": "Modificar un resultado oficial después de certificado.",
-                "mitigation": "Tabla append-only (trigger prevent_row_mutation) + cadena de hashes; alterar una rompe la cadena hacia adelante, detectable vía /verify."
+                "mitigation": "Tabla append-only (trigger prevent_row_mutation) + cadena de hashes; alterar una rompe la cadena hacia adelante, detectable vía /verify. Y aunque se recalculen todos los hashes, la firma digital Ed25519 de cada acta (clave privada solo en scrutiny-service, verificada por analytics con la pública) deja de corresponder: el indicador de veracidad la marca como alterada."
               }
             ]
           } },

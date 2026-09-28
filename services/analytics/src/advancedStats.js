@@ -12,6 +12,7 @@
 // número engañoso. Y ninguna salida permite reconstruir votos individuales.
 
 const { GENESIS_HASH, computeRecordHash } = require('./hashChain');
+const { signatureStatus } = require('./actaSignature');
 
 const MINUTE_MS = 60 * 1000;
 
@@ -289,8 +290,11 @@ function leadTimeline({ options, minuteCounts, start, end }) {
 
 // Recalcula toda la cadena de actas (mismo criterio que GET /verify de
 // scrutiny-service, pero hecho por otro servicio): para cada acta, si su
-// contenido coincide con su hash y si enlaza con la anterior.
-function verifyLedgerChain(ledgerRows) {
+// contenido coincide con su hash, si enlaza con la anterior y el estado de
+// su firma digital contra la clave pública de esta instalación (ver
+// actaSignature.js). Un acta sin firma no rompe la cadena; una firma que no
+// corresponde, o de una clave desconocida, sí.
+function verifyLedgerChain(ledgerRows, publicKey, keyId) {
   const byElection = new Map();
   const broken = [];
   let expectedPrevious = GENESIS_HASH;
@@ -301,9 +305,15 @@ function verifyLedgerChain(ledgerRows) {
       totalVotes: row.total_votes,
       results: row.results,
     });
-    const status = { hashOk: recomputed === row.record_hash, linkOk: row.previous_hash === expectedPrevious };
+    const status = {
+      hashOk: recomputed === row.record_hash,
+      linkOk: row.previous_hash === expectedPrevious,
+      signature: signatureStatus(row, publicKey, keyId),
+    };
     byElection.set(Number(row.election_id), status);
-    if (!status.hashOk || !status.linkOk) broken.push(Number(row.election_id));
+    if (!status.hashOk || !status.linkOk || ['invalida', 'otra_clave'].includes(status.signature)) {
+      broken.push(Number(row.election_id));
+    }
     expectedPrevious = row.record_hash;
   }
   return { valid: broken.length === 0, totalRecords: ledgerRows.length, brokenElectionIds: broken, byElection };
@@ -350,21 +360,32 @@ function compareWithStoredVotes(results, certifiedTotal, stored) {
   };
 }
 
-// Informe completo para una elección: estado de su acta en la cadena, de la
-// cadena en general y recuento contra los votos guardados, con la lista de
-// problemas en palabras. "integra" solo si no aparece ninguno.
-function buildIntegrityReport({ electionId, ledgerRows, stored }) {
+// Informe completo para una elección: estado de su acta en la cadena, su
+// firma digital, la cadena en general y el recuento contra los votos
+// guardados, con la lista de problemas en palabras. Estados:
+//   'integra'    ningún problema y firma válida: el acta es auténtica y no cambió
+//   'sin_firma'  ningún problema, pero el acta no tiene firma (se certificó
+//                antes de la firma digital): no se puede probar quién la emitió
+//   'alterada'   cualquier problema
+// publicKey/keyId: la clave pública de las actas (ver actaKeys.js).
+function buildIntegrityReport({ electionId, ledgerRows, stored, publicKey, keyId }) {
   const index = ledgerRows.findIndex((r) => Number(r.election_id) === Number(electionId));
   if (index === -1) return { state: 'sin_certificar' };
 
   const record = ledgerRows[index];
-  const chain = verifyLedgerChain(ledgerRows);
+  const chain = verifyLedgerChain(ledgerRows, publicKey, keyId);
   const own = chain.byElection.get(Number(electionId));
   const votes = compareWithStoredVotes(record.results, record.total_votes, stored);
 
   const problems = [];
   if (!own.hashOk) problems.push('El contenido del acta no coincide con su hash: fue modificada después de certificarse.');
   if (!own.linkOk) problems.push('El acta no enlaza con la anterior: la cadena se rompe justo en esta acta.');
+  if (own.signature === 'invalida') {
+    problems.push('La firma digital no corresponde al acta: se cambió su hash o su firma después de certificarla.');
+  }
+  if (own.signature === 'otra_clave') {
+    problems.push('El acta dice estar firmada con una clave que esta instalación no reconoce.');
+  }
   const brokenBefore = ledgerRows
     .slice(0, index)
     .map((r) => Number(r.election_id))
@@ -382,10 +403,16 @@ function buildIntegrityReport({ electionId, ledgerRows, stored }) {
   if (votes.optionDiffs.length) problems.push(`${votes.optionDiffs.length} opción(es) no coinciden con el acta.`);
   if (votes.tableDiffs.length) problems.push(`${votes.tableDiffs.length} mesa(s) no coinciden con el acta.`);
 
+  let state = 'integra';
+  if (problems.length) state = 'alterada';
+  else if (own.signature === 'sin_firma') state = 'sin_firma';
+
   return {
-    state: problems.length ? 'alterada' : 'integra',
+    state,
     certifiedAt: record.certified_at,
     recordHash: record.record_hash,
+    signingKeyId: record.signing_key_id || null,
+    publicKeyId: keyId,
     record: own,
     chain: { valid: chain.valid, totalRecords: chain.totalRecords, brokenElectionIds: chain.brokenElectionIds },
     votes,

@@ -10,7 +10,7 @@
 # resultado de compilar el codigo que haya en la maquina en ese momento.
 #
 # Despliegue:
-#   cd orquestacion && ./deploy.sh v1.2.0
+#   cd orquestacion && ./deploy.sh v1.3.0
 #
 # Ver orquestacion/README.md para el detalle.
 # =============================================================================
@@ -195,6 +195,10 @@ services:
       NODE_ENV: production
       PORT: 3003
       JWT_SECRET: ${JWT_SECRET}
+      # Lee el padron cifrado (participacion): sin esta clave no arranca.
+      VOTERS_ENCRYPTION_KEY: ${VOTERS_ENCRYPTION_KEY}
+      # Solo la publica: verifica la firma de las actas, no puede firmar.
+      ACTA_PUBLIC_KEY: ${ACTA_PUBLIC_KEY}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
     ports:
       - target: 3003
@@ -221,6 +225,10 @@ services:
       PORT: 3004
       JWT_SECRET: ${JWT_SECRET}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      # La privada firma cada acta al certificarla; es el unico servicio que
+      # la tiene.
+      ACTA_SIGNING_KEY: ${ACTA_SIGNING_KEY}
+      ACTA_PUBLIC_KEY: ${ACTA_PUBLIC_KEY}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
     ports:
       - target: 3004
