@@ -10,7 +10,7 @@
 # resultado de compilar el codigo que haya en la maquina en ese momento.
 #
 # Despliegue:
-#   cd orquestacion && ./deploy.sh v1.3.1
+#   cd orquestacion && ./deploy.sh v1.3.2
 #
 # Ver orquestacion/README.md para el detalle.
 # =============================================================================

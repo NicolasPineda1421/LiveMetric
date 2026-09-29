@@ -67,7 +67,7 @@ La primera vez tarda varios minutos (construye y analiza las 6 imágenes). Al te
 
 ## Imágenes en Docker Hub
 
-Las 6 imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspineda1421) con cada versión de git (`vX.Y.Z`), etiquetadas con la versión exacta (`1.3.1`), la línea menor (`1.3`) y `latest`. Antes de subirse, cada una se escanea con Trivy: si tiene CVE críticas o altas, no se publica (ver [`release.yml`](.github/workflows/release.yml)). Son las que usa el [despliegue con Docker Swarm](orquestacion/README.md).
+Las 6 imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspineda1421) con cada versión de git (`vX.Y.Z`), etiquetadas con la versión exacta (`1.3.2`), la línea menor (`1.3`) y `latest`. Antes de subirse, cada una se escanea con Trivy: si tiene CVE críticas o altas, no se publica (ver [`release.yml`](.github/workflows/release.yml)). Son las que usa el [despliegue con Docker Swarm](orquestacion/README.md).
 
 | Servicio | Imagen |
 |---|---|
@@ -79,7 +79,7 @@ Las 6 imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspine
 | Scheduler (worker) | [`nicolaspineda1421/livemetric-scheduler`](https://hub.docker.com/r/nicolaspineda1421/livemetric-scheduler) |
 
 ```bash
-docker pull nicolaspineda1421/livemetric-auth:1.3.1
+docker pull nicolaspineda1421/livemetric-auth:1.3.2
 ```
 
 Para publicar una versión nueva basta con crear el tag: `git tag -a v1.4.0 -m "..." && git push origin v1.4.0`.

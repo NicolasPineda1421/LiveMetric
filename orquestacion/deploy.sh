@@ -2,7 +2,7 @@
 # =============================================================================
 # LiveMetric — Despliegue orquestado en Docker Swarm
 #
-# Uso:  ./deploy.sh v1.3.1
+# Uso:  ./deploy.sh v1.3.2
 #
 # Requisitos previos:
 #   - Docker Swarm inicializado:  docker swarm init
@@ -22,7 +22,7 @@ REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 # -----------------------------------------------------------------------------
 VERSION="${1:-}"
 if [ -z "$VERSION" ]; then
-  echo "❌ Falta la version. Uso: ./deploy.sh v1.3.1"
+  echo "❌ Falta la version. Uso: ./deploy.sh v1.3.2"
   exit 1
 fi
 

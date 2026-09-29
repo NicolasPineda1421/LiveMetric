@@ -58,10 +58,10 @@ docker swarm init
 # 2. Desplegar la versión publicada
 cd orquestacion
 chmod +x deploy.sh
-./deploy.sh v1.3.1
+./deploy.sh v1.3.2
 ```
 
-Desde **v1.3.1**: el frontend de las imágenes anteriores no arranca en este stack (escribía fuera de `/tmp`, y Swarm no puede preparar esas carpetas en un sistema de archivos de solo lectura). Las anteriores a v1.3.0, además, no firman las actas (Scrutiny) ni verifican
+Desde **v1.3.2**: el frontend de las imágenes anteriores no arranca en este stack. Escribía fuera de `/tmp`, que Swarm no puede preparar en un sistema de archivos de solo lectura, y resolvía los servicios del API una sola vez al arrancar: en el primer despliegue se crea antes que ellos y se caía. Desde esta versión los resuelve en cada petición, así que arranca en cualquier orden y sigue a cada servicio aunque cambie de IP. Las anteriores a v1.3.0, además, no firman las actas (Scrutiny) ni verifican
 esa firma (Analytics), así que el indicador de veracidad no puede mostrar ninguna acta
 como verificada. Las anteriores a v1.2.0, además, se conectaban a Supabase y no traen lo
 que este stack espera de la base local (el cifrado del padrón al arrancar y
