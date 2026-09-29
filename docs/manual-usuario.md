@@ -1,7 +1,7 @@
 # Manual de Usuario — LiveMetric
 
 > Sistema de Elecciones y Escrutinio en Tiempo Real
-> Documento correspondiente a la sección 4.2 de la documentación obligatoria del curso.
+> Documento correspondiente a la sección 4.6 de la documentación obligatoria del curso.
 
 Este manual está escrito para quien **usa** LiveMetric, no para quien lo instala ni lo
 desarrolla. Si necesita levantar el sistema, vea
@@ -35,9 +35,8 @@ Desde otro equipo de la misma red, se reemplaza `localhost` por la IP del servid
 No requiere instalar nada en el equipo del usuario. Funciona en Chrome, Firefox y Edge
 en sus versiones recientes.
 
-> 📸 **Captura 01 — `01-pantalla-inicio.png`**
-> La pantalla de ingreso completa, recién abierta, con las dos pestañas visibles
-> (Administrador / Votante) y el logotipo de LiveMetric.
+![Captura 01: La pantalla de ingreso, con sus dos pestañas: Administrador / Auditor y Votante](img/01-pantalla-inicio.png)
+*Captura 01. La pantalla de ingreso, con sus dos pestañas: Administrador / Auditor y Votante.*
 
 ---
 
@@ -68,9 +67,8 @@ La pantalla de inicio tiene dos pestañas. Elija la que corresponda a su rol.
 El sistema lo lleva al panel que corresponde a su rol: los administradores ven nueve
 pestañas; los auditores, solo dos.
 
-> 📸 **Captura 02 — `02-login-admin.png`**
-> La pestaña de Administrador con los campos Usuario y Contraseña diligenciados
-> (con la contraseña oculta por puntos, nunca visible).
+![Captura 02: Ingreso de administrador: el usuario escrito y la contraseña oculta](img/02-login-admin.png)
+*Captura 02. Ingreso de administrador: el usuario escrito y la contraseña oculta.*
 
 ### 3.2 Votante
 
@@ -79,17 +77,16 @@ pestañas; los auditores, solo dos.
 3. Escriba su **PIN de acceso**, que le entrega el encargado de su puesto de votación.
 4. Botón **Ingresar a votar**.
 
-> 📸 **Captura 03 — `03-login-votante.png`**
-> La pestaña de Votante con los campos Cédula y PIN, mostrando el texto de ayuda
-> *"El PIN te lo entrega el encargado de tu puesto de votación"*.
+![Captura 03: Ingreso de votante: cédula, PIN de acceso y el texto de ayuda sobre el PIN](img/03-login-votante.png)
+*Captura 03. Ingreso de votante: cédula, PIN de acceso y el texto de ayuda sobre el PIN.*
 
 **Si el ingreso falla**, el sistema siempre responde lo mismo: *"Cédula o PIN
 incorrectos"*. No distingue entre una cédula que no existe y un PIN equivocado. Esto es
 intencional: evita que alguien pueda averiguar quién está inscrito en el padrón probando
 números de cédula.
 
-> 📸 **Captura 04 — `04-login-fallido.png`**
-> Un intento fallido mostrando el mensaje genérico de error.
+![Captura 04: Un intento fallido: el mensaje es el mismo si la cédula no existe o si el PIN es incorrecto](img/04-login-fallido.png)
+*Captura 04. Un intento fallido: el mensaje es el mismo si la cédula no existe o si el PIN es incorrecto.*
 
 **La sesión del votante dura 10 minutos.** Es tiempo suficiente para votar, y limita el
 riesgo si alguien deja la sesión abierta en un equipo compartido. Además, recargar la
@@ -102,9 +99,8 @@ dejar la sesión guardada en el navegador sería un riesgo.
 
 El panel de administración tiene nueve pestañas.
 
-> 📸 **Captura 05 — `05-panel-admin.png`**
-> El panel completo recién ingresado, con las nueve pestañas visibles y la de
-> Resumen activa.
+![Captura 05: El panel del administrador, con sus nueve pestañas y Resumen activa](img/05-panel-admin.png)
+*Captura 05. El panel del administrador, con sus nueve pestañas y Resumen activa.*
 
 ### 4.1 Resumen
 
@@ -113,9 +109,8 @@ y **Cerradas**, más una guía de primeros pasos.
 
 Es la pantalla de control: de un vistazo se sabe si hay una votación en curso.
 
-> 📸 **Captura 06 — `06-resumen.png`**
-> La pestaña Resumen con al menos una elección en cada estado, para que se vean
-> los tres contadores con datos.
+![Captura 06: Resumen: una elección programada, una activa y una cerrada](img/06-resumen.png)
+*Captura 06. Resumen: una elección programada, una activa y una cerrada.*
 
 ### 4.2 Plantillas
 
@@ -132,12 +127,11 @@ Para crear una:
 5. Use **Quitar** para eliminar una fila que sobre.
 6. Guarde la plantilla.
 
-> 📸 **Captura 07 — `07-plantilla-nueva.png`**
-> El formulario de nueva plantilla con tres o cuatro candidatos ya cargados,
-> mostrando los campos de número, nombre y foto.
+![Captura 07: Nueva plantilla presidencial con cuatro candidatos: número, nombre y foto](img/07-plantilla-nueva.png)
+*Captura 07. Nueva plantilla presidencial con cuatro candidatos: número, nombre y foto.*
 
-> 📸 **Captura 08 — `08-plantillas-lista.png`**
-> El listado de plantillas existentes.
+![Captura 08: Las plantillas existentes, con sus candidatos u opciones](img/08-plantillas-lista.png)
+*Captura 08. Las plantillas existentes, con sus candidatos u opciones.*
 
 ### 4.3 Elecciones
 
@@ -157,11 +151,11 @@ cierre. Un componente interno revisa esto de forma continua.
 Si necesita terminar una votación antes de tiempo, use **Detener** sobre una elección
 activa.
 
-> 📸 **Captura 09 — `09-eleccion-programar.png`**
-> El formulario de nueva elección con plantilla seleccionada y las dos fechas.
+![Captura 09: Nueva elección: plantilla, título y ventana de apertura y cierre](img/09-eleccion-programar.png)
+*Captura 09. Nueva elección: plantilla, título y ventana de apertura y cierre.*
 
-> 📸 **Captura 10 — `10-elecciones-lista.png`**
-> El listado mostrando elecciones en distintos estados (programada, activa, cerrada).
+![Captura 10: Las elecciones en sus tres estados: programada, activa y cerrada](img/10-elecciones-lista.png)
+*Captura 10. Las elecciones en sus tres estados: programada, activa y cerrada.*
 
 ### 4.4 Padrón
 
@@ -187,16 +181,14 @@ misma pestaña, en la sección **PIN de acceso generados**.
 
 Si un votante pierde su PIN, el administrador se lo regenera desde el listado del padrón.
 
-> 📸 **Captura 11 — `11-padron-carga.png`**
-> El formulario de carga con varios votantes listos para cargar.
+![Captura 11: Carga del padrón: una fila por votante (cédula, nombre, puesto y mesa)](img/11-padron-carga.png)
+*Captura 11. Carga del padrón: una fila por votante (cédula, nombre, puesto y mesa).*
 
-> 📸 **Captura 12 — `12-padron-pines.png`**
-> La pantalla de PINes generados. **Cubra o difumine los PINes reales antes de
-> guardar la captura**: no deben quedar credenciales visibles en la documentación del
-> proyecto.
+![Captura 12: Los PIN generados, que se muestran una sola vez. En esta captura están difuminados: no deben quedar credenciales en la documentación](img/12-padron-pines.png)
+*Captura 12. Los PIN generados, que se muestran una sola vez. En esta captura están difuminados: no deben quedar credenciales en la documentación.*
 
-> 📸 **Captura 13 — `13-padron-lista.png`**
-> El listado del padrón con las columnas Cédula y Nombre.
+![Captura 13: El padrón actual, con el estado del PIN de cada votante](img/13-padron-lista.png)
+*Captura 13. El padrón actual, con el estado del PIN de cada votante.*
 
 ### 4.5 Usuarios
 
@@ -207,8 +199,8 @@ Para crear otros administradores o auditores.
 3. Elija el rol: **Administrador** o **Auditor (solo lectura)**.
 4. Botón **Crear usuario**.
 
-> 📸 **Captura 14 — `14-usuarios.png`**
-> El formulario mostrando las dos opciones de rol disponibles.
+![Captura 14: Creación de un usuario con rol de auditor (solo lectura)](img/14-usuarios.png)
+*Captura 14. Creación de un usuario con rol de auditor (solo lectura).*
 
 ### 4.6 Resultados
 
@@ -225,11 +217,11 @@ por el **indicador de veracidad del acta**, que se comprueba cada vez que se con
 El administrador puede **descargar el acta en PDF** desde aquí; el documento lleva el
 mismo veredicto en su encabezado, comprobado en el momento de generarlo.
 
-> 📸 **Captura 15 — `15-resultados-vivo.png`**
-> Resultados de una elección activa, con las gráficas de conteo.
+![Captura 15: Resultados en vivo de una elección activa](img/15-resultados-vivo.png)
+*Captura 15. Resultados en vivo de una elección activa.*
 
-> 📸 **Captura 16 — `16-resultados-certificados.png`**
-> Resultados de una elección ya cerrada y certificada.
+![Captura 16: Resultados de una elección cerrada: el indicador "Acta verificada", el ganador y el conteo certificado](img/16-resultados-certificados.png)
+*Captura 16. Resultados de una elección cerrada: el indicador "Acta verificada", el ganador y el conteo certificado.*
 
 ### 4.7 Reportes
 
@@ -238,8 +230,8 @@ participación, métricas operativas, de integridad y de accesos sospechosos.
 
 Los tableros se pueden **exportar a PDF**.
 
-> 📸 **Captura 17 — `17-reportes.png`**
-> Un tablero de reportes con varias gráficas cargadas.
+![Captura 17: Un tablero de reportes sobre la elección certificada: integridad del acta, participación, concentración del voto, resultados y evolución](img/17-reportes.png)
+*Captura 17. Un tablero de reportes sobre la elección certificada: integridad del acta, participación, concentración del voto, resultados y evolución.*
 
 ### 4.8 Escrutinio
 
@@ -261,14 +253,14 @@ recorre toda la cadena y muestra, acta por acta, si su contenido, su enlace con 
 anterior y su firma digital están en orden, con un veredicto (verificada, sin firma o
 alterada) y la explicación de cualquier problema.
 
-> 📸 **Captura 18 — `18-escrutinio-actas.png`**
-> El listado de actas por mesa, con sus huellas digitales visibles.
+![Captura 18: El acta de escrutinio por mesa, en la pestaña Resultados de una elección certificada](img/18-escrutinio-actas.png)
+*Captura 18. El acta de escrutinio por mesa, en la pestaña Resultados de una elección certificada.*
 
-> 📸 **Captura 19 — `19-escrutinio-verificacion.png`**
-> El resultado de la verificación de integridad, mostrando la cadena íntegra.
+![Captura 19: La verificación de todas las actas: contenido, enlace con la anterior y firma digital, con su veredicto](img/19-escrutinio-verificacion.png)
+*Captura 19. La verificación de todas las actas: contenido, enlace con la anterior y firma digital, con su veredicto.*
 
-> 📸 **Captura 20 — `20-acta-pdf.png`**
-> El acta descargada en PDF, abierta en el visor.
+![Captura 20: Primera página del acta en PDF, con el veredicto de verificación en el encabezado](img/20-acta-pdf.png)
+*Captura 20. Primera página del acta en PDF, con el veredicto de verificación en el encabezado.*
 
 ### 4.9 Auditoría
 
@@ -284,9 +276,8 @@ Dos características importantes:
   documento, no con el documento mismo. Así se puede auditar el comportamiento sin
   exponer los datos personales de nadie.
 
-> 📸 **Captura 21 — `21-auditoria.png`**
-> El registro de auditoría con varios eventos de distinto tipo, mostrando que las
-> referencias de actor son códigos y no cédulas.
+![Captura 21: El registro de auditoría: los votantes aparecen con un código derivado de su cédula, nunca con la cédula](img/21-auditoria.png)
+*Captura 21. El registro de auditoría: los votantes aparecen con un código derivado de su cédula, nunca con la cédula.*
 
 ---
 
@@ -302,8 +293,8 @@ asignados.
 Si no hay ninguna votación en curso, verá el mensaje *"No hay elecciones activas en este
 momento. Vuelve más tarde."*
 
-> 📸 **Captura 22 — `22-votante-elecciones.png`**
-> La vista del votante con una elección abierta y sus datos de puesto y mesa visibles.
+![Captura 22: El votante ve la elección abierta y su puesto y mesa](img/22-votante-elecciones.png)
+*Captura 22. El votante ve la elección abierta y su puesto y mesa.*
 
 ### 5.2 Emitir el voto
 
@@ -311,13 +302,13 @@ momento. Vuelve más tarde."*
 2. Seleccione su opción.
 3. Confirme.
 
-> 📸 **Captura 23 — `23-votante-boleta.png`**
-> La boleta con los candidatos desplegados.
+![Captura 23: La boleta con un candidato seleccionado, antes de emitir el voto](img/23-votante-boleta.png)
+*Captura 23. La boleta con un candidato seleccionado, antes de emitir el voto.*
 
 Al confirmar, aparece la pantalla **Voto registrado**.
 
-> 📸 **Captura 24 — `24-voto-registrado.png`**
-> La confirmación de voto registrado.
+![Captura 24: La confirmación de voto registrado](img/24-voto-registrado.png)
+*Captura 24. La confirmación de voto registrado.*
 
 ### 5.3 Historial
 
@@ -328,8 +319,8 @@ Si intenta votar dos veces en la misma elección, verá *"Ya emitiste tu voto en
 elección"* y la opción quedará bloqueada. El sistema lo impide por tres vías distintas y
 simultáneas, de modo que ni un fallo ni una manipulación pueden burlarlo.
 
-> 📸 **Captura 25 — `25-votante-historial.png`**
-> El historial mostrando el aviso *"Ya emitiste tu voto en esta elección"*.
+![Captura 25: Después de votar: el aviso "Ya emitiste tu voto en esta elección" y el historial, que no muestra la opción elegida](img/25-votante-historial.png)
+*Captura 25. Después de votar: el aviso "Ya emitiste tu voto en esta elección" y el historial, que no muestra la opción elegida.*
 
 ### 5.4 Salir
 
@@ -347,9 +338,8 @@ No puede crear elecciones, ni cargar el padrón, ni crear usuarios. Esas opcione
 sencillamente no aparecen: la restricción no es que los botones estén ocultos, es que el
 servidor rechaza cualquier intento de usar esas funciones con una sesión de auditor.
 
-> 📸 **Captura 26 — `26-panel-auditor.png`**
-> El panel del auditor, donde se aprecia que solo hay dos pestañas frente a las
-> nueve del administrador. Esta captura es valiosa puesta al lado de la Captura 05.
+![Captura 26: El panel del auditor: solo dos pestañas, frente a las nueve del administrador (Captura 05)](img/26-panel-auditor.png)
+*Captura 26. El panel del auditor: solo dos pestañas, frente a las nueve del administrador (Captura 05).*
 
 ---
 
@@ -410,8 +400,9 @@ Escrutinio, que revisa todas las actas y señala exactamente cuál y qué falló
 
 ## Anexo — Lista de capturas
 
-Guárdelas en `docs/img/` con estos nombres exactos y reemplace cada marcador 📸 de este
-documento por la imagen, con la sintaxis `![descripción](img/nombre.png)`.
+Las capturas están en `docs/img/`. Se tomaron con los datos de demostración (padrón,
+candidatos y votos ficticios) sobre una instalación limpia, con el navegador a 1280 px de
+ancho. Ninguna muestra credenciales: la contraseña aparece oculta y los PIN, difuminados.
 
 | # | Archivo | Contenido |
 |---|---|---|
@@ -426,14 +417,14 @@ documento por la imagen, con la sintaxis `![descripción](img/nombre.png)`.
 | 09 | `09-eleccion-programar.png` | Programar elección |
 | 10 | `10-elecciones-lista.png` | Listado de elecciones |
 | 11 | `11-padron-carga.png` | Carga del padrón |
-| 12 | `12-padron-pines.png` | PINes generados (**difuminar**) |
+| 12 | `12-padron-pines.png` | PINes generados (difuminados) |
 | 13 | `13-padron-lista.png` | Listado del padrón |
 | 14 | `14-usuarios.png` | Creación de usuarios y roles |
 | 15 | `15-resultados-vivo.png` | Resultados preliminares |
 | 16 | `16-resultados-certificados.png` | Resultados certificados |
 | 17 | `17-reportes.png` | Tablero de reportes |
-| 18 | `18-escrutinio-actas.png` | Actas por mesa |
-| 19 | `19-escrutinio-verificacion.png` | Verificación de la cadena |
+| 18 | `18-escrutinio-actas.png` | Acta por mesa (Resultados) |
+| 19 | `19-escrutinio-verificacion.png` | Verificación de las actas |
 | 20 | `20-acta-pdf.png` | Acta en PDF |
 | 21 | `21-auditoria.png` | Registro de auditoría |
 | 22 | `22-votante-elecciones.png` | Elecciones abiertas |
@@ -442,11 +433,5 @@ documento por la imagen, con la sintaxis `![descripción](img/nombre.png)`.
 | 25 | `25-votante-historial.png` | Historial y bloqueo de doble voto |
 | 26 | `26-panel-auditor.png` | Panel de auditor (2 pestañas) |
 
-**Recomendaciones para las capturas:**
-
-- Ventana del navegador en 1280 px de ancho: se ve completo y pesa poco.
-- Use los datos de demostración, nunca datos reales de personas.
-- **Difumine los PINes** de la captura 12 y cualquier contraseña visible.
-- Formato PNG.
-- Las capturas 05 y 26 juntas demuestran visualmente el control de acceso por rol:
-  vale la pena usarlas también en el informe y en el video.
+Las capturas 05 y 26 juntas muestran el control de acceso por rol: conviene usarlas también
+en el informe y en el video.
