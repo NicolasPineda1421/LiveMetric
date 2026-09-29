@@ -105,7 +105,7 @@
                   "status": "Mitigated",
                   "severity": "Medium",
                   "description": "Intentar muchos PIN distintos hasta acertar.",
-                  "mitigation": "Rate limiting: 8 intentos / 15 min por IP (voterLoginLimiter en services/auth/src/index.js)."
+                  "mitigation": "Rate limiting: 8 intentos fallidos cada 15 min por IP (voterLoginLimiter en services/auth/src/app.js); los ingresos correctos no cuentan, para que un puesto con un solo equipo atienda a todos sus votantes."
                 }
               ]
             }

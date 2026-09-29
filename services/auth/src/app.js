@@ -33,13 +33,16 @@ app.use(helmet());
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000' }));
 app.use(express.json({ limit: '10kb' }));
 
-// El login de votantes usa cédula como usuario Y contraseña (ver Manual de
-// Seguridad): no hay secreto real que proteger con fuerza bruta, por lo que
-// el rate limiting aquí es la principal barrera técnica contra el intento
-// masivo de "adivinar" cédulas válidas. Se limita agresivamente por IP.
+// Login de votantes (cédula + PIN de 6 dígitos): el límite frena a quien
+// intenta adivinar PINs o cédulas. Solo cuentan los intentos FALLIDOS: en un
+// puesto de votación todos los votantes entran desde el mismo equipo (la
+// misma IP), y si contaran también los correctos, el noveno votante en 15
+// minutos quedaría bloqueado. Después de 8 fallos, la IP queda bloqueada
+// hasta que pase la ventana, también para el PIN correcto.
 const voterLoginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 8,
+  skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiados intentos. Intenta de nuevo más tarde.' },

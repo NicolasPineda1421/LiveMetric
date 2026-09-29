@@ -21,7 +21,7 @@ El modelo formal está en [`threat-model/livemetric.threatdragon.json`](threat-m
 
 | Amenaza | STRIDE | Control |
 |---|---|---|
-| Suplantar a un votante conociendo su cédula | Spoofing | Cédula + PIN de 6 dígitos; 8 intentos cada 15 minutos por IP |
+| Suplantar a un votante conociendo su cédula | Spoofing | Cédula + PIN de 6 dígitos; 8 intentos fallidos cada 15 minutos por IP |
 | Votar dos veces | Elevation of Privilege | `UNIQUE(election_id, voter_id_hash)` en la base |
 | Alterar un acta certificada, aunque sea recalculando todos los hashes | Tampering | Tabla append-only + cadena de hashes + firma digital Ed25519 de cada acta |
 | Fuga de la base de datos | Information Disclosure | Cédula, puesto y mesa cifrados con AES-256-GCM |
