@@ -114,7 +114,7 @@ La última corrida (septiembre de 2026) dio **0 altas, 1 media, 7 bajas y 9 info
 
 | Riesgo | Alerta | Lectura |
 |---|---|---|
-| Medio | *Content Security Policy (CSP) Header Not Set* | nginx no enviaba una política CSP, la defensa en profundidad contra XSS del frontend. **Corregido** |
+| Medio | *Content Security Policy (CSP) Header Not Set* | nginx no enviaba una política CSP, la defensa en profundidad contra XSS del frontend. **Corregido**: la política permite en línea solo el atributo `style` y un `<style>` de html2canvas autorizado por su hash, nunca scripts |
 | Bajo | *X-Content-Type-Options Header Missing* (1 instancia) | `/config.js` perdía las cabeceras de seguridad: en nginx, un `add_header` dentro de un `location` anula los del servidor. **Corregido** |
 | Bajo | COEP, COOP, CORP y *Permissions-Policy* ausentes; nginx revela su versión (`Server`) | Endurecimiento del navegador y del servidor. **Corregido** |
 | Bajo | *Timestamp Disclosure* | Constantes numéricas del JavaScript compilado (de las librerías) que ZAP interpreta como marcas de tiempo, por ejemplo `1604231423`. Falso positivo |
