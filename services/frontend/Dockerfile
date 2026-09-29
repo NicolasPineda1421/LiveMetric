@@ -28,13 +28,13 @@ COPY cabeceras-seguridad.conf /etc/nginx/cabeceras-seguridad.conf
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 # - "user nginx;" solo tiene sentido si el maestro arranca como root: se
 #   quita para que no avise que la ignora.
-# - /var/cache/nginx (buffers) y /run (nginx.pid y el config.js que genera
-#   docker-entrypoint.sh) pasan a ser del usuario nginx. Esto cubre cuando se
-#   corre sin montajes extra, como en infra/terraform/main.tf; docker-compose
-#   las monta como tmpfs y ahi el dueno se fija con uid/gid.
+# - El pid va a /tmp, igual que los buffers y el config.js (ver nginx.conf y
+#   docker-entrypoint.sh): /tmp es lo unico escribible que hace falta, y ya
+#   es de todos (modo 1777), con o sin tmpfs montado encima. Asi funciona
+#   igual en compose, Swarm y Terraform.
 RUN chmod +x /docker-entrypoint.sh && \
     sed -i '/^user /d' /etc/nginx/nginx.conf && \
-    chown -R nginx:nginx /var/cache/nginx /run
+    sed -i 's|^pid .*|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf
 
 USER nginx
 EXPOSE 8080

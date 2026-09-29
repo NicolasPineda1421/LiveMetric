@@ -27,6 +27,8 @@ es el mismo que fue auditado, no una recompilación local que podría diferir.
 | Base de datos | Contenedor `postgres`, volumen `db-data` | Igual, con su propio volumen; una réplica fijada al nodo manager y `init.sql` como `config` de Swarm versionada |
 | Límites de recursos | Ninguno | CPU y memoria acotadas por servicio |
 | Rotación de logs | Ninguna | 3 archivos de 10 MB por servicio |
+| Puertos publicados | 3000 (frontend) en la red; 3001 a 3004 solo en `127.0.0.1`, para probar el API | Solo el 3000: el API se alcanza a través de nginx |
+| Endurecimiento | Sin root, solo lectura, `no-new-privileges` | Sin root, solo lectura y **sin ninguna capability** (`cap_drop: ALL`), porque Swarm no soporta `no-new-privileges` |
 
 ## Por qué dos servicios no se replican
 
@@ -56,10 +58,10 @@ docker swarm init
 # 2. Desplegar la versión publicada
 cd orquestacion
 chmod +x deploy.sh
-./deploy.sh v1.3.0
+./deploy.sh v1.3.1
 ```
 
-Desde **v1.3.0**: las imágenes anteriores no firman las actas (Scrutiny) ni verifican
+Desde **v1.3.1**: el frontend de las imágenes anteriores no arranca en este stack (escribía fuera de `/tmp`, y Swarm no puede preparar esas carpetas en un sistema de archivos de solo lectura). Las anteriores a v1.3.0, además, no firman las actas (Scrutiny) ni verifican
 esa firma (Analytics), así que el indicador de veracidad no puede mostrar ninguna acta
 como verificada. Las anteriores a v1.2.0, además, se conectaban a Supabase y no traen lo
 que este stack espera de la base local (el cifrado del padrón al arrancar y
@@ -112,12 +114,18 @@ watch -n 1 docker stack services livemetric
 
 ## Limitaciones conocidas
 
-**Los puertos se publican en todas las interfaces.** El `docker-compose.yml` publica los
-microservicios solo en `127.0.0.1`. Swarm no permite restringir el puerto a una interfaz
-en modo `ingress`, así que en este stack quedan accesibles desde la red. En un despliegue
-real esto se resuelve poniendo los cuatro microservicios detrás de un reverse proxy y
-publicando únicamente el 443 — que es además la forma correcta de cerrar la ausencia de
-API Gateway documentada en [decisiones y riesgos](../docs/decisiones-y-riesgos.md).
+**Sin HTTPS.** El único puerto publicado es el 3000, en HTTP. En un despliegue real iría
+un certificado TLS en nginx (o un balanceador delante) y se publicaría el 443.
+
+**Lo que Swarm no soporta del compose.** `docker stack deploy` ignora dos opciones que en
+el compose endurecen los contenedores, y el stack las reemplaza:
+
+- `security_opt` (`no-new-privileges`): en su lugar, los servicios corren sin ninguna
+  capability de Linux (`cap_drop: ALL`). Ninguno las necesita: todos corren sin root.
+- La clave `tmpfs`: los `tmpfs` van con la sintaxis larga de `volumes`, **sin opciones**.
+  `docker stack deploy` descarta el modo y deja el `tmpfs` inaccesible, y Swarm no
+  permite elegir su dueño. Por eso nginx escribe todo lo suyo (buffers, pid y
+  `config.js`) en `/tmp`, que es de todos (modo 1777).
 
 **Los secretos viajan como variables de entorno.** Swarm ofrece `docker secret`, que los
 monta como archivos en `/run/secrets/` en lugar de exponerlos en la definición del
@@ -125,8 +133,15 @@ servicio. Aprovecharlo requiere un cambio menor en los servicios: leer
 `/run/secrets/<nombre>` cuando el archivo exista y caer a la variable de entorno cuando
 no. Es el siguiente paso natural de endurecimiento y está pendiente.
 
-**Un solo nodo.** El stack está probado en un Swarm de nodo único. La base ya queda
-fijada al nodo manager; en varios nodos habría que hacer lo mismo con el scheduler.
+**Un solo nodo.** El stack está probado en un Swarm de nodo único, de punta a punta:
+los 7 servicios convergen, el login funciona a través del balanceo entre réplicas, el
+padrón queda cifrado y el scheduler certifica y firma las actas, que Escrutinio y
+Analytics dan por verificadas. La base ya queda fijada al nodo manager; en varios nodos
+habría que hacer lo mismo con el scheduler.
+
+**No convive con `docker compose` en la misma PC.** Los dos usan los mismos nombres de
+red (`livemetric_app-net`, `livemetric_db-net`) y el mismo puerto 3000: antes de desplegar
+el stack hay que bajar el compose (`docker compose down`), y al revés.
 
 **La base no tiene respaldo automático ni alta disponibilidad.** Si el nodo manager se
 pierde, se pierde la base. El respaldo es manual (`pg_dump`, ver

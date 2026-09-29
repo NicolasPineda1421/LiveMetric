@@ -339,9 +339,6 @@ services:
       - no-new-privileges:true
     read_only: true
     tmpfs:
+      # nginx corre sin root y escribe acá todo lo suyo: buffers, pid y el
+      # config.js (ver nginx.conf y el Dockerfile).
       - /tmp
-      # Del usuario nginx (uid/gid 101 en la imagen): nginx corre sin root y
-      # escribe acá sus buffers, su pid y el config.js (ver Dockerfile). Sin
-      # uid/gid, un tmpfs montado sobre una carpeta existente queda de root.
-      - /var/cache/nginx:uid=101,gid=101
-      - /var/run:uid=101,gid=101

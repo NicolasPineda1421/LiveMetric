@@ -10,7 +10,7 @@
 # resultado de compilar el codigo que haya en la maquina en ese momento.
 #
 # Despliegue:
-#   cd orquestacion && ./deploy.sh v1.3.0
+#   cd orquestacion && ./deploy.sh v1.3.1
 #
 # Ver orquestacion/README.md para el detalle.
 # =============================================================================
@@ -46,12 +46,19 @@ x-service-common: &service-common
   networks:
     - app-net
   read_only: true
-  tmpfs:
-    - /tmp
-  # El endurecimiento del compose se conserva: sin escalada de privilegios y
-  # sistema de archivos de solo lectura.
-  security_opt:
-    - no-new-privileges:true
+  # En Swarm la clave "tmpfs" del compose se ignora: los tmpfs van con la
+  # sintaxis larga de volumes. Un servicio que declare sus propios volumes
+  # tiene que repetir este. Sin opciones: "docker stack deploy" descarta el
+  # modo de un tmpfs y lo dejaria inaccesible; sin ellas queda en 1777.
+  # Los frontends (nginx) escriben todo en /tmp, asi que les alcanza.
+  volumes:
+    - type: tmpfs
+      target: /tmp
+  # Swarm no soporta "security_opt" (no-new-privileges): en su lugar, sin
+  # ninguna capability de Linux. Ningun servicio las necesita: todos corren
+  # sin root, y nginx escucha en el 8080.
+  cap_drop:
+    - ALL
   logging:
     driver: json-file
     options:
@@ -156,11 +163,6 @@ services:
       VOTER_ID_SALT: ${VOTER_ID_SALT}
       VOTERS_ENCRYPTION_KEY: ${VOTERS_ENCRYPTION_KEY}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
-    ports:
-      - target: 3001
-        published: 3001
-        protocol: tcp
-        mode: ingress
     deploy: *deploy-defaults
 
   # ---------------------------------------------------------------------------
@@ -176,11 +178,6 @@ services:
       PORT: 3002
       JWT_SECRET: ${JWT_SECRET}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
-    ports:
-      - target: 3002
-        published: 3002
-        protocol: tcp
-        mode: ingress
     deploy: *deploy-defaults
 
   # ---------------------------------------------------------------------------
@@ -200,11 +197,6 @@ services:
       # Solo la publica: verifica la firma de las actas, no puede firmar.
       ACTA_PUBLIC_KEY: ${ACTA_PUBLIC_KEY}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
-    ports:
-      - target: 3003
-        published: 3003
-        protocol: tcp
-        mode: ingress
     deploy: *deploy-defaults
 
   # ---------------------------------------------------------------------------
@@ -230,11 +222,6 @@ services:
       ACTA_SIGNING_KEY: ${ACTA_SIGNING_KEY}
       ACTA_PUBLIC_KEY: ${ACTA_PUBLIC_KEY}
       FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
-    ports:
-      - target: 3004
-        published: 3004
-        protocol: tcp
-        mode: ingress
     deploy:
       <<: *deploy-defaults
       replicas: 1
@@ -271,6 +258,9 @@ services:
   frontend:
     <<: *service-common
     image: ${DOCKERHUB_NAMESPACE}/livemetric-frontend:${LIVEMETRIC_VERSION}
+    # Es el UNICO puerto publicado del stack: los cuatro servicios del API no
+    # publican los suyos (en Swarm quedarian abiertos en todas las
+    # interfaces); se llega a ellos a traves de nginx, por la red interna.
     # Rutas relativas: el navegador solo habla con el frontend, y nginx
     # reenvia a cada servicio por app-net (igual que en docker-compose.yml).
     # Asi la Content-Security-Policy puede limitar las conexiones a este origen.
