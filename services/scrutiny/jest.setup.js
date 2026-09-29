@@ -22,7 +22,7 @@ process.env.VOTER_JWT_EXPIRES_IN ||= '10m';
 // verifica en analytics-service, así que se generan juntas.
 if (!process.env.ACTA_SIGNING_KEY) {
   const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
-  const crudo = (clave, campo) => Buffer.from(clave.export({ format: 'jwk' })[campo], 'base64url').toString('base64');
-  process.env.ACTA_SIGNING_KEY = crudo(privateKey, 'd');
-  process.env.ACTA_PUBLIC_KEY = crudo(publicKey, 'x');
+  const base64 = (base64url) => Buffer.from(base64url, 'base64url').toString('base64');
+  process.env.ACTA_SIGNING_KEY = base64(privateKey.export({ format: 'jwk' }).d);
+  process.env.ACTA_PUBLIC_KEY = base64(publicKey.export({ format: 'jwk' }).x);
 }

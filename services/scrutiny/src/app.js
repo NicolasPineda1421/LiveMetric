@@ -219,12 +219,12 @@ app.get(
     }
     try {
       const ledger = await loadLedger();
-      const index = ledger.findIndex((row) => Number(row.election_id) === req.params.electionId);
-      if (index === -1) {
+      const row = ledger.find((r) => Number(r.election_id) === req.params.electionId);
+      if (!row) {
         return res.status(404).json({ error: 'Esta elección aún no tiene acta de escrutinio' });
       }
-      const { title: _title, ...record } = ledger[index];
-      const verification = verifyLedger(ledger, publicKey, keyId)[index];
+      const { title: _title, ...record } = row;
+      const verification = verifyLedger(ledger, publicKey, keyId).find((r) => r.electionId === req.params.electionId);
       return res.status(200).json({ ...record, verification: { ...verification, publicKeyId: keyId } });
     } catch (err) {
       console.error('Error en /certifications/:electionId:', err.message);
@@ -251,16 +251,15 @@ app.get(
     }
     try {
       const ledger = await loadLedger();
-      const index = ledger.findIndex((row) => Number(row.election_id) === req.params.electionId);
-      if (index === -1) {
+      const certification = ledger.find((r) => Number(r.election_id) === req.params.electionId);
+      if (!certification) {
         return res.status(404).json({ error: 'Esta elección aún no tiene acta de escrutinio' });
       }
-      const certification = ledger[index];
 
       streamActaPdf(res, {
         election: { id: req.params.electionId, title: certification.title },
         certification,
-        verification: verifyLedger(ledger, publicKey, keyId)[index],
+        verification: verifyLedger(ledger, publicKey, keyId).find((r) => r.electionId === req.params.electionId),
         publicKeyId: keyId,
       });
     } catch (err) {
@@ -280,11 +279,7 @@ app.get(
 app.get('/verify', requireAuth, readLimiter, async (_req, res) => {
   try {
     const ledger = await loadLedger();
-    const records = verifyLedger(ledger, publicKey, keyId).map((record, i) => ({
-      ...record,
-      title: ledger[i].title,
-      certifiedAt: ledger[i].certified_at,
-    }));
+    const records = verifyLedger(ledger, publicKey, keyId);
     const broken = records.filter((r) => r.verdict === 'alterada');
 
     return res.status(200).json({

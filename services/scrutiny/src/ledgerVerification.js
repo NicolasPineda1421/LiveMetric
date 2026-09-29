@@ -46,7 +46,7 @@ function verifyLedger(rows, publicKey, keyId) {
 
     if (!ownOk && firstBroken === null) firstBroken = electionId;
     expectedPrevious = row.record_hash;
-    return { electionId, hashOk, linkOk, signature, verdict, problems };
+    return { electionId, title: row.title, certifiedAt: row.certified_at, hashOk, linkOk, signature, verdict, problems };
   });
 }
 

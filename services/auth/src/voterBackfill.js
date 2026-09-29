@@ -28,6 +28,7 @@ async function encryptPlaintextVoters(pool, log = () => {}) {
   const { rows } = await pool.query('SELECT id, cedula, polling_place, voting_table FROM voters ORDER BY id');
   let changed = 0;
   for (const row of rows) {
+    // eslint-disable-next-line security/detect-object-injection -- column sale de COLUMNS, la lista fija de arriba
     const pending = COLUMNS.filter((column) => row[column] && !isAlreadyEncrypted(row[column]));
     if (!pending.length) continue;
 
@@ -35,6 +36,7 @@ async function encryptPlaintextVoters(pool, log = () => {}) {
     try {
       await client.query('BEGIN');
       for (const column of pending) {
+        // eslint-disable-next-line security/detect-object-injection -- column sale de COLUMNS, la lista fija de arriba
         await client.query(`UPDATE voters SET ${column} = $1 WHERE id = $2`, [encryptField(row[column]), row.id]);
       }
       await client.query('COMMIT');

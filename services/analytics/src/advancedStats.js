@@ -28,6 +28,7 @@ const sumVotes = (rows) => rows.reduce((sum, r) => sum + r.votes, 0);
 function median(values) {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
+  // eslint-disable-next-line security/detect-object-injection -- mid es un índice numérico dentro del arreglo
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
@@ -269,6 +270,7 @@ function leadTimeline({ options, minuteCounts, start, end }) {
   if (currentLeader) {
     let i = checkpoints.length - 1;
     while (i > 0 && checkpoints[i - 1].leader?.optionId === currentLeader.optionId) i -= 1;
+    // eslint-disable-next-line security/detect-object-injection -- i es un índice numérico de checkpoints
     stableSince = { at: checkpoints[i].at, votesCountedPct: pct(checkpoints[i].votesCounted, total), fromStart: i === 0 };
   }
 
@@ -372,6 +374,7 @@ function buildIntegrityReport({ electionId, ledgerRows, stored, publicKey, keyId
   const index = ledgerRows.findIndex((r) => Number(r.election_id) === Number(electionId));
   if (index === -1) return { state: 'sin_certificar' };
 
+  // eslint-disable-next-line security/detect-object-injection -- index viene de findIndex sobre el mismo arreglo
   const record = ledgerRows[index];
   const chain = verifyLedgerChain(ledgerRows, publicKey, keyId);
   const own = chain.byElection.get(Number(electionId));
@@ -458,6 +461,7 @@ function peakInWindow(events, windowMs, distinctKey) {
   let best = { count: 0, from: null, to: null };
   const inWindow = new Map();
   let left = 0;
+  /* eslint-disable security/detect-object-injection -- left y right son índices numéricos de la ventana sobre events */
   for (let right = 0; right < events.length; right++) {
     const key = distinctKey ? distinctKey(events[right]) : right;
     inWindow.set(key, (inWindow.get(key) || 0) + 1);
@@ -470,6 +474,7 @@ function peakInWindow(events, windowMs, distinctKey) {
     }
     if (inWindow.size > best.count) best = { count: inWindow.size, from: events[left].at, to: events[right].at };
   }
+  /* eslint-enable security/detect-object-injection */
   return best;
 }
 

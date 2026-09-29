@@ -21,7 +21,7 @@
 // no lee los .bat como UTF-8, asi que los acentos escritos en un .bat salen
 // desfigurados, mientras que Node los muestra bien en las dos plataformas.
 //
-// <control>: gitleaks, semgrep, npm-audit, trivy-fs, build, trivy-image, pruebas.
+// <control>: gitleaks, semgrep, eslint, npm-audit, trivy-fs, build, trivy-image, pruebas.
 // "final" termina con codigo 1 si algun control que bloquea fallo.
 // Con PIPELINE_MOSTRAR_LOG=1, "resultado" imprime ademas el log completo
 // antes de la linea de resultado (el modo --detalle de pipeline-local.bat,
@@ -52,6 +52,7 @@ const {
 const NOMBRE = {
   gitleaks: 'Gitleaks',
   semgrep: 'Semgrep',
+  eslint: 'ESLint',
   'npm-audit': 'npm audit',
   'trivy-fs': 'Trivy (deps)',
   build: 'docker build',
@@ -61,7 +62,7 @@ const NOMBRE = {
 
 const PASOS = [
   ['Secretos en el repositorio', 'Gitleaks busca contraseñas, tokens o claves subidas por error a git.'],
-  ['Código fuente', 'Semgrep busca patrones inseguros (OWASP Top 10, Express, JWT). No bloquea.'],
+  ['Código fuente', 'Semgrep busca patrones inseguros (no bloquea); ESLint aplica reglas de seguridad en cada servicio (bloquea).'],
   ['Dependencias de cada servicio', 'npm audit y Trivy buscan CVE altas o críticas en las librerías.'],
   ['Imágenes Docker', 'Construye las 6 imágenes reales; Trivy busca CVE altas o críticas.'],
   ['Pruebas unitarias', 'Jest + Supertest sobre los 5 servicios de backend.'],
@@ -395,6 +396,30 @@ function trivy(codigo, log, _servicio, control) {
   };
 }
 
+// ESLint (formato "stylish"): una linea con la ruta de cada archivo y, debajo,
+// "  12:5  error  mensaje  regla" por hallazgo. Se muestran como
+// "archivo:linea  regla" para ubicarlos sin abrir el log.
+function eslint(codigo, log) {
+  if (codigo === 0) return { estado: 'ok', detalle: 'sin hallazgos de seguridad' };
+  const ls = lineas(leer(log));
+  const hallazgos = [];
+  let archivo = '';
+  for (const l of ls) {
+    if (/^(\/|[A-Za-z]:\\)/.test(l)) archivo = l.trim().replace(/^.*[\\/]services[\\/][^\\/]+[\\/]/, '');
+    const m = l.match(/^\s+(\d+):(\d+)\s+(error|warning)\s+(.*?)\s{2,}(\S+)\s*$/);
+    if (m) hallazgos.push(`${archivo}:${m[1]}  ${m[5]}  ${m[4]}`);
+  }
+  if (!hallazgos.length) {
+    return { estado: 'falla', detalle: 'ESLint no pudo ejecutarse', celda: 'error', extracto: lineasDeError(ls) };
+  }
+  return {
+    estado: 'falla',
+    detalle: `${plural(hallazgos.length, 'hallazgo', 'hallazgos')}: corrígelos o justifica la excepción en la línea`,
+    celda: String(hallazgos.length),
+    extracto: [...hallazgos.slice(0, 8), ...(hallazgos.length > 8 ? [`… y ${hallazgos.length - 8} más`] : [])],
+  };
+}
+
 function build(codigo, log) {
   if (codigo === 0) return { estado: 'ok', detalle: 'imagen construida' };
   const ls = lineas(leer(log));
@@ -444,6 +469,7 @@ function pruebas(codigo, log) {
 const INTERPRETAR = {
   gitleaks,
   semgrep: (codigo, log, _servicio, _control, sarif) => semgrep(codigo, log, sarif),
+  eslint,
   'npm-audit': npmAudit,
   'trivy-fs': trivy,
   build,
@@ -527,16 +553,19 @@ function comandoFinal([archivo, carpetaLogs]) {
   }
 
   // Cuadro por servicio: una fila por servicio, una columna por control.
-  const COLUMNAS = ['npm-audit', 'trivy-fs', 'build', 'trivy-image', 'pruebas'];
+  // Columnas de 11 y servicio de 12: el cuadro entra en 80 columnas.
+  const COLUMNAS = ['eslint', 'npm-audit', 'trivy-fs', 'build', 'trivy-image', 'pruebas'];
   const celda = (r) => {
-    if (!r) return gris(rellenar('—', 12));
-    return COLOR_ESTADO[r.estado](rellenar(`${SIMBOLO[r.estado]} ${r.celda}`.trim(), 12));
+    if (!r) return gris(rellenar('—', 11));
+    return COLOR_ESTADO[r.estado](rellenar(`${SIMBOLO[r.estado]} ${r.celda}`.trim(), 11));
   };
   escribir();
-  escribir(negrita(`  ${rellenar('Por servicio', 14)}${rellenar('Dependencias', 24)}${rellenar('Imagen Docker', 24)}Pruebas`));
-  escribir(gris(`  ${rellenar('', 14)}${['npm audit', 'Trivy', 'build', 'Trivy', 'Jest'].map((t) => rellenar(t, 12)).join('')}`));
+  escribir(
+    negrita(`  ${rellenar('Por servicio', 12)}${rellenar('Código', 11)}${rellenar('Dependencias', 22)}${rellenar('Imagen Docker', 22)}Pruebas`),
+  );
+  escribir(gris(`  ${rellenar('', 12)}${['ESLint', 'npm audit', 'Trivy', 'build', 'Trivy', 'Jest'].map((t) => rellenar(t, 11)).join('')}`));
   for (const s of servicios) {
-    escribir(`  ${rellenar(s, 14)}${COLUMNAS.map((c) => celda(buscar(c, s))).join('')}`);
+    escribir(`  ${rellenar(s, 12)}${COLUMNAS.map((c) => celda(buscar(c, s))).join('')}`);
   }
   escribir(
     gris(

@@ -15,6 +15,7 @@ Todas las actions de terceros están **fijadas a un SHA de commit** (con la vers
 | `secrets-scan` | **Gitleaks** | Commits con secretos, tokens o credenciales. Corre primero: si falla, no corre nada más. También corre **antes de cada commit** vía `scripts/git-hooks/pre-commit` (se instala una vez con `./scripts/install-hooks.sh`). |
 | `dependency-audit` | **npm audit** | Vulnerabilidades conocidas (CVE) en las dependencias de los 6 servicios; falla ante severidad `high` o mayor. |
 | `sast-scan` | **Semgrep** (OWASP Top 10, Express, nodejsscan, JWT) | Inyección SQL, debilidades en la verificación de JWT, configuraciones inseguras. Sus hallazgos se revisan pero no bloquean; los resultados van a GitHub Security. |
+| `lint-security` | **ESLint** + `eslint-plugin-security` | En cada uno de los 6 servicios: `eval` y derivados, `require` dinámico, `child_process`, expresiones regulares vulnerables a ReDoS, rutas de archivo armadas con datos, acceso a objetos con claves variables (prototype pollution), comparación de secretos sin tiempo constante y caracteres Unicode que esconden código. En el frontend, además: `dangerouslySetInnerHTML`, `innerHTML`, `document.write`, URLs `javascript:` y `target="_blank"` sin `rel`. **Bloquea** con cualquier hallazgo. Las reglas están en [`scripts/lib/eslint-reglas-seguridad.js`](../scripts/lib/eslint-reglas-seguridad.js); un falso positivo solo pasa con la excepción justificada en la misma línea (`// eslint-disable-next-line <regla> -- <por qué>`), que en GitHub Security aparece como resultado suprimido. Localmente: `cd services/<nombre> && npm run lint`. |
 | `sca-scan` | **Trivy** (modo `fs`) | Lo mismo que npm audit sobre cada `package.json`, con la herramienta que pide el enunciado; umbral `CRITICAL`/`HIGH`. |
 
 **Fase 3 — Integración / build.**
@@ -42,7 +43,7 @@ Todas las actions de terceros están **fijadas a un SHA de commit** (con la vers
 |---|---|
 | `security-gate` | Resume el estado de todos los controles y falla si alguno falló. Es el *required check* recomendado para proteger `main`. |
 
-Los hallazgos de Semgrep, Trivy y Checkov se suben en formato **SARIF** a **Security → Code scanning** de GitHub.
+Los hallazgos de Semgrep, ESLint, Trivy y Checkov se suben en formato **SARIF** a **Security → Code scanning** de GitHub.
 
 > **Ninguna base real:** las pruebas, el DAST y `iac-deploy` usan cada uno su propio PostgreSQL efímero, que se borra al terminar. Ningún job del pipeline puede leer ni escribir los datos de una instalación.
 >
@@ -64,5 +65,6 @@ Cada prueba en un cambio aparte, revirtiéndolo después:
 1. **Gitleaks** — Agregar una línea como `const JWT_SECRET = "sk_live_abcdef1234567890"` y hacer commit: `secrets-scan` debe fallar y bloquear el resto.
 2. **npm audit** — Degradar una dependencia de `services/voting/package.json` a una versión con CVE conocidos y regenerar el lockfile: `dependency-audit` debe fallar.
 3. **Semgrep** — Reemplazar una query parametrizada por concatenación, p. ej. `` `SELECT * FROM votes WHERE election_id = ${electionId}` ``: debe aparecer como hallazgo de inyección SQL.
-4. **Trivy** — Cambiar la imagen base de un `Dockerfile` por una antigua con CVE conocidos (p. ej. `node:18.0.0`): `container-scan` debe fallar.
-5. **Checkov** — Quitar `internal = true` de la red `db_net` en `infra/terraform/main.tf`: `iac-scan` debe fallar.
+4. **ESLint** — Agregar `const clave = req.query.clave; const obj = {}; obj[clave] = 1;` a una ruta (el plugin reconoce la clave cuando es una variable, no `obj[req.query.clave]` directo), o `<div dangerouslySetInnerHTML={{ __html: texto }} />` a un componente: `lint-security` debe fallar señalando el archivo y la línea.
+5. **Trivy** — Cambiar la imagen base de un `Dockerfile` por una antigua con CVE conocidos (p. ej. `node:18.0.0`): `container-scan` debe fallar.
+6. **Checkov** — Quitar `internal = true` de la red `db_net` en `infra/terraform/main.tf`: `iac-scan` debe fallar.

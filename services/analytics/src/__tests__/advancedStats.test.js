@@ -294,6 +294,7 @@ describe('buildIntegrityReport', () => {
   it('actaSignature de analytics coincide con el de scrutiny-service (verifica por su cuenta, con el mismo algoritmo)', () => {
     const fs = require('fs');
     const path = require('path');
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- service es 'analytics' o 'scrutiny', literales de esta prueba
     const read = (service) => fs.readFileSync(path.join(__dirname, '..', '..', '..', service, 'src', 'actaSignature.js'), 'utf8');
     expect(read('analytics')).toBe(read('scrutiny'));
   });

@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import DashboardCanvas from '../components/DashboardCanvas.jsx';
 import { exportDashboardToPdf, buildIntro, slugify } from '../utils/exportDashboardPdf.js';
 import { WIDGET_TYPE_LABELS, DATA_SOURCE_LABELS } from '../components/widgets/labels.js';
+import { ownValue } from '../utils/ownValue.js';
 
 const ADVANCED_SOURCES = ['turnoutProjection', 'leadTimeline', 'integrity', 'suspiciousAccess'];
 
@@ -142,7 +143,7 @@ export default function ReportsTab({ session }) {
       setWidgets((ws) => ws.map((w) => (w.id === editingWidgetId ? { ...w, title, dataSource, params } : w)));
     } else {
       setWidgets((ws) => {
-        const grid = nextGridPosition(ws, DEFAULT_GRID[pendingType]);
+        const grid = nextGridPosition(ws, ownValue(DEFAULT_GRID, pendingType));
         return [...ws, { id: newWidgetId(), type: pendingType, title, dataSource, params, grid }];
       });
     }
@@ -279,7 +280,7 @@ export default function ReportsTab({ session }) {
               <span className="widget-palette-label">Agregar widget:</span>
               {Object.keys(WIDGET_TYPE_LABELS).map((type) => (
                 <button key={type} className="btn btn-outline" onClick={() => startAddWidget(type)}>
-                  + {WIDGET_TYPE_LABELS[type]}
+                  + {ownValue(WIDGET_TYPE_LABELS, type)}
                 </button>
               ))}
             </div>
@@ -313,9 +314,9 @@ export default function ReportsTab({ session }) {
 }
 
 function WidgetForm({ type, initial, onCancel, onSubmit }) {
-  const sources = WIDGET_DATA_SOURCES[type];
+  const sources = ownValue(WIDGET_DATA_SOURCES, type);
   const [dataSource, setDataSource] = useState(initial?.dataSource || sources[0]);
-  const [title, setTitle] = useState(initial?.title || DATA_SOURCE_LABELS[dataSource]);
+  const [title, setTitle] = useState(initial?.title || ownValue(DATA_SOURCE_LABELS, dataSource));
   // Al crear un widget nuevo, el título sigue a la fuente de datos elegida
   // (así dice "Participación por puesto/mesa" y no el genérico "Gráfico de
   // torta"). Al editar uno existente, o en cuanto la persona toque el campo
@@ -326,7 +327,7 @@ function WidgetForm({ type, initial, onCancel, onSubmit }) {
 
   function handleDataSourceChange(newSource) {
     setDataSource(newSource);
-    if (!titleTouched) setTitle(DATA_SOURCE_LABELS[newSource]);
+    if (!titleTouched) setTitle(ownValue(DATA_SOURCE_LABELS, newSource));
   }
 
   function submit(e) {
@@ -334,7 +335,7 @@ function WidgetForm({ type, initial, onCancel, onSubmit }) {
     const params = {};
     if (dataSource === 'timeseries' || dataSource === 'anomalies') params.interval = interval;
     if (dataSource === 'participation') params.groupBy = groupBy;
-    onSubmit({ title: title.trim() || DATA_SOURCE_LABELS[dataSource], dataSource, params });
+    onSubmit({ title: title.trim() || ownValue(DATA_SOURCE_LABELS, dataSource), dataSource, params });
   }
 
   return (
@@ -346,7 +347,7 @@ function WidgetForm({ type, initial, onCancel, onSubmit }) {
       <div className="field-dark">
         <label>Fuente de datos</label>
         <select value={dataSource} onChange={(e) => handleDataSourceChange(e.target.value)}>
-          {sources.map((s) => <option key={s} value={s}>{DATA_SOURCE_LABELS[s]}</option>)}
+          {sources.map((s) => <option key={s} value={s}>{ownValue(DATA_SOURCE_LABELS, s)}</option>)}
         </select>
       </div>
       {(dataSource === 'timeseries' || dataSource === 'anomalies') && (

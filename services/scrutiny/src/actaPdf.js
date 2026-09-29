@@ -250,6 +250,7 @@ function streamActaPdf(res, { election, certification, verification, publicKeyId
 // Dibuja una tabla simple con encabezado sombreado. No usa librerías extra:
 // pdfkit no trae tablas nativas, así que se calculan las celdas a mano.
 function drawTable(doc, headers, rows, colWidths, opts = {}) {
+  /* eslint-disable security/detect-object-injection -- i es el índice numérico de la columna en colWidths */
   const startX = 50;
   const rowHeight = opts.compact ? 16 : 20;
   let y = doc.y;
@@ -284,6 +285,7 @@ function drawTable(doc, headers, rows, colWidths, opts = {}) {
   doc.rect(startX, doc.y, colWidths.reduce((a, b) => a + b, 0), y - doc.y).strokeColor(BORDER).stroke();
   doc.x = startX;
   doc.y = y;
+  /* eslint-enable security/detect-object-injection */
 }
 
 module.exports = { streamActaPdf };

@@ -82,6 +82,21 @@ REM se pasa a la carpeta de logs para no dejarlo suelto en el repo.
 if exist semgrep-local.sarif move /y semgrep-local.sarif "%LOG_DIR%\semgrep.sarif" >nul
 call :resumir semgrep - !RC! "%LOG_DIR%\semgrep.log" "%LOG_DIR%\semgrep.sarif"
 
+REM ESLint con reglas de seguridad, en cada servicio. A diferencia de
+REM Semgrep, SI bloquea: cualquier hallazgo es un error (ver
+REM scripts\lib\eslint-reglas-seguridad.js), igual que el job lint-security
+REM del workflow. Instala las dependencias del servicio (ESLint es una de
+REM desarrollo); las pruebas del paso 5 reutilizan esa instalacion.
+for %%S in (%SERVICES%) do (
+  call :en_curso "%%S - ESLint"
+  pushd services\%%S
+  call npm ci --silent --ignore-scripts > "%LOG_DIR%\npm-install-%%S-dev.log" 2>&1
+  call npx --no-install eslint . --max-warnings 0 > "%LOG_DIR%\eslint-%%S.log" 2>&1
+  set RC=!errorlevel!
+  popd
+  call :resumir eslint %%S !RC! "%LOG_DIR%\eslint-%%S.log"
+)
+
 REM --- 3-4. npm audit + Trivy fs (SCA) por servicio -----------------------
 call :paso 3
 for %%S in (%SERVICES%) do (
@@ -116,11 +131,11 @@ for %%S in (%SERVICES%) do (
 REM --- 6. Pruebas unitarias -------------------------------------------------
 REM Cada "npm test" levanta su propia base PostgreSQL desechable (ver
 REM scripts\lib\jest-db-setup.js): no hace falta .env ni ninguna base externa.
+REM Las dependencias (Jest incluido) ya las instalo el paso de ESLint.
 call :paso 5
 for %%S in (%BACKEND_SERVICES%) do (
   call :en_curso "%%S - pruebas"
   pushd services\%%S
-  call npm ci --silent --ignore-scripts > "%LOG_DIR%\npm-install-test-%%S.log" 2>&1
   call npm test > "%LOG_DIR%\test-%%S.log" 2>&1
   set RC=!errorlevel!
   popd

@@ -31,7 +31,7 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 | Seguridad en la aplicación | JWT, bcrypt, AES-256-GCM (padrón cifrado), cadena de hashes SHA-256, firma digital Ed25519 de las actas, helmet, rate limiting |
 | Contenedores e infraestructura | Docker, Docker Compose, Docker Hub, Terraform (provider `kreuzwerker/docker`), Docker-in-Docker |
 | Orquestación y observabilidad | Docker Swarm, Prometheus, Grafana, Loki + Promtail, Falco |
-| CI/CD y seguridad | GitHub Actions, Gitleaks, Semgrep, npm audit, Trivy, Checkov, OWASP ZAP |
+| CI/CD y seguridad | GitHub Actions, Gitleaks, Semgrep, ESLint (`eslint-plugin-security`), npm audit, Trivy, Checkov, OWASP ZAP |
 | Pruebas | Jest, Supertest |
 | Modelado de amenazas | OWASP Threat Dragon, STRIDE |
 

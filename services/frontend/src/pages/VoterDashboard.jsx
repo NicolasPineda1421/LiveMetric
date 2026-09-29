@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import { ownValue } from '../utils/ownValue.js';
 
 export default function VoterDashboard({ session, onLogout }) {
   const [elections, setElections] = useState([]);
@@ -42,7 +43,7 @@ export default function VoterDashboard({ session, onLogout }) {
   if (votedElectionId) votedElectionIds.add(votedElectionId);
 
   async function submitVote(electionId) {
-    const optionId = selection[electionId];
+    const optionId = ownValue(selection, electionId);
     if (!optionId) return;
     setError('');
     try {

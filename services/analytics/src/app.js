@@ -115,7 +115,7 @@ function detectAnomalies(points) {
   const stdDev = Math.sqrt(variance);
   if (stdDev === 0) return [];
   return points
-    .map((p, i) => ({ bucket: p.bucket, votes: p.votes, zScore: Number(((values[i] - mean) / stdDev).toFixed(2)) }))
+    .map((p) => ({ bucket: p.bucket, votes: p.votes, zScore: Number(((p.votes - mean) / stdDev).toFixed(2)) }))
     .filter((p) => Math.abs(p.zScore) > 2);
 }
 

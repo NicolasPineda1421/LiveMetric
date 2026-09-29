@@ -174,6 +174,22 @@ mv -f "$REPO_ROOT/semgrep-local.sarif" "$LOG_DIR/semgrep.sarif" 2>/dev/null \
   || rm -f "$REPO_ROOT/semgrep-local.sarif"
 resumir semgrep - "$SEMGREP_RC" "$LOG_DIR/semgrep.log" "$LOG_DIR/semgrep.sarif"
 
+# ESLint con reglas de seguridad, en cada servicio. A diferencia de Semgrep,
+# SI bloquea: cualquier hallazgo es un error (ver
+# scripts/lib/eslint-reglas-seguridad.js), igual que el job lint-security
+# del workflow. Instala las dependencias del servicio (ESLint es una de
+# desarrollo); las pruebas del paso 5 reutilizan esa instalacion.
+eslint_servicio() {
+  cd "services/$1" || return 1
+  npm ci --silent --ignore-scripts > "$LOG_DIR/npm-install-$1-dev.log" 2>&1 \
+    || { echo "npm ci fallo:"; cat "$LOG_DIR/npm-install-$1-dev.log"; return 1; }
+  npx --no-install eslint . --max-warnings 0
+}
+for svc in "${SERVICES[@]}"; do
+  correr "$LOG_DIR/eslint-$svc.log" "$svc · ESLint" eslint_servicio "$svc"
+  resumir eslint "$svc" $? "$LOG_DIR/eslint-$svc.log"
+done
+
 # 3-4. npm audit + Trivy fs (SCA) por servicio -----------------------------
 npm_audit() {
   cd "services/$1" || return 1
@@ -213,9 +229,9 @@ for svc in "${SERVICES[@]}"; do
 done
 
 # 6. Pruebas unitarias ------------------------------------------------------
+# Las dependencias (Jest incluido) ya las instalo el paso de ESLint.
 pruebas() {
   cd "services/$1" || return 1
-  npm ci --silent --ignore-scripts > "$LOG_DIR/npm-install-test-$1.log" 2>&1
   npm test
 }
 

@@ -1,6 +1,8 @@
 // Cliente HTTP mínimo: envuelve fetch, adjunta el token cuando existe, y
 // normaliza los errores del backend (que siempre responden { error: "..." }).
 
+import { ownValue } from './utils/ownValue.js';
+
 const cfg = window.__LIVEMETRIC_CONFIG__ || {};
 
 const BASE_URLS = {
@@ -16,7 +18,7 @@ async function request(service, path, { method = 'GET', body, token } = {}) {
 
   let response;
   try {
-    response = await fetch(`${BASE_URLS[service]}${path}`, {
+    response = await fetch(`${ownValue(BASE_URLS, service)}${path}`, {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,

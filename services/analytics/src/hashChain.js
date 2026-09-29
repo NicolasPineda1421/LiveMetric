@@ -18,6 +18,7 @@ function stableStringify(value) {
   }
   if (value && typeof value === 'object') {
     const keys = Object.keys(value).sort();
+    // eslint-disable-next-line security/detect-object-injection -- k es una clave propia de value (Object.keys)
     return `{${keys.map((k) => `"${k}":${stableStringify(value[k])}`).join(',')}}`;
   }
   return JSON.stringify(value);

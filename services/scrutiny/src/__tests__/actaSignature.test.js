@@ -14,7 +14,7 @@ const { GENESIS_HASH, computeRecordHash } = require('../hashChain');
 
 const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
 const keyId = keyIdOf(publicKey);
-const raw = (key, field) => Buffer.from(key.export({ format: 'jwk' })[field], 'base64url').toString('base64');
+const base64 = (base64url) => Buffer.from(base64url, 'base64url').toString('base64');
 
 // Un acta firmada como lo hace scrutiny-service al certificar.
 function acta({ electionId, previousHash, votes, key = privateKey }) {
@@ -33,8 +33,8 @@ function acta({ electionId, previousHash, votes, key = privateKey }) {
 
 describe('actaSignature', () => {
   it('lee las claves del .env (32 bytes en base64) y firma lo que verifica la pública', () => {
-    const priv = loadPrivateKey(raw(privateKey, 'd'));
-    const pub = loadPublicKey(raw(publicKey, 'x'));
+    const priv = loadPrivateKey(base64(privateKey.export({ format: 'jwk' }).d));
+    const pub = loadPublicKey(base64(publicKey.export({ format: 'jwk' }).x));
     expect(keyIdOf(pub)).toBe(keyId);
     expect(keyId).toMatch(/^[0-9a-f]{16}$/);
     const hash = 'ab'.repeat(32);

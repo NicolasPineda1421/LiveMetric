@@ -348,6 +348,7 @@ app.post(
     try {
       await client.query('BEGIN');
 
+      /* eslint-disable security/detect-object-injection -- i es el índice numérico de voters, pins y pinHashes, arreglos paralelos del mismo largo armados arriba */
       for (let i = 0; i < voters.length; i += 1) {
         const v = voters[i];
         // cedula/polling_place/voting_table van cifrados (ver voterCrypto.js);
@@ -376,6 +377,7 @@ app.post(
           updated += 1;
         }
       }
+      /* eslint-enable security/detect-object-injection */
 
       await client.query('COMMIT');
 
