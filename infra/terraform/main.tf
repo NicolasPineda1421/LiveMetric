@@ -399,11 +399,14 @@ resource "docker_container" "frontend" {
   image   = docker_image.frontend.image_id
   restart = "unless-stopped"
 
+  # Rutas relativas: el navegador solo habla con el frontend, y nginx
+  # reenvia a cada servicio por app_net (igual que en docker-compose.yml).
+  # Asi la Content-Security-Policy puede limitar las conexiones a este origen.
   env = [
-    "AUTH_URL=http://127.0.0.1:3001",
-    "VOTING_URL=http://127.0.0.1:3002",
-    "ANALYTICS_URL=http://127.0.0.1:3003",
-    "SCRUTINY_URL=http://127.0.0.1:3004",
+    "AUTH_URL=/auth",
+    "VOTING_URL=/voting",
+    "ANALYTICS_URL=/analytics",
+    "SCRUTINY_URL=/scrutiny",
   ]
 
   ports {

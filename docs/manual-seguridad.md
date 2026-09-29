@@ -114,13 +114,13 @@ La última corrida (septiembre de 2026) dio **0 altas, 1 media, 7 bajas y 9 info
 
 | Riesgo | Alerta | Lectura |
 |---|---|---|
-| Medio | *Content Security Policy (CSP) Header Not Set* | nginx no envía una política CSP. Es la defensa en profundidad contra XSS del frontend. Abierto |
-| Bajo | *X-Content-Type-Options Header Missing* (1 instancia) | `/config.js` pierde las cabeceras de seguridad: en nginx, un `add_header` dentro de un `location` anula los del servidor. Abierto |
-| Bajo | COEP, COOP, CORP y *Permissions-Policy* ausentes; nginx revela su versión (`Server`) | Endurecimiento del navegador y del servidor. Abierto |
+| Medio | *Content Security Policy (CSP) Header Not Set* | nginx no enviaba una política CSP, la defensa en profundidad contra XSS del frontend. **Corregido** |
+| Bajo | *X-Content-Type-Options Header Missing* (1 instancia) | `/config.js` perdía las cabeceras de seguridad: en nginx, un `add_header` dentro de un `location` anula los del servidor. **Corregido** |
+| Bajo | COEP, COOP, CORP y *Permissions-Policy* ausentes; nginx revela su versión (`Server`) | Endurecimiento del navegador y del servidor. **Corregido** |
 | Bajo | *Timestamp Disclosure* | Constantes numéricas del JavaScript compilado (de las librerías) que ZAP interpreta como marcas de tiempo, por ejemplo `1604231423`. Falso positivo |
 | Informativo | *Modern Web Application*, *Sec-Fetch-\**, *Storable Content*, … | Descripciones de la aplicación, no fallas |
 
-Las alertas abiertas están registradas en [Decisiones y riesgos](decisiones-y-riesgos.md), con su plan.
+Las correcciones están en `services/frontend/cabeceras-seguridad.conf` y registradas en [Decisiones y riesgos](decisiones-y-riesgos.md). Una CSP estricta puede romper la interfaz sin que ningún escáner lo note, así que se verificó recorriendo toda la aplicación con un navegador y registrando cada violación de la política: no hubo ninguna, y un script inyectado a propósito sí quedó bloqueado.
 
 ## 5. Gestión de vulnerabilidades
 

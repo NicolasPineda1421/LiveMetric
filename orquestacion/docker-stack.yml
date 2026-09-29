@@ -271,6 +271,14 @@ services:
   frontend:
     <<: *service-common
     image: ${DOCKERHUB_NAMESPACE}/livemetric-frontend:${LIVEMETRIC_VERSION}
+    # Rutas relativas: el navegador solo habla con el frontend, y nginx
+    # reenvia a cada servicio por app-net (igual que en docker-compose.yml).
+    # Asi la Content-Security-Policy puede limitar las conexiones a este origen.
+    environment:
+      AUTH_URL: /auth
+      VOTING_URL: /voting
+      ANALYTICS_URL: /analytics
+      SCRUTINY_URL: /scrutiny
     ports:
       - target: 8080
         published: 3000

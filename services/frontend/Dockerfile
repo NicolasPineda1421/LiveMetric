@@ -24,6 +24,7 @@ RUN apk upgrade --no-cache
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY cabeceras-seguridad.conf /etc/nginx/cabeceras-seguridad.conf
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 # - "user nginx;" solo tiene sentido si el maestro arranca como root: se
 #   quita para que no avise que la ignora.
