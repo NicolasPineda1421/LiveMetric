@@ -71,6 +71,16 @@ services:
   auth-service:
     build:
       context: ./services/auth
+    # Modo desarrollo: "docker compose watch" reconstruye y reinicia solo este
+    # servicio cuando cambia su codigo (ver docs/manual-desarrollo.md).
+    develop:
+      watch:
+        - action: rebuild
+          path: ./services/auth/src
+          ignore:
+            - __tests__/
+        - action: rebuild
+          path: ./services/auth/package.json
     container_name: livemetric-auth
     restart: unless-stopped
     environment:
@@ -105,6 +115,16 @@ services:
   voting-service:
     build:
       context: ./services/voting
+    # Modo desarrollo: "docker compose watch" reconstruye y reinicia solo este
+    # servicio cuando cambia su codigo (ver docs/manual-desarrollo.md).
+    develop:
+      watch:
+        - action: rebuild
+          path: ./services/voting/src
+          ignore:
+            - __tests__/
+        - action: rebuild
+          path: ./services/voting/package.json
     container_name: livemetric-voting
     restart: unless-stopped
     environment:
@@ -134,6 +154,16 @@ services:
   analytics-service:
     build:
       context: ./services/analytics
+    # Modo desarrollo: "docker compose watch" reconstruye y reinicia solo este
+    # servicio cuando cambia su codigo (ver docs/manual-desarrollo.md).
+    develop:
+      watch:
+        - action: rebuild
+          path: ./services/analytics/src
+          ignore:
+            - __tests__/
+        - action: rebuild
+          path: ./services/analytics/package.json
     container_name: livemetric-analytics
     restart: unless-stopped
     environment:
@@ -172,6 +202,16 @@ services:
   scrutiny-service:
     build:
       context: ./services/scrutiny
+    # Modo desarrollo: "docker compose watch" reconstruye y reinicia solo este
+    # servicio cuando cambia su codigo (ver docs/manual-desarrollo.md).
+    develop:
+      watch:
+        - action: rebuild
+          path: ./services/scrutiny/src
+          ignore:
+            - __tests__/
+        - action: rebuild
+          path: ./services/scrutiny/package.json
     container_name: livemetric-scrutiny
     restart: unless-stopped
     environment:
@@ -212,6 +252,16 @@ services:
   scheduler-worker:
     build:
       context: ./services/scheduler
+    # Modo desarrollo: "docker compose watch" reconstruye y reinicia solo este
+    # servicio cuando cambia su codigo (ver docs/manual-desarrollo.md).
+    develop:
+      watch:
+        - action: rebuild
+          path: ./services/scheduler/src
+          ignore:
+            - __tests__/
+        - action: rebuild
+          path: ./services/scheduler/package.json
     container_name: livemetric-scheduler
     restart: unless-stopped
     environment:
@@ -246,6 +296,16 @@ services:
   frontend:
     build:
       context: ./services/frontend
+    # Modo desarrollo: "docker compose watch" reconstruye y reinicia solo este
+    # servicio cuando cambia su codigo (ver docs/manual-desarrollo.md).
+    develop:
+      watch:
+        - action: rebuild
+          path: ./services/frontend/src
+          ignore:
+            - __tests__/
+        - action: rebuild
+          path: ./services/frontend/package.json
     container_name: livemetric-frontend
     restart: unless-stopped
     environment:

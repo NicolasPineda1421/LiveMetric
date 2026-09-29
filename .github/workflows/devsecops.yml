@@ -1,10 +1,10 @@
 name: LiveMetric DevSecOps Pipeline
 
 on:
-  # GitHub Flow: "main" es la unica rama larga y siempre debe ser desplegable.
-  # El pipeline corre en cada Pull Request hacia main (donde realmente se
-  # bloquean los merges) y tambien en cada push a main (post-merge, como
-  # doble verificacion y para dejar historial de escaneos en la rama principal).
+  # El equipo integra directo en "main", que siempre debe ser desplegable
+  # (ver docs/manual-desarrollo.md): el pipeline corre en cada push a main, y
+  # tambien en cada Pull Request hacia main para los cambios que se revisan
+  # antes de integrar.
   push:
     branches: [main]
   pull_request:
@@ -111,6 +111,14 @@ jobs:
       - name: Verificar SARIF generado
         run: test -f semgrep.sarif && echo "SARIF generado correctamente"
 
+      # Los hallazgos silenciados en el codigo con "nosemgrep" (con su
+      # justificacion al lado) no se suben: GitHub no respeta la marca de
+      # "suprimido" de herramientas externas y los mostraria como abiertos.
+      - name: Quitar del SARIF los hallazgos silenciados con nosemgrep
+        run: |
+          jq '(.runs[].results) |= map(select((.suppressions // []) | length == 0))' semgrep.sarif > semgrep.filtrado.sarif
+          mv semgrep.filtrado.sarif semgrep.sarif
+
       - name: Subir resultados SARIF a GitHub Security
         uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3.38.2
         if: always()
@@ -122,8 +130,7 @@ jobs:
   #     el frontend, reglas contra XSS y tabnabbing), en cada servicio. Las
   #     reglas estan en scripts/lib/eslint-reglas-seguridad.js y son todas
   #     "error": cualquier hallazgo bloquea. Los falsos positivos solo pasan
-  #     con una excepcion justificada en la misma linea del codigo, que en
-  #     GitHub Security aparece como resultado suprimido.
+  #     con una excepcion justificada en la misma linea del codigo.
   # -------------------------------------------------------------------------
   lint-security:
     name: SAST - ESLint (seguridad) - ${{ matrix.service }}
@@ -151,12 +158,17 @@ jobs:
         run: npm ci --ignore-scripts
 
       # El formateador SARIF solo hace falta aca: se instala sin guardarlo
-      # en package.json, con la version fijada.
+      # en package.json, con la version fijada. Las excepciones justificadas
+      # en el codigo (eslint-disable -- motivo) se quitan del SARIF: GitHub
+      # no respeta la marca de "suprimido" de herramientas externas y las
+      # mostraria como alertas abiertas; su justificacion vive en el codigo.
       - name: Generar SARIF (aunque haya hallazgos)
         working-directory: services/${{ matrix.service }}
         run: |
           npm install --no-save --ignore-scripts @microsoft/eslint-formatter-sarif@3.1.0
           npx eslint . -f @microsoft/eslint-formatter-sarif -o eslint.sarif || true
+          jq '(.runs[].results) |= map(select((.suppressions // []) | length == 0))' eslint.sarif > eslint.filtrado.sarif
+          mv eslint.filtrado.sarif eslint.sarif
 
       - name: Subir resultados SARIF a GitHub Security
         uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3.38.2

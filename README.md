@@ -90,11 +90,12 @@ Para publicar una versión nueva basta con crear el tag: `git tag -a v1.4.0 -m "
 |---|---|
 | [Manual de Arquitectura](docs/manual-arquitectura.md) | Estilo arquitectónico, patrones, ADRs, modelo de datos y los 7 diagramas (componentes, despliegue, secuencia, casos de uso, DFD 0 y 1) |
 | [Arquitectura](docs/arquitectura.md) | Componentes, red, secretos, flujo de punta a punta y estructura del repositorio |
-| [Instalación y despliegue](docs/instalacion-y-despliegue.md) | Las cuatro formas de levantarlo, `.env`, Windows, acceso desde la red, datos de demostración, API por línea de comandos |
+| [Instalación y despliegue](docs/instalacion-y-despliegue.md) | Las cuatro formas de levantarlo, `.env`, base de datos, Windows, acceso desde la red, datos de demostración, API por línea de comandos y solución de problemas |
+| [Manual de desarrollo](docs/manual-desarrollo.md) | Entorno local, modo desarrollo con recarga automática, pruebas, ramas, commits, revisión y publicación de versiones |
+| [Manual de seguridad](docs/manual-seguridad.md) | Modelo de amenazas, herramientas y su configuración, cómo leer cada reporte, gestión de vulnerabilidades y rotación de secretos |
 | [Pipeline DevSecOps](docs/pipeline-devsecops.md) | Cada job del pipeline, cómo correrlo en local y cómo comprobar que los controles bloquean |
 | [Guía de validación](docs/guia-de-validacion.md) | Pruebas manuales de cada funcionalidad |
 | [Decisiones y riesgos](docs/decisiones-y-riesgos.md) | Decisiones de diseño y riesgos aceptados |
-| [Estrategia de ramas](docs/estrategia-de-ramas.md) | GitHub Flow y protección de `main` |
 | [Modelo de amenazas](docs/threat-model/STRIDE-analysis.md) | Análisis STRIDE y diagramas de flujo de datos |
 | [Manual de Usuario](docs/manual-usuario.md) | Guía de las tres interfaces con capturas de pantalla |
 | [Orquestación](orquestacion/README.md) | Despliegue en Docker Swarm con réplicas, rolling updates y red cifrada |

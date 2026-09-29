@@ -174,3 +174,25 @@ curl http://127.0.0.1:3003/api/elections/1/results -H "Authorization: Bearer <TO
 # Integridad de toda la cadena de actas
 curl http://127.0.0.1:3004/verify -H "Authorization: Bearer <TOKEN_ADMIN>"
 ```
+
+## Solución de problemas
+
+Lo primero, casi siempre: `docker compose ps` (qué contenedor no está sano) y `docker compose logs <servicio>` (por qué). `start.sh` y `start.bat` ya muestran el motivo de cada contenedor que no queda sano.
+
+| Síntoma | Causa | Solución |
+|---|---|---|
+| `port is already allocated` o "El puerto 3000 ya está en uso" | Otra forma de despliegue ya está arriba: el contenedor global y `start.sh` usan los dos el 3000 | `docker ps --filter publish=3000` muestra cuál. Bájala (`docker compose down` o `./scripts/contenedor.sh detener`), o usa otro puerto con `LIVEMETRIC_PUERTO=3100 ./scripts/contenedor.sh` |
+| Un servicio se reinicia en bucle y su log dice `FATAL: VOTERS_ENCRYPTION_KEY debe ser una clave AES-256 (32 bytes) en base64.` o `FATAL: ACTA_SIGNING_KEY debe ser una clave Ed25519 de 32 bytes en base64.` | Falta la variable en el `.env`, o tiene todavía el marcador de la plantilla | `node scripts/lib/generar-env.js` agrega lo que falte y genera lo que tenga el marcador, sin tocar los valores reales. Después, `docker compose up -d` |
+| `FATAL: ACTA_PUBLIC_KEY no corresponde a ACTA_SIGNING_KEY` | Las dos claves de la firma de las actas no son pareja (se editó una a mano) | Borra las dos líneas del `.env` y corre `generar-env.js`, que genera un par nuevo. Las actas firmadas con el par anterior pasan a verse como firmadas "con otra clave" |
+| Los servicios no arrancan y su log dice `password authentication failed for user "livemetric"` | El `.env` se regeneró o cambió después de crear la base: Postgres guardó la contraseña de la primera vez | Si tienes el `.env` anterior, restáuralo. Si no, empieza de cero con `docker compose down -v` (**borra la base**) |
+| Semgrep falla con `Name does not resolve` | El DNS de la red (típicamente, compartir Internet desde Windows) no le resuelve `semgrep.dev` a los contenedores Alpine | `pipeline-local.sh` lo detecta y usa DNS públicos solo para Semgrep. Si falla igual, no hay salida a Internet: Semgrep descarga sus reglas en cada corrida |
+| `npm test` falla con "Las pruebas necesitan Docker para levantar su base desechable" | Docker no está corriendo | Arranca Docker (o Docker Desktop). Las pruebas no usan la base del stack: levantan la suya |
+| Un votante recibe "Cédula o PIN incorrectos" con los datos correctos | Su cédula no tiene PIN (en **Padrón** figura "Sin asignar"), o el PIN se regeneró | Genera el PIN desde **Padrón** y entrégaselo. El mensaje es el mismo en todos los casos a propósito |
+| "Demasiados intentos. Intenta de nuevo más tarde." al ingresar como votante | El login de votantes admite 8 intentos por IP cada 15 minutos, contando también los exitosos. En un puesto donde todos votan desde el mismo equipo, el límite se alcanza rápido | Esperar a que pase la ventana de 15 minutos. Para una jornada con muchos votantes por equipo, el límite se ajusta en `voterLoginLimiter` (`services/auth/src/app.js`) |
+| No hay ningún administrador, o se perdió la contraseña del único | La base es nueva, o no hay recuperación de contraseña | `docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay` si no hay ninguno; `crearAdmin.js <usuario-nuevo>` para crear otro. Desde ese, se administra el resto en **Usuarios** |
+| En **Resultados**, un acta aparece como "Sin firma digital" o "Alterada" | "Sin firma": se certificó antes de que existiera la firma digital. "Alterada": algo en ella no coincide (el indicador dice qué) | Ver el [Manual de usuario](manual-usuario.md#46-resultados) y el [Manual de seguridad](manual-seguridad.md). Un acta alterada no debe usarse como oficial |
+| El stack de monitoreo no arranca: `Define GRAFANA_ADMIN_PASSWORD en el .env` | Compose busca el `.env` en `monitoring/` si no se le indica otro | `docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml up -d`, desde la raíz del repo. En un `.env` anterior, `generar-env.js` agrega la contraseña |
+| `docker compose watch` responde `unknown command` | Compose anterior a la versión 2.22 | Actualiza Docker (o Docker Desktop), o reconstruye a mano: `docker compose up -d --build <servicio>` |
+| En Windows: `error during connect` o `pipe/docker_engine` | Docker Desktop no está corriendo | Ábrelo y espera a que diga que el motor está listo |
+| En Windows con WSL2, todo es muy lento | El repo está en `/mnt/c/...` | Clónalo dentro del sistema de archivos de Linux (`~`) |
+| Desde otra PC de la red no se abre la aplicación | El firewall de Windows bloquea el puerto 3000 | Ver [Acceso desde otras PC de la red](#acceso-desde-otras-pc-de-la-red) |

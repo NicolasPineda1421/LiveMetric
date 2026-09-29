@@ -11,8 +11,9 @@
 
 ## Checklist antes de solicitar revisión
 
-- [ ] La rama sigue la convención `tipo/descripcion-corta` (ver `docs/estrategia-de-ramas.md`)
+- [ ] La rama sigue la convención `tipo/descripcion-corta` (ver `docs/manual-desarrollo.md`, sección 6)
 - [ ] Se ejecutó `docker compose up --build` localmente y el stack levanta sin errores
+- [ ] `./scripts/pipeline-local.sh` termina en verde (Gitleaks, Semgrep, ESLint, npm audit, Trivy, pruebas)
 - [ ] No se agregaron secretos, tokens ni contraseñas en el código (verificado localmente, ej. `gitleaks detect`)
 - [ ] Si se tocó `services/*/package.json`, se corrió `npm audit` localmente
 - [ ] Si se tocaron queries a PostgreSQL, siguen usando parámetros (`$1, $2, ...`), nunca concatenación de strings
@@ -24,4 +25,4 @@
      Si es así, describe brevemente el análisis de riesgo. -->
 
 ---
-Este PR **no podrá mezclarse a `main`** hasta que el check requerido **`Security Gate (resumen)`** del workflow `devsecops.yml` pase en verde y al menos un `CODEOWNER` apruebe los cambios.
+Antes de integrar este PR a `main`, el check **`Security Gate (resumen)`** del workflow `devsecops.yml` tiene que estar en verde.
