@@ -110,7 +110,7 @@ Cada hallazgo es un control (`CKV_DOCKER_…`, `CKV_TF_…`) sobre un recurso de
 
 El reporte HTML agrupa las alertas por riesgo (High, Medium, Low, Informational). De cada una muestra la descripción, las URL afectadas (instancias), la solución sugerida y sus referencias CWE y WASC. Lo que se revisa primero es High y Medium.
 
-La última corrida (septiembre de 2026) dio **0 altas, 1 media, 7 bajas y 9 informativas**:
+La corrida de septiembre de 2026 dio **0 altas, 1 media, 7 bajas y 9 informativas**. Después de corregirlas, ZAP da **0 altas, 0 medias, 1 baja** (el falso positivo de *Timestamp Disclosure*) y las 9 informativas:
 
 | Riesgo | Alerta | Lectura |
 |---|---|---|
