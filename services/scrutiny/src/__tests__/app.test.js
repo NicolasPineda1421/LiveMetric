@@ -231,6 +231,18 @@ describe('GET /certifications/:electionId/acta.pdf', () => {
     expect(res.headers['content-type']).toMatch(/application\/pdf/);
     expect(res.body.length).toBeGreaterThan(0);
   });
+
+  // El auditor ve el veredicto del acta en Resultados (Analytics), pero el
+  // acta oficial y la verificación de la cadena son solo del administrador.
+  it('un auditor o un votante no pueden descargar el acta ni verificar la cadena (403)', async () => {
+    for (const role of ['auditor', 'voter']) {
+      const token = jwt.sign({ sub: 2, role }, process.env.JWT_SECRET, { algorithm: 'HS256', expiresIn: '1h' });
+      for (const ruta of [`/certifications/${closedElectionId}/acta.pdf`, `/certifications/${closedElectionId}`, '/verify']) {
+        const res = await request(app).get(ruta).set('Authorization', `Bearer ${token}`);
+        expect(res.status).toBe(403);
+      }
+    }
+  });
 });
 
 describe('GET /verify', () => {

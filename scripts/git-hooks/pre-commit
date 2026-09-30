@@ -6,23 +6,44 @@
 # "shift left": detectarlo aquí es más barato que detectarlo en CI o, peor,
 # después de un push.
 #
+# Usa Gitleaks si está instalado y, si no, su imagen de Docker (la misma del
+# pipeline): el proyecto solo exige Docker, y sin este respaldo el hook no
+# revisaba nada en casi ninguna PC.
+#
 # Instalación: ./scripts/install-hooks.sh (copia este archivo a .git/hooks/).
 
 set -euo pipefail
 
-if ! command -v gitleaks >/dev/null 2>&1; then
-  echo "⚠️  Gitleaks no está instalado — no se pudo revisar el commit en busca de secretos." >&2
-  echo "    Instálalo con: https://github.com/gitleaks/gitleaks#installing" >&2
-  echo "    (el commit continúa; CI igual lo revisará al hacer push)." >&2
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# --exit-code 2: un secreto encontrado se distingue de un error al correr la
+# herramienta (Docker apagado, sin red para bajar la imagen...), que no debe
+# bloquear el commit: el pipeline igual lo revisa al hacer push.
+if command -v gitleaks >/dev/null 2>&1; then
+  revisar() { gitleaks protect --staged --redact --exit-code 2 --config "${REPO_ROOT}/.gitleaks.toml"; }
+elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+  # Con el usuario propio: si no, git rechaza el repositorio por ser de otro dueño.
+  revisar() {
+    docker run --rm -u "$(id -u):$(id -g)" -v "${REPO_ROOT}:/repo" -w /repo zricethezav/gitleaks:latest \
+      protect --staged --redact --exit-code 2 --config /repo/.gitleaks.toml
+  }
+else
+  echo "⚠️  No se pudo revisar el commit en busca de secretos: falta Gitleaks o Docker corriendo." >&2
+  echo "    (el commit continúa; el pipeline igual lo revisará al hacer push)." >&2
   exit 0
 fi
 
-REPO_ROOT="$(git rev-parse --show-toplevel)"
+set +e
+revisar
+rc=$?
+set -e
 
-if ! gitleaks protect --staged --redact --config "${REPO_ROOT}/.gitleaks.toml"; then
+if [ "$rc" -eq 2 ]; then
   echo "" >&2
   echo "❌ Gitleaks detectó un posible secreto en los cambios preparados (staged)." >&2
   echo "   Revisa el hallazgo de arriba, quítalo del código y vuelve a intentar el commit." >&2
-  echo "   Si es un falso positivo, agrégalo al allowlist de .gitleaks.toml con justificación." >&2
+  echo "   Si es un falso positivo, agrega su huella (Fingerprint) a .gitleaksignore con el motivo." >&2
   exit 1
+elif [ "$rc" -ne 0 ]; then
+  echo "⚠️  Gitleaks no pudo correr (código $rc): el commit continúa; el pipeline igual lo revisará al hacer push." >&2
 fi
