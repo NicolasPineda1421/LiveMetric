@@ -8,7 +8,7 @@
 <dt>Docente</dt><dd>[Nombre del docente]</dd>
 <dt>Institución</dt><dd>[Nombre de la institución]</dd>
 <dt>Fecha</dt><dd>[Fecha de entrega]</dd>
-<dt>Versión documentada</dt><dd>v1.3.3</dd>
+<dt>Versión documentada</dt><dd>v1.3.4</dd>
 <dt>Licencia</dt><dd>MIT</dd>
 <dt>Repositorio</dt><dd>github.com/NicolasPineda1421/LiveMetric</dd>
 <dt>Imágenes</dt><dd>hub.docker.com/u/nicolaspineda1421</dd>
@@ -71,7 +71,7 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 | Base de datos de código abierto | PostgreSQL 16, en una red interna sin puerto hacia la PC |
 | Autenticación JWT con roles | JWT HS256 con los roles `admin`, `auditor` y `voter`, verificados en cada servicio |
 | Dockerfile por servicio, docker-compose | Seis Dockerfile multietapa sobre Alpine, sin root; `docker-compose.yml` para desarrollo |
-| Imágenes en Docker Hub con versión semántica | Seis imágenes publicadas por `release.yml` con `1.3.3`, `v1.3.3`, `1.3` y `latest`, solo si Trivy las aprueba |
+| Imágenes en Docker Hub con versión semántica | Seis imágenes publicadas por `release.yml` con `1.3.4`, `v1.3.4`, `1.3` y `latest`, solo si Trivy las aprueba |
 | Pipeline DevSecOps | 37 jobs en GitHub Actions, con un *Security Gate* final (sección 4) |
 | IaC y orquestación | Terraform (provider `kreuzwerker/docker`) y Docker Swarm |
 | Documentación en Markdown | README y manuales de arquitectura, desarrollo, despliegue, seguridad y usuario |
@@ -553,7 +553,7 @@ El job `container-scan` construye las seis imágenes reales, igual que en produc
 
 ### 4.5 Fase 4 — Pruebas
 
-**Pruebas unitarias y de integración.** Jest corre en los seis componentes: **263 pruebas** en la corrida sobre la v1.3.3.
+**Pruebas unitarias y de integración.** Jest corre en los seis componentes: **269 pruebas** en la corrida sobre la v1.3.4.
 
 - **Servicios.** Supertest llama a la app de Express en memoria contra un PostgreSQL 16 real y desechable: cada `npm test` lo levanta en un contenedor, le carga `db/init.sql` y lo borra al terminar.
 - **Frontend.** React Testing Library prueba los componentes sobre jsdom, con el cliente HTTP reemplazado por un doble.
@@ -620,7 +620,7 @@ definition:
             type=raw,value=latest
 ```
 
-*Fragmento 6. Etiquetas de cada imagen publicada (`release.yml`): `1.3.3`, `v1.3.3`, `1.3` y `latest`.*
+*Fragmento 6. Etiquetas de cada imagen publicada (`release.yml`): `1.3.4`, `v1.3.4`, `1.3` y `latest`.*
 
 ### 4.7 Fase 6 — Operación y monitoreo
 
@@ -647,20 +647,20 @@ Los mismos controles, salvo Checkov, Terraform y ZAP, corren en la PC con `./scr
 
 ### 5.1 Resumen de la última corrida
 
-Los datos de esta sección salen de la corrida del pipeline sobre la versión v1.3.3, del 29 de septiembre de 2026, y del pipeline local sobre ese mismo código.
+Los datos de esta sección salen de la corrida del pipeline sobre la versión v1.3.4, del 30 de septiembre de 2026, y del pipeline local sobre ese mismo código.
 
 | Control | Resultado |
 |---|---|
-| Gitleaks | Sin secretos en los 68 commits del historial |
+| Gitleaks | Sin secretos en los 75 commits del historial |
 | Semgrep | 289 reglas sobre 185 archivos: 0 hallazgos de severidad alta o media; 33 informativos |
 | ESLint | 0 hallazgos en los 6 servicios; 11 excepciones justificadas en el código |
 | npm audit | 0 vulnerabilidades en las dependencias de producción de los 6 servicios |
 | Trivy (dependencias) | 0 CVE críticas o altas |
 | Trivy (imágenes) | 0 CVE críticas o altas en las 6 imágenes |
 | Checkov | 37 controles aprobados, 0 fallidos |
-| Jest | 263 pruebas aprobadas; 78,5 % de cobertura de líneas |
+| Jest | 269 pruebas aprobadas; 78,6 % de cobertura de líneas |
 | Terraform | Despliegue, *smoke test* y destrucción correctos |
-| OWASP ZAP | 0 alertas altas, 0 medias, 1 baja (falso positivo) y 9 informativas |
+| OWASP ZAP | 0 alertas altas, 0 medias, 1 baja (falso positivo) y 8 informativas |
 
 *Tabla 8. Resultado de cada control.*
 
@@ -670,15 +670,15 @@ Los datos de esta sección salen de la corrida del pipeline sobre la versión v1
 
 ```
   Todo el repositorio
-   ✔ Secretos  · Gitleaks    sin secretos expuestos (68 commits revisados)
+   ✔ Secretos  · Gitleaks    sin secretos expuestos (75 commits revisados)
    ✔ Código    · Semgrep     sin hallazgos para revisar · 33 informativos
 
   Por servicio Código     Dependencias          Imagen Docker         Pruebas
               ESLint     npm audit  Trivy      build      Trivy      Jest
-  auth        ✔          ✔          ✔          ✔          ✔          ✔ 21
-  voting      ✔          ✔          ✔          ✔          ✔          ✔ 33
-  analytics   ✔          ✔          ✔          ✔          ✔          ✔ 84
-  scrutiny    ✔          ✔          ✔          ✔          ✔          ✔ 20
+  auth        ✔          ✔          ✔          ✔          ✔          ✔ 23
+  voting      ✔          ✔          ✔          ✔          ✔          ✔ 34
+  analytics   ✔          ✔          ✔          ✔          ✔          ✔ 85
+  scrutiny    ✔          ✔          ✔          ✔          ✔          ✔ 22
   scheduler   ✔          ✔          ✔          ✔          ✔          ✔ 4
   frontend    ✔          ✔          ✔          ✔          ✔          ✔ 101
 
@@ -688,8 +688,8 @@ Los datos de esta sección salen de la corrida del pipeline sobre la versión v1
 **Gitleaks.** Revisa el historial completo con las reglas por defecto, más una propia para `JWT_SECRET`. Cuatro huellas de falsos positivos ya revisados están en `.gitleaksignore`, cada una con su motivo: una contraseña deliberadamente incorrecta en una prueba y los ejemplos de la documentación que muestran cómo comprobar que Gitleaks bloquea.
 
 ```
-INF 68 commits scanned.
-INF scanned ~2685067 bytes (2.69 MB) in 1.16s
+INF 75 commits scanned.
+INF scanned ~3213295 bytes (3.21 MB) in 870ms
 INF no leaks found
 ```
 
@@ -734,6 +734,7 @@ La evolución de ZAP muestra el ciclo completo de gestión de un hallazgo:
 |---|---|---|---|---|
 | Primera corrida con el stack completo | 0 | 1 | 7 | 9 |
 | Después de corregir las cabeceras | 0 | 0 | 1 | 9 |
+| Con Vite 8 (v1.3.4): el nuevo build ya no deja comentarios de las librerías y desaparece *Suspicious Comments* | 0 | 0 | 1 | 8 |
 
 *Tabla 9. Alertas de ZAP antes y después de las correcciones.*
 
@@ -741,13 +742,13 @@ La evolución de ZAP muestra el ciclo completo de gestión de un hallazgo:
 
 | Componente | Pruebas | Líneas cubiertas | Cobertura |
 |---|---|---|---|
-| Analytics | 84 | 481 / 520 | 92,5 % |
-| Scrutiny | 20 | 320 / 358 | 89,4 % |
-| Voting | 33 | 159 / 204 | 77,9 % |
+| Analytics | 85 | 483 / 522 | 92,5 % |
+| Scrutiny | 22 | 323 / 359 | 90,0 % |
+| Voting | 34 | 159 / 204 | 77,9 % |
 | Frontend | 101 | 586 / 775 | 75,6 % |
-| Auth | 21 | 173 / 315 | 54,9 % |
+| Auth | 23 | 174 / 315 | 55,2 % |
 | Scheduler | 4 | 26 / 52 | 50,0 % |
-| **Total** | **263** | **1745 / 2224** | **78,5 %** |
+| **Total** | **269** | **1751 / 2227** | **78,6 %** |
 
 ### 5.3 Tabla de hallazgos
 
@@ -765,7 +766,7 @@ Un hallazgo no siempre sale de una herramienta automática: algunos aparecieron 
 | Content-Security-Policy ausente | ZAP | Media | Resuelto | CSP estricta: scripts y conexiones solo del propio origen; el único `<style>` en línea permitido se autoriza por su hash |
 | `X-Content-Type-Options` ausente en `/config.js`; COEP, COOP, CORP y Permissions-Policy ausentes; nginx revelaba su versión | ZAP | Baja | Resuelto | Cabeceras en `cabeceras-seguridad.conf`, incluidas también en el `location` de `/config.js`; `server_tokens off` |
 | *Timestamp Disclosure* | ZAP | Baja | Aceptado | Falso positivo: una constante numérica de una librería |
-| 9 alertas informativas (*Modern Web Application*, *Sec-Fetch-\**, *Storable Content*, *Base64 Disclosure*, *Suspicious Comments*) | ZAP | Informativa | Aceptado | Describen la aplicación o señalan comentarios y cadenas Base64 dentro de las librerías compiladas; ninguna es una falla explotable |
+| 8 alertas informativas (*Modern Web Application*, *Sec-Fetch-\**, *Storable Content*, *Base64 Disclosure*) | ZAP | Informativa | Aceptado | Describen la aplicación o señalan cadenas Base64 dentro de las librerías compiladas; ninguna es una falla explotable |
 | 33 hallazgos informativos | Semgrep | Informativa | Aceptado | Confirman controles implementados (helmet, rate limiting) |
 | El `Dockerfile` del contenedor global corre como root | Semgrep | Media | Aceptado | Ese contenedor ejecuta su propio motor de Docker, que necesita root; excepción `nosemgrep` con el motivo en la línea |
 | El frontend hablaba directamente con cada servicio, y cada uno validaba CORS por su cuenta | Revisión | Baja | Resuelto | nginx como único punto de entrada; los servicios solo en `127.0.0.1` |
@@ -925,7 +926,7 @@ Además, Falco corre con `rule_matching=all`, porque por defecto sus reglas gen�
 - **La base es compartida entre servicios**, con un mismo usuario de PostgreSQL para todos, que además es dueño de las tablas: puede desactivar los triggers *append-only*. Tampoco tiene respaldo automático.
 - **Swarm se probó en un solo nodo**, y ahí los secretos llegan a los servicios como variables de entorno.
 - **Faltan procedimientos de rotación.** Cambiar la clave de cifrado del padrón requiere un script que todavía no existe, y las actas firmadas con una clave anterior pasan a verse como alteradas, porque el sistema no conserva las claves públicas viejas.
-- **La cobertura de pruebas es desigual:** Auth y el scheduler están por debajo del 55 %.
+- **La cobertura de pruebas es desigual:** Auth (55 %) y el scheduler (50 %) quedan muy por debajo del resto.
 
 ### 7.3 Lecciones aprendidas
 
@@ -951,7 +952,7 @@ Además, Falco corre con `rule_matching=all`, porque por defecto sus reglas gen�
 |---|---|
 | Repositorio | https://github.com/NicolasPineda1421/LiveMetric |
 | Imágenes | https://hub.docker.com/u/nicolaspineda1421 |
-| Versión documentada | v1.3.3 (release en GitHub y tags en Docker Hub) |
+| Versión documentada | v1.3.4 (release en GitHub y tags en Docker Hub) |
 | Modelo de amenazas | `docs/threat-model/livemetric.threatdragon.json` y `STRIDE-analysis.md` |
 | Pipeline | `.github/workflows/devsecops.yml` y `release.yml` |
 | Manuales | `docs/` (arquitectura, desarrollo, instalación y despliegue, seguridad, usuario) |
