@@ -780,6 +780,9 @@ Un hallazgo no siempre sale de una herramienta automática: algunos aparecieron 
 | esbuild, dependencia de Vite 5, permite leer el servidor de desarrollo desde otro sitio | npm audit (incluyendo desarrollo) | Media | Resuelto | Solo afectaba a `npm run dev`. Se actualizó a Vite 8: `npm audit` da 0 vulnerabilidades también en las dependencias de desarrollo, y la aplicación se recorrió con la CSP activa sin ninguna violación |
 | cAdvisor y Falco corren en modo privilegiado | Diseño del monitoreo | Media | Aceptado | Inherente a su función; el monitoreo está en un compose aparte y sus puertos, solo en `127.0.0.1` |
 | Sin el binario de Gitleaks instalado, el hook de pre-commit dejaba pasar cualquier commit | Prueba del hook | Media | Resuelto | Usa la imagen de Docker de Gitleaks (el proyecto solo exige Docker); un error de la herramienta no bloquea el commit, un secreto sí |
+| Analytics y Scrutiny no confiaban en el proxy: el límite de peticiones contaba a todos los usuarios como uno solo (la IP de nginx), y uno podía agotar el cupo de todos | Simulacro desde cero (un error en los registros de Grafana) | Media (disponibilidad) | Resuelto | `trust proxy` igual que en Auth y Voting; una prueba en cada servicio reproduce dos clientes detrás de nginx y falla sin la corrección |
+| Nombres del padrón, puestos, mesas, plantillas y títulos se guardaban con entidades HTML (`O&#x27;Neil`, `A&amp;B`), que se veían así en el panel y en el acta | Simulacro desde cero | Media (lo que muestra el acta) | Resuelto | Sin `.escape()` al guardar: nada se arma como HTML en el servidor, y React escapa al mostrar. Pruebas con apóstrofes, `&` y `/`. Los datos ya guardados en instalaciones anteriores conservan las entidades |
+| La documentación del monitoreo daba por activo node-exporter, que viene desactivado; y `docker swarm init` falla en una PC con varias direcciones de red | Simulacro desde cero | Baja | Resuelto | Documentados, con su solución en la guía de problemas |
 | Los servicios se conectan a la base como dueños de las tablas, y por eso pueden desactivar el trigger *append-only* | Demostración del ataque a las actas | Media | Mitigado | La firma Ed25519 y el reconteo detectan cualquier alteración del acta (Figura 16). Pendiente: un usuario de base por servicio, sin permiso para cambiar las tablas |
 
 *Tabla 10. Hallazgos con su severidad, estado y justificación.*
@@ -792,6 +795,14 @@ Un control que nunca falla puede no estar revisando nada: lo demostró Checkov. 
 - **Pruebas del frontend.** Se introdujeron 21 defectos en el código: por ejemplo, el sello del acta en verde sin firma, la sesión guardada en `localStorage` o un nombre de candidato interpretado como HTML. Las pruebas detectaron los 21; dos de ellas hubo que reforzarlas antes.
 - **CSP.** Se recorrió toda la aplicación con un navegador registrando cada violación de la política: no hubo ninguna. Un script inyectado a propósito quedó bloqueado.
 - **Hook de pre-commit.** Con un secreto de prueba preparado, el hook bloqueó el commit. Esa prueba mostró que, sin el binario de Gitleaks instalado, el hook dejaba pasar todo. Ahora usa la imagen de Docker de Gitleaks, la misma del pipeline.
+- **Simulacro desde cero.** Se clonó el repositorio desde GitHub en una carpeta vacía y se siguió el README como lo haría un evaluador:
+  - `start.sh` generó el `.env`, pasó el análisis de seguridad y levantó los siete contenedores;
+  - un recorrido automatizado de 46 comprobaciones usó la aplicación como administrador, auditor y votantes, con el navegador vigilando la CSP;
+  - se levantó el monitoreo con Falco;
+  - se desplegaron en Swarm las imágenes publicadas en Docker Hub;
+  - el PDF de este informe se regeneró idéntico.
+
+  Aparecieron los hallazgos que la Tabla 10 marca con ese origen, que ninguna herramienta automática había señalado.
 - **Integridad del acta, en vivo (amenaza 15).** Un script de demostración (`scripts/demo/alterar-acta.js`) hace lo que haría un atacante con acceso total a la base:
   - intenta cambiar el acta y la base se lo impide;
   - con permisos de dueño de la tabla, apaga el trigger *append-only*;
@@ -814,7 +825,6 @@ Los servicios no tienen instrumentación propia: no exponen un endpoint `/metric
 |---|---|
 | Blackbox exporter | Disponibilidad y latencia de cada servicio, sondeando sus `/health` |
 | cAdvisor | CPU, memoria, red y reinicios por contenedor |
-| node-exporter | Métricas del host |
 | Promtail y Loki | Registros de todos los contenedores, etiquetados por servicio |
 | Prometheus | Recolección de métricas y evaluación de alertas |
 | Grafana | Tablero aprovisionado desde el repositorio |

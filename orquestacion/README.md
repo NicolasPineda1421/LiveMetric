@@ -54,6 +54,9 @@ Swarm la reprograma.
 ```bash
 # 1. Inicializar Swarm (una sola vez por host)
 docker swarm init
+# Si falla con "could not choose an IP address to advertise" (la PC tiene
+# varias direcciones, por ejemplo IPv6 en el Wi-Fi), indicar la IP local:
+#   docker swarm init --advertise-addr 192.168.x.x
 
 # 2. Desplegar la versión publicada
 cd orquestacion

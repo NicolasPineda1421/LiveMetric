@@ -17,7 +17,7 @@ código de la aplicación:
 | **cAdvisor** | CPU, memoria, red y reinicios por contenedor |
 | **Blackbox exporter** | Disponibilidad y latencia de cada microservicio, sondeando los `/health` que ya exponen |
 | **Promtail → Loki** | Logs de todos los contenedores, etiquetados por servicio |
-| **node-exporter** | Métricas del host |
+| **node-exporter** | Métricas del host. **Viene desactivado** (comentado en el compose): en Docker Desktop sobre Windows mediría la VM de WSL2 y no el equipo. En un host Linux se activa descomentándolo |
 | **Falco** | Detección de comportamiento anómalo en tiempo de ejecución |
 
 La sonda sobre `/health` es lo que convierte esto en observabilidad de la **aplicación** y
@@ -32,7 +32,7 @@ instrumentar nada.
 | Grafana | 3010 | Visualización |
 | Prometheus | 9090 | Recolección y almacenamiento de métricas |
 | cAdvisor | — | Métricas por contenedor |
-| node-exporter | — | Métricas del host |
+| node-exporter | — | Métricas del host (desactivado por defecto, ver arriba) |
 | Blackbox exporter | — | Sondas HTTP |
 | Loki | — | Agregación de logs |
 | Promtail | — | Recolección de logs |
