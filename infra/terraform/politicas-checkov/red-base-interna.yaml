@@ -1,0 +1,17 @@
+metadata:
+  id: "CKV2_LM_1"
+  name: "La red de la base de datos debe ser interna (sin salida a Internet ni acceso desde el host)"
+  category: "NETWORKING"
+  severity: "HIGH"
+definition:
+  or:
+    - cond_type: "attribute"
+      resource_types: ["docker_network"]
+      attribute: "name"
+      operator: "not_contains"
+      value: "db"
+    - cond_type: "attribute"
+      resource_types: ["docker_network"]
+      attribute: "internal"
+      operator: "equals"
+      value: true

@@ -1,0 +1,16 @@
+metadata:
+  id: "CKV2_LM_2"
+  name: "Los contenedores solo publican puertos en 127.0.0.1"
+  category: "NETWORKING"
+  severity: "HIGH"
+definition:
+  or:
+    - cond_type: "attribute"
+      resource_types: ["docker_container"]
+      attribute: "ports"
+      operator: "not_exists"
+    - cond_type: "attribute"
+      resource_types: ["docker_container"]
+      attribute: "ports.*.ip"
+      operator: "equals"
+      value: "127.0.0.1"

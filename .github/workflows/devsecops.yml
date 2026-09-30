@@ -49,7 +49,7 @@ jobs:
         # lo que falla este step y bloquea automaticamente el resto del pipeline.
 
   # -------------------------------------------------------------------------
-  # 2) NPM AUDIT - Vulnerabilidades de dependencias en los 3 microservicios.
+  # 2) NPM AUDIT - Vulnerabilidades de dependencias en los 6 servicios.
   # -------------------------------------------------------------------------
   dependency-audit:
     name: npm audit - ${{ matrix.service }}
@@ -273,6 +273,11 @@ jobs:
 
   # -------------------------------------------------------------------------
   # 5) CHECKOV - Validacion de seguridad del codigo Terraform (IaC).
+  #    Checkov no trae controles para el provider kreuzwerker/docker: sin las
+  #    politicas propias de infra/terraform/politicas-checkov no evaluaria
+  #    ningun recurso. Esas politicas exigen lo que promete la arquitectura
+  #    (red de la base interna, puertos solo en 127.0.0.1, solo lectura,
+  #    no-new-privileges, nada privilegiado).
   # -------------------------------------------------------------------------
   iac-scan:
     name: Checkov - Terraform
@@ -289,6 +294,7 @@ jobs:
         with:
           directory: infra/terraform
           framework: terraform
+          external_checks_dirs: infra/terraform/politicas-checkov
           output_format: sarif
           output_file_path: checkov-report.sarif
           soft_fail: false   # falla el pipeline ante hallazgos de severidad relevante

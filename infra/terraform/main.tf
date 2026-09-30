@@ -133,9 +133,9 @@ resource "docker_image" "postgres" {
 }
 
 resource "docker_container" "postgres" {
-  name     = "livemetric-postgres"
-  image    = docker_image.postgres.image_id
-  restart  = "unless-stopped"
+  name    = "livemetric-postgres"
+  image   = docker_image.postgres.image_id
+  restart = "unless-stopped"
 
   env = [
     "POSTGRES_DB=${var.postgres_db}",
@@ -148,10 +148,20 @@ resource "docker_container" "postgres" {
     container_path = "/var/lib/postgresql/data"
   }
 
-  upload {
-    file    = "/docker-entrypoint-initdb.d/init.sql"
-    content = file("${path.module}/../../db/init.sql")
+  # Montado como en docker-compose.yml, de solo lectura. No con "upload":
+  # sobre un sistema de archivos de solo lectura, Docker no puede copiar nada
+  # al contenedor.
+  volumes {
+    host_path      = abspath("${path.module}/../../db/init.sql")
+    container_path = "/docker-entrypoint-initdb.d/init.sql"
+    read_only      = true
   }
+
+  # Igual que en docker-compose.yml: sistema de archivos de solo lectura
+  # (salvo sus datos y los tmpfs) y sin poder ganar privilegios.
+  read_only     = true
+  tmpfs         = { "/tmp" = "", "/var/run/postgresql" = "" }
+  security_opts = ["no-new-privileges:true"]
 
   networks_advanced {
     name = docker_network.db_net.name
@@ -175,6 +185,12 @@ resource "docker_container" "auth" {
   name    = "livemetric-auth"
   image   = docker_image.auth.image_id
   restart = "unless-stopped"
+
+  # Igual que en docker-compose.yml: sistema de archivos de solo lectura
+  # (salvo /tmp) y sin poder ganar privilegios.
+  read_only     = true
+  tmpfs         = { "/tmp" = "" }
+  security_opts = ["no-new-privileges:true"]
 
   env = [
     "NODE_ENV=production",
@@ -228,6 +244,12 @@ resource "docker_container" "voting" {
   image   = docker_image.voting.image_id
   restart = "unless-stopped"
 
+  # Igual que en docker-compose.yml: sistema de archivos de solo lectura
+  # (salvo /tmp) y sin poder ganar privilegios.
+  read_only     = true
+  tmpfs         = { "/tmp" = "" }
+  security_opts = ["no-new-privileges:true"]
+
   env = [
     "NODE_ENV=production",
     "PORT=3002",
@@ -270,6 +292,12 @@ resource "docker_container" "analytics" {
   name    = "livemetric-analytics"
   image   = docker_image.analytics.image_id
   restart = "unless-stopped"
+
+  # Igual que en docker-compose.yml: sistema de archivos de solo lectura
+  # (salvo /tmp) y sin poder ganar privilegios.
+  read_only     = true
+  tmpfs         = { "/tmp" = "" }
+  security_opts = ["no-new-privileges:true"]
 
   env = [
     "NODE_ENV=production",
@@ -315,6 +343,12 @@ resource "docker_container" "scrutiny" {
   name    = "livemetric-scrutiny"
   image   = docker_image.scrutiny.image_id
   restart = "unless-stopped"
+
+  # Igual que en docker-compose.yml: sistema de archivos de solo lectura
+  # (salvo /tmp) y sin poder ganar privilegios.
+  read_only     = true
+  tmpfs         = { "/tmp" = "" }
+  security_opts = ["no-new-privileges:true"]
 
   env = [
     "NODE_ENV=production",
@@ -362,6 +396,12 @@ resource "docker_container" "scheduler" {
   image   = docker_image.scheduler.image_id
   restart = "unless-stopped"
 
+  # Igual que en docker-compose.yml: sistema de archivos de solo lectura
+  # (salvo /tmp) y sin poder ganar privilegios.
+  read_only     = true
+  tmpfs         = { "/tmp" = "" }
+  security_opts = ["no-new-privileges:true"]
+
   env = [
     "NODE_ENV=production",
     "PORT=3005",
@@ -398,6 +438,12 @@ resource "docker_container" "frontend" {
   name    = "livemetric-frontend"
   image   = docker_image.frontend.image_id
   restart = "unless-stopped"
+
+  # Igual que en docker-compose.yml: sistema de archivos de solo lectura
+  # (salvo /tmp) y sin poder ganar privilegios.
+  read_only     = true
+  tmpfs         = { "/tmp" = "" }
+  security_opts = ["no-new-privileges:true"]
 
   # Rutas relativas: el navegador solo habla con el frontend, y nginx
   # reenvia a cada servicio por app_net (igual que en docker-compose.yml).

@@ -36,7 +36,7 @@ Todas las actions de terceros están **fijadas a un SHA de commit** (con la vers
 
 | Job | Herramienta | Qué cubre |
 |---|---|---|
-| `iac-scan` | **Checkov** | Malas prácticas en `infra/terraform/main.tf`: redes no aisladas, contenedores privilegiados, falta de límites, secretos en `.tf`. |
+| `iac-scan` | **Checkov** | Malas prácticas en `infra/terraform/main.tf`. Checkov no trae controles para el provider de Docker (`kreuzwerker/docker`), así que el proyecto define los suyos en [`infra/terraform/politicas-checkov/`](../infra/terraform/politicas-checkov/): la red de la base es interna, los puertos solo se publican en `127.0.0.1`, la base no publica ninguno, y cada contenedor tiene solo lectura, `no-new-privileges` y nada privilegiado. |
 | `iac-deploy` | **Terraform** | Despliegue real: `terraform apply` levanta el stack (con su propio PostgreSQL), un smoke test confirma que los 4 microservicios responden y `terraform destroy` limpia todo. |
 
 | Job final | |

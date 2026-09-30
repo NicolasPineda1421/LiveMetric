@@ -42,7 +42,7 @@ Todas son de código abierto y corren en el pipeline de GitHub Actions (`.github
 | **npm audit** | CVE en las dependencias de producción | `--omit=dev --audit-level=high` | **Sí**, desde severidad alta |
 | **Trivy** (`fs`) | CVE en `package.json`/`package-lock.json` | `CRITICAL,HIGH`, `--ignore-unfixed`; excepciones en `.trivyignore` | **Sí** |
 | **Trivy** (imagen) | CVE en las 6 imágenes construidas (sistema base y librerías) | Igual que el anterior. También en `release.yml`: una imagen con CVE críticas o altas no se publica en Docker Hub | **Sí** |
-| **Checkov** | Terraform (`infra/terraform`): redes, privilegios, límites, secretos | `soft_fail: false`. Excepción: `#checkov:skip=<ID>:<motivo>` en el recurso | **Sí** |
+| **Checkov** | Terraform (`infra/terraform`): la red de la base, los puertos publicados y el endurecimiento de cada contenedor | Checkov no trae controles para el provider de Docker: evalúa las políticas propias de `infra/terraform/politicas-checkov/` (`CKV2_LM_1` a `CKV2_LM_6`). `soft_fail: false`. Excepción: `#checkov:skip=<ID>:<motivo>` en el recurso | **Sí** |
 | **OWASP ZAP** (baseline) | La aplicación desplegada, como caja negra, en `http://localhost:3000` | Escaneo pasivo, con las reglas alfa (`-a`) | No: el reporte queda como artefacto |
 | **Jest** | Pruebas unitarias y de integración de los servicios (incluye un ataque simulado contra las actas) y de la interfaz (sello del acta, papeleta, roles, XSS) | Base desechable y secretos aleatorios por corrida | **Sí** |
 
@@ -106,7 +106,7 @@ La tabla trae la librería o el paquete del sistema, el CVE, la severidad, la ve
 
 ### Checkov
 
-Cada hallazgo es un control (`CKV_DOCKER_…`, `CKV_TF_…`) sobre un recurso de `main.tf`, con un enlace a la guía que explica el riesgo y la corrección. Se corrige en el recurso; si no aplica, `#checkov:skip=<ID>:<motivo>` dentro de ese recurso.
+Cada hallazgo es un control sobre un recurso de `main.tf`. Como Checkov no trae controles para el provider de Docker, los que se evalúan son los propios del proyecto (`CKV2_LM_1` a `CKV2_LM_6`, descritos en [`politicas-checkov/README.md`](../infra/terraform/politicas-checkov/README.md)): el nombre del control dice qué garantía se rompió y el recurso, dónde. Se corrige en el recurso; si no aplica, `#checkov:skip=<ID>:<motivo>` dentro de ese recurso. Hoy pasan los 37 (5 controles por cada uno de los 7 contenedores y 1 por cada una de las 2 redes).
 
 ### OWASP ZAP
 

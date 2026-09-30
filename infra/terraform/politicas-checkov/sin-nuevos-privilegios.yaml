@@ -1,0 +1,11 @@
+metadata:
+  id: "CKV2_LM_5"
+  name: "Los contenedores corren con no-new-privileges"
+  category: "GENERAL_SECURITY"
+  severity: "MEDIUM"
+definition:
+  cond_type: "attribute"
+  resource_types: ["docker_container"]
+  attribute: "security_opts"
+  operator: "contains"
+  value: "no-new-privileges:true"

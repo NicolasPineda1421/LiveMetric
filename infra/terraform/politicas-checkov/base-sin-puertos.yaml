@@ -1,0 +1,16 @@
+metadata:
+  id: "CKV2_LM_3"
+  name: "La base de datos no publica ningún puerto"
+  category: "NETWORKING"
+  severity: "HIGH"
+definition:
+  or:
+    - cond_type: "attribute"
+      resource_types: ["docker_container"]
+      attribute: "name"
+      operator: "not_contains"
+      value: "postgres"
+    - cond_type: "attribute"
+      resource_types: ["docker_container"]
+      attribute: "ports"
+      operator: "not_exists"

@@ -1,0 +1,16 @@
+metadata:
+  id: "CKV2_LM_6"
+  name: "Ningún contenedor corre en modo privilegiado"
+  category: "GENERAL_SECURITY"
+  severity: "HIGH"
+definition:
+  or:
+    - cond_type: "attribute"
+      resource_types: ["docker_container"]
+      attribute: "privileged"
+      operator: "not_exists"
+    - cond_type: "attribute"
+      resource_types: ["docker_container"]
+      attribute: "privileged"
+      operator: "equals"
+      value: false

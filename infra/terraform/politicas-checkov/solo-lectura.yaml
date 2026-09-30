@@ -1,0 +1,11 @@
+metadata:
+  id: "CKV2_LM_4"
+  name: "Los contenedores tienen el sistema de archivos de solo lectura"
+  category: "GENERAL_SECURITY"
+  severity: "MEDIUM"
+definition:
+  cond_type: "attribute"
+  resource_types: ["docker_container"]
+  attribute: "read_only"
+  operator: "equals"
+  value: true
