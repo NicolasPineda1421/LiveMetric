@@ -89,6 +89,7 @@ Para publicar una versión nueva basta con crear el tag: `git tag -a v1.4.0 -m "
 | Documento | Contenido |
 |---|---|
 | [Informe técnico](docs/informe-tecnico.md) ([PDF](docs/informe-tecnico.pdf)) | El informe del trabajo final: arquitectura, modelo de amenazas, pipeline, resultados de seguridad, monitoreo y conclusiones. El PDF se genera con `scripts/informe` |
+| [Sustentación](docs/sustentacion/historia-de-usuario.md) | La historia de usuario de la sustentación, con su demostración en vivo (incluido un ataque a un acta), y el [guion del video](docs/sustentacion/guion-video.md) |
 | [Manual de Arquitectura](docs/manual-arquitectura.md) | Estilo arquitectónico, patrones, ADRs, modelo de datos y los 7 diagramas (componentes, despliegue, secuencia, casos de uso, DFD 0 y 1) |
 | [Arquitectura](docs/arquitectura.md) | Componentes, red, secretos, flujo de punta a punta y estructura del repositorio |
 | [Instalación y despliegue](docs/instalacion-y-despliegue.md) | Las cuatro formas de levantarlo, `.env`, base de datos, Windows, acceso desde la red, datos de demostración, API por línea de comandos y solución de problemas |

@@ -553,7 +553,7 @@ El job `container-scan` construye las seis imágenes reales, igual que en produc
 
 ### 4.5 Fase 4 — Pruebas
 
-**Pruebas unitarias y de integración.** Jest corre en los seis componentes: **263 pruebas** en la última corrida.
+**Pruebas unitarias y de integración.** Jest corre en los seis componentes: **263 pruebas** en la corrida sobre la v1.3.3.
 
 - **Servicios.** Supertest llama a la app de Express en memoria contra un PostgreSQL 16 real y desechable: cada `npm test` lo levanta en un contenedor, le carga `db/init.sql` y lo borra al terminar.
 - **Frontend.** React Testing Library prueba los componentes sobre jsdom, con el cliente HTTP reemplazado por un doble.
@@ -779,6 +779,8 @@ Un hallazgo no siempre sale de una herramienta automática: algunos aparecieron 
 | En Swarm, los secretos viajan como variables de entorno | Análisis de riesgos | Baja | Aceptado | Pendiente: `docker secret` (sección 7.4) |
 | esbuild, dependencia de Vite 5, permite leer el servidor de desarrollo desde otro sitio | npm audit (incluyendo desarrollo) | Media | Aceptado temporalmente | Solo afecta a `npm run dev`; producción sirve archivos estáticos con nginx. Pendiente: actualizar Vite |
 | cAdvisor y Falco corren en modo privilegiado | Diseño del monitoreo | Media | Aceptado | Inherente a su función; el monitoreo está en un compose aparte y sus puertos, solo en `127.0.0.1` |
+| Sin el binario de Gitleaks instalado, el hook de pre-commit dejaba pasar cualquier commit | Prueba del hook | Media | Resuelto | Usa la imagen de Docker de Gitleaks (el proyecto solo exige Docker); un error de la herramienta no bloquea el commit, un secreto sí |
+| Los servicios se conectan a la base como dueños de las tablas, y por eso pueden desactivar el trigger *append-only* | Demostración del ataque a las actas | Media | Mitigado | La firma Ed25519 y el reconteo detectan cualquier alteración del acta (Figura 16). Pendiente: un usuario de base por servicio, sin permiso para cambiar las tablas |
 
 *Tabla 10. Hallazgos con su severidad, estado y justificación.*
 
@@ -789,6 +791,18 @@ Un control que nunca falla puede no estar revisando nada: lo demostró Checkov. 
 - **Checkov.** Cada una de las seis políticas se probó con una copia de `main.tf` que rompe exactamente lo que ella protege. En los seis casos falló solo esa política, sobre el recurso correcto.
 - **Pruebas del frontend.** Se introdujeron 21 defectos en el código: por ejemplo, el sello del acta en verde sin firma, la sesión guardada en `localStorage` o un nombre de candidato interpretado como HTML. Las pruebas detectaron los 21; dos de ellas hubo que reforzarlas antes.
 - **CSP.** Se recorrió toda la aplicación con un navegador registrando cada violación de la política: no hubo ninguna. Un script inyectado a propósito quedó bloqueado.
+- **Hook de pre-commit.** Con un secreto de prueba preparado, el hook bloqueó el commit. Esa prueba mostró que, sin el binario de Gitleaks instalado, el hook dejaba pasar todo. Ahora usa la imagen de Docker de Gitleaks, la misma del pipeline.
+- **Integridad del acta, en vivo (amenaza 15).** Un script de demostración (`scripts/demo/alterar-acta.js`) hace lo que haría un atacante con acceso total a la base:
+  - intenta cambiar el acta y la base se lo impide;
+  - con permisos de dueño de la tabla, apaga el trigger *append-only*;
+  - da vuelta el resultado;
+  - recalcula todos los hashes, para que la cadena vuelva a cuadrar.
+
+  El sistema la marcó como **alterada** de inmediato (Figura 16). La firma no se puede rehacer sin la clave privada, y el reconteo de los votos guardados no coincide con el acta. El script corre en el contenedor de Analytics, que tiene la base y el código pero solo la clave pública; es la demostración de la historia de usuario de la sustentación.
+
+![Pestaña Resultados con el sello de acta alterada](img/27-acta-alterada.png)
+
+*Figura 16. El ataque de la amenaza 15, detectado: el acta dice que ganó la Opción B, pero su firma ya no corresponde y los votos guardados no coinciden con ella.*
 
 ## 6. Monitoreo y observabilidad
 
@@ -898,7 +912,7 @@ Además, Falco corre con `rule_matching=all`, porque por defecto sus reglas gen�
 
 - **Sin HTTPS.** El sistema se sirve por HTTP en la red local; un despliegue real necesita TLS en nginx o en un balanceador.
 - **ZAP no bloquea** y corre en modo pasivo (*baseline*), no con un escaneo activo completo.
-- **La base es compartida entre servicios**, con un mismo usuario de PostgreSQL para todos, y no tiene respaldo automático.
+- **La base es compartida entre servicios**, con un mismo usuario de PostgreSQL para todos, que además es dueño de las tablas: puede desactivar los triggers *append-only*. Tampoco tiene respaldo automático.
 - **Swarm se probó en un solo nodo**, y ahí los secretos llegan a los servicios como variables de entorno.
 - **Faltan procedimientos de rotación.** Cambiar la clave de cifrado del padrón requiere un script que todavía no existe, y las actas firmadas con una clave anterior pasan a verse como alteradas, porque el sistema no conserva las claves públicas viejas.
 - **La cobertura de pruebas es desigual:** Auth y el scheduler están por debajo del 55 %.
@@ -931,5 +945,6 @@ Además, Falco corre con `rule_matching=all`, porque por defecto sus reglas gen�
 | Modelo de amenazas | `docs/threat-model/livemetric.threatdragon.json` y `STRIDE-analysis.md` |
 | Pipeline | `.github/workflows/devsecops.yml` y `release.yml` |
 | Manuales | `docs/` (arquitectura, desarrollo, instalación y despliegue, seguridad, usuario) |
+| Sustentación | `docs/sustentacion/`: la historia de usuario con su demostración y el guion del video |
 
 Para levantar el sistema basta con Docker: `./scripts/start.sh` (Linux o macOS) o `scripts\start.bat` (Windows) generan el `.env`, corren el análisis de seguridad y, si pasa, levantan los siete contenedores en `http://localhost:3000`. Este documento se genera a partir de `docs/informe-tecnico.md` con `scripts/informe` (`npm run pdf`).
