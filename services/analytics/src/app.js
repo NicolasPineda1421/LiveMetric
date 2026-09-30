@@ -13,6 +13,11 @@ const { projectTurnout, leadTimeline, buildIntegrityReport, detectSuspiciousAcce
 const app = express();
 
 app.disable('x-powered-by');
+// Detrás del nginx del frontend: req.ip es el cliente real (el último valor
+// de X-Forwarded-For, que agrega nginx), no la IP de nginx. Sin esto, el
+// límite de peticiones contaba a todos los usuarios como uno solo, y uno
+// podía agotar el cupo de todos. Igual que en auth y voting.
+app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000' }));
 app.use(express.json({ limit: '5kb' }));
@@ -185,6 +190,9 @@ app.get('/api/elections/:id/results', [param('id').isInt({ min: 1 }).toInt()], a
     certified: false,
     scheduledStart: scheduled_start,
     scheduledEnd: scheduled_end,
+    // Igual que la respuesta certificada, para que quien consuma el API no
+    // tenga que distinguir los dos casos para saber el total.
+    totalVotes: result.rows.reduce((sum, r) => sum + r.votes, 0),
     results: result.rows.map((r) => ({
       optionId: r.option_id,
       candidateNumber: r.candidate_number,

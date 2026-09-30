@@ -325,14 +325,20 @@ app.post(
   [
     body('voters').isArray({ min: 1, max: 5000 }),
     body('voters.*.cedula').trim().isLength({ min: 5, max: 20 }).matches(/^[0-9A-Za-z-]+$/),
-    body('voters.*.fullName').trim().isLength({ min: 3, max: 200 }).escape(),
-    body('voters.*.pollingPlace').trim().isLength({ min: 2, max: 150 }).escape(),
-    body('voters.*.votingTable').trim().isLength({ min: 1, max: 50 }).escape(),
+    // Sin .escape(): convertía "O'Neil" o "Sede A / B" en entidades HTML
+    // (O&#x27;Neil) que después salían así en el panel y en el acta. Aquí
+    // nada se arma como HTML; React escapa al mostrar y el PDF es texto.
+    body('voters.*.fullName').trim().isLength({ min: 3, max: 200 }),
+    body('voters.*.pollingPlace').trim().isLength({ min: 2, max: 150 }),
+    body('voters.*.votingTable').trim().isLength({ min: 1, max: 50 }),
   ],
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ error: 'Formato de padrón inválido (falta puesto o mesa de votación)', details: errors.array() });
+      return res.status(400).json({
+        error: 'Formato de padrón inválido: cada votante necesita cédula (5 a 20 letras, números o guiones), nombre (3 o más caracteres), puesto y mesa',
+        details: errors.array(),
+      });
     }
 
     const { voters } = req.body;

@@ -133,6 +133,7 @@ describe('GET /api/elections/:id/results', () => {
     expect(res.body.results).toHaveLength(2);
     const votesTotal = res.body.results.reduce((acc, r) => acc + r.votes, 0);
     expect(votesTotal).toBe(0);
+    expect(res.body.totalVotes).toBe(votesTotal);
     expect(res.body.results[0]).toEqual(
       expect.objectContaining({
         optionId: expect.any(Number),

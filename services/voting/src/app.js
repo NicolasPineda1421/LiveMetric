@@ -220,8 +220,10 @@ app.post(
   requireAuth,
   adminLimiter,
   [
-    body('name').trim().isLength({ min: 3, max: 200 }).escape(),
-    body('description').optional().trim().isLength({ max: 1000 }).escape(),
+    // Sin .escape(): guardaba entidades HTML ("A &amp; B") que después se
+    // veían tal cual en la interfaz y en el acta. React escapa al mostrar.
+    body('name').trim().isLength({ min: 3, max: 200 }),
+    body('description').optional().trim().isLength({ max: 1000 }),
     body('templateType').optional().isIn(['generic', 'presidential']),
     body('options').isArray({ min: 2, max: 30 }),
   ],
@@ -331,7 +333,7 @@ app.post(
   adminLimiter,
   [
     body('templateId').isInt({ min: 1 }).toInt(),
-    body('title').trim().isLength({ min: 3, max: 200 }).escape(),
+    body('title').trim().isLength({ min: 3, max: 200 }),
     body('scheduledStart').isISO8601().toDate(),
     body('scheduledEnd').isISO8601().toDate(),
   ],

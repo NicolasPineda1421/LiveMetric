@@ -16,6 +16,11 @@ const { streamActaPdf } = require('./actaPdf');
 const app = express();
 
 app.disable('x-powered-by');
+// Detrás del nginx del frontend: req.ip es el cliente real (el último valor
+// de X-Forwarded-For, que agrega nginx), no la IP de nginx. Sin esto, el
+// límite de peticiones contaba a todos los usuarios como uno solo, y uno
+// podía agotar el cupo de todos. Igual que en auth y voting.
+app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000' }));
 app.use(express.json({ limit: '10kb' }));

@@ -243,6 +243,40 @@ describe('POST /admin/voters/bulk + login de votante con PIN', () => {
   });
 });
 
+describe('Datos del padrón con caracteres especiales', () => {
+  it('guarda el nombre, el puesto y la mesa tal como se escribieron: sin entidades HTML', async () => {
+    const cedula = `CI-X${Date.now().toString().slice(-9)}`;
+    const carga = await request(app)
+      .post('/admin/voters/bulk')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ voters: [{ cedula, fullName: "María O'Neil", pollingPlace: 'Colegio San José / Sede A&B', votingTable: 'Mesa 1/2' }] });
+    expect(carga.status).toBe(201);
+
+    const lista = await request(app).get('/admin/voters?limit=200').set('Authorization', `Bearer ${adminToken}`);
+    expect(lista.body.voters.find((v) => v.cedula === cedula)).toMatchObject({
+      full_name: "María O'Neil",
+      polling_place: 'Colegio San José / Sede A&B',
+      voting_table: 'Mesa 1/2',
+    });
+
+    // El puesto y la mesa viajan en el JWT y de ahí a cada voto y al acta.
+    const login = await request(app).post('/login/voter').send({ cedula, pin: carga.body.accessCodes[0].pin });
+    expect(login.body).toMatchObject({ pollingPlace: 'Colegio San José / Sede A&B', votingTable: 'Mesa 1/2' });
+
+    // Se borra acá: apunta al admin de prueba, que el afterAll borra después.
+    await pool.query('DELETE FROM voters WHERE cedula = $1', [encryptField(cedula)]);
+  });
+
+  it('un error de formato dice qué necesita cada votante', async () => {
+    const res = await request(app)
+      .post('/admin/voters/bulk')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ voters: [{ cedula: 'CI-12345', fullName: 'V0', pollingPlace: 'Puesto', votingTable: 'Mesa 1' }] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/nombre \(3 o más caracteres\)/);
+  });
+});
+
 describe('GET /admin/audit-log', () => {
   it('devuelve eventos paginados con un total', async () => {
     const res = await request(app)

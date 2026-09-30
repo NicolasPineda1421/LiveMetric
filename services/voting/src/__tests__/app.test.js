@@ -296,6 +296,31 @@ describe('POST /admin/templates y GET /admin/templates', () => {
     createdTemplateId = res.body.templateId;
   });
 
+  it('guarda el nombre y la descripción de la plantilla, y el título de la elección, sin entidades HTML', async () => {
+    const nombre = `${RUN_ID} Consulta A & B / "Sede" O'Neil`;
+    const creada = await request(app)
+      .post('/admin/templates')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: nombre, description: 'Sede 1/2 & anexo', templateType: 'generic', options: ['Sí', 'No'] });
+    expect(creada.status).toBe(201);
+    const plantillas = await request(app).get('/admin/templates').set('Authorization', `Bearer ${adminToken}`);
+    expect(plantillas.body.find((t) => t.id === creada.body.templateId)).toMatchObject({ name: nombre, description: 'Sede 1/2 & anexo' });
+
+    const titulo = `${RUN_ID} Elección A & B / 2026`;
+    const eleccion = await request(app)
+      .post('/admin/elections')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        templateId: creada.body.templateId,
+        title: titulo,
+        scheduledStart: new Date(Date.now() + 3600_000).toISOString(),
+        scheduledEnd: new Date(Date.now() + 7200_000).toISOString(),
+      });
+    expect(eleccion.status).toBe(201);
+    const elecciones = await request(app).get('/admin/elections').set('Authorization', `Bearer ${adminToken}`);
+    expect(elecciones.body.map((e) => e.title)).toContain(titulo);
+  });
+
   it('GET rechaza sin token (401)', async () => {
     const res = await request(app).get('/admin/templates');
     expect(res.status).toBe(401);
