@@ -39,8 +39,11 @@ groups:
           resumen: "El contenedor {{ $labels.name }} se reinicio"
           descripcion: "Un reinicio inesperado puede indicar un fallo recurrente."
 
+      # Solo contenedores con limite de memoria (en Swarm lo tienen; en
+      # compose no): sin limite, container_spec_memory_limit_bytes vale 0, la
+      # division da infinito y la alerta saltaba para todos.
       - alert: MemoriaAlta
-        expr: (container_memory_usage_bytes{name=~"livemetric-.*"} / container_spec_memory_limit_bytes{name=~"livemetric-.*"}) > 0.9
+        expr: (container_memory_usage_bytes{name=~"livemetric-.*"} / container_spec_memory_limit_bytes{name=~"livemetric-.*"} > 0.9) and container_spec_memory_limit_bytes{name=~"livemetric-.*"} > 0
         for: 5m
         labels:
           severidad: advertencia

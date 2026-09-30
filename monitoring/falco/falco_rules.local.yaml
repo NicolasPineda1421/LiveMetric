@@ -6,20 +6,38 @@
 # no pueden ver, porque ocurre despues del despliegue.
 #
 # Las reglas aprovechan una propiedad del diseño de LiveMetric: los
-# contenedores corren con read_only y usuario no-root, asi que cualquier
-# escritura fuera de /tmp o cualquier shell interactiva es, por definicion,
-# anomala.
+# contenedores de la aplicacion corren sin root, con el sistema de archivos
+# de solo lectura (salvo /tmp) y solo hablan entre ellos y con la base. Una
+# shell interactiva, una escritura fuera de /tmp o una conexion a otro
+# destino son, por definicion, anomalas.
+#
+# Usan las macros de las reglas por defecto de Falco (spawned_process,
+# open_write, outbound), que se cargan antes que este archivo.
 # =============================================================================
 
-- macro: contenedor_livemetric
-  condition: container.name startswith "livemetric-"
+# Los 6 contenedores de la aplicacion. No "livemetric-*": el stack de
+# monitoreo (Prometheus, Loki, Grafana, ...) tambien se llama asi, y escribe
+# en sus volumenes todo el tiempo.
+- list: contenedores_app_livemetric
+  items: [livemetric-auth, livemetric-voting, livemetric-analytics, livemetric-scrutiny, livemetric-scheduler, livemetric-frontend]
 
-- list: puertos_db_livemetric
-  items: [5432]
+- macro: contenedor_app_livemetric
+  condition: container.name in (contenedores_app_livemetric)
+
+# La base tambien entra en las reglas de shell y de escalada; no en la de
+# escrituras (Postgres escribe sus datos, es su trabajo).
+- macro: contenedor_livemetric
+  condition: (contenedor_app_livemetric or container.name = livemetric-postgres)
+
+# A donde se conectan los servicios: la base y los otros servicios del API.
+- list: puertos_internos_livemetric
+  items: [5432, 3001, 3002, 3003, 3004]
 
 # -----------------------------------------------------------------------------
-# Una shell dentro de un contenedor de produccion no tiene ninguna razon de
-# ser. Si aparece, o alguien esta depurando en produccion o hay un intruso.
+# Una shell interactiva dentro de un contenedor de produccion no tiene
+# ninguna razon de ser: o alguien esta depurando en produccion, o hay un
+# intruso. "proc.tty != 0" deja afuera las shells sin terminal que abre el
+# propio Docker para los healthchecks (sh -c ...), que no son anomalas.
 # -----------------------------------------------------------------------------
 - rule: Shell abierta en contenedor LiveMetric
   desc: Se abrio una shell interactiva dentro de un contenedor de la aplicacion
@@ -27,6 +45,7 @@
     spawned_process
     and contenedor_livemetric
     and proc.name in (bash, sh, ash, dash, zsh, busybox)
+    and proc.tty != 0
   output: >
     Shell abierta en contenedor LiveMetric
     (usuario=%user.name comando=%proc.cmdline contenedor=%container.name)
@@ -34,17 +53,20 @@
   tags: [container, shell, livemetric]
 
 # -----------------------------------------------------------------------------
-# Los contenedores tienen read_only: true con tmpfs solo en /tmp. Una escritura
-# fuera de ahi indica que algo logro saltarse esa restriccion.
+# Los contenedores de la aplicacion tienen el sistema de archivos de solo
+# lectura, salvo /tmp. Una escritura que llega a abrirse fuera de ahi indica
+# que algo logro saltarse esa restriccion (o que alguien la quito). Quedan
+# fuera las de runc, el propio Docker preparando cada healthcheck.
 # -----------------------------------------------------------------------------
 - rule: Escritura fuera de tmp en contenedor LiveMetric
   desc: Escritura en el sistema de archivos de solo lectura del contenedor
   condition: >
     open_write
-    and contenedor_livemetric
+    and contenedor_app_livemetric
     and not fd.name startswith /tmp
     and not fd.name startswith /proc
     and not fd.name startswith /dev
+    and not proc.name startswith runc
   output: >
     Escritura inesperada en contenedor de solo lectura
     (archivo=%fd.name proceso=%proc.name contenedor=%container.name)
@@ -52,25 +74,29 @@
   tags: [container, filesystem, livemetric]
 
 # -----------------------------------------------------------------------------
-# Los servicios solo deben hablar con la base de datos y entre ellos. Una
-# conexion saliente a un destino distinto puede ser exfiltracion.
+# Los servicios solo deben hablar con la base y entre ellos. Una conexion a
+# cualquier otro puerto puede ser exfiltracion. Lo local no cuenta: la macro
+# "outbound" ya deja fuera 127.0.0.0/8 (incluido el DNS interno de Docker,
+# 127.0.0.11), y aca se agrega el loopback de IPv6 (::1), que el scheduler
+# usa en cada ciclo.
 # -----------------------------------------------------------------------------
 - rule: Conexion saliente inesperada desde LiveMetric
   desc: Un contenedor de la aplicacion abrio una conexion a un destino no previsto
   condition: >
     outbound
-    and contenedor_livemetric
-    and not fd.sport in (puertos_db_livemetric)
-    and not fd.sip.name contains "livemetric"
+    and contenedor_app_livemetric
+    and not fd.sport in (puertos_internos_livemetric)
+    and not fd.sip = "::1"
   output: >
     Conexion saliente inesperada
-    (destino=%fd.rip:%fd.rport proceso=%proc.name contenedor=%container.name)
+    (destino=%fd.sip:%fd.sport conexion=%fd.name proceso=%proc.name contenedor=%container.name)
   priority: NOTICE
   tags: [container, network, livemetric]
 
 # -----------------------------------------------------------------------------
-# Escalada de privilegios: los contenedores corren como no-root con
-# no-new-privileges. Cualquier intento de cambiar de usuario es anomalo.
+# Escalada de privilegios: los contenedores corren como no-root y sin
+# capabilities (o con no-new-privileges). Cualquier intento de cambiar de
+# usuario es anomalo.
 # -----------------------------------------------------------------------------
 - rule: Intento de escalada de privilegios en LiveMetric
   desc: Ejecucion de binarios de cambio de identidad dentro de un contenedor

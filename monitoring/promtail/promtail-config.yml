@@ -26,9 +26,14 @@ scrape_configs:
 
     relabel_configs:
       # Solo los contenedores de LiveMetric, no los del stack de monitoreo.
+      # Solo los contenedores de LiveMetric. "keep" no asigna etiquetas: la
+      # de "contenedor" va en una regla aparte (antes estaban juntas y la
+      # etiqueta nunca se asignaba, y los paneles de logs quedaban vacíos).
       - source_labels: ['__meta_docker_container_name']
         regex: '/(livemetric-.*)'
         action: keep
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(livemetric-.*)'
         target_label: 'contenedor'
         replacement: '$1'
 

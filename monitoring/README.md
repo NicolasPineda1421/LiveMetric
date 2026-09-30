@@ -63,6 +63,9 @@ docker compose up -d
 
 # Después el monitoreo
 docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml up -d
+
+# O con Falco (solo en Linux, ver más abajo)
+docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml --profile falco up -d
 ```
 
 `--env-file .env` hace falta: con `-f` apuntando a `monitoring/`, Compose buscaría el
@@ -88,7 +91,9 @@ Con `-v` si además quieren borrar las métricas y logs históricos.
 
 ## El tablero
 
-Tres secciones:
+![Tablero de Grafana: disponibilidad, recursos, registros y alertas de Falco](../docs/img/grafana-tablero.png)
+
+Cuatro secciones:
 
 **Disponibilidad del servicio.** Cuántos de los cinco endpoints responden, el estado de
 cada uno en el tiempo, la latencia por servicio y un indicador dedicado al **worker de
@@ -100,12 +105,20 @@ nadie lo note — no hay error visible en la interfaz, simplemente las eleccione
 cerrarse. Es el punto único de fallo del sistema, y por eso tiene su propio panel y su
 propia alerta.
 
-**Recursos por contenedor.** CPU y memoria de los seis servicios.
+**Recursos por contenedor.** CPU y memoria de los servicios de la aplicación y la base.
+Vienen de cAdvisor, que necesita la versión 0.5x o posterior con Docker 29: ese Docker
+guarda las imágenes en containerd, y cAdvisor 0.49 no lo sabe leer, así que no reconocía
+ningún contenedor y los paneles quedaban vacíos.
 
-**Registros.** Tres paneles de Loki: intentos de autenticación fallidos (un repunte súbito
-puede indicar fuerza bruta contra el padrón), errores de aplicación, y actividad del
-proceso electoral filtrando scheduler y scrutiny, que permite verificar que la apertura,
-el cierre y la certificación ocurren en los tiempos previstos.
+**Registros.** Tres paneles de Loki:
+- Intentos de autenticación fallidos. Un repunte súbito puede indicar fuerza bruta contra el padrón. auth escribe cada evento de auditoría en su log como una línea JSON, con los mismos datos de la tabla y sin cédulas ni contraseñas.
+- Errores de la aplicación, por palabra completa (`error`, `exception`, `fatal`).
+- Actividad del proceso electoral, filtrando scheduler y scrutiny. Permite verificar que la apertura, el cierre y la certificación ocurren en los tiempos previstos.
+
+**Seguridad en tiempo de ejecución.** Cuántas alertas de Falco hubo en la última hora (en
+funcionamiento normal, 0) y la lista, con la prioridad, la regla y el contenedor. Solo los
+contenedores de LiveMetric: Falco también ve el sistema anfitrión, pero eso queda en su
+log.
 
 ## Alertas
 
@@ -118,7 +131,7 @@ exigen acción humana. Una alerta que nadie atiende entrena al equipo a ignorar 
 | `SchedulerCaido` | crítica | El worker lleva más de 2 minutos inactivo |
 | `LatenciaAlta` | advertencia | Más de 2 s de respuesta durante 3 minutos |
 | `ContenedorReiniciandose` | advertencia | Reinicio inesperado en los últimos 15 minutos |
-| `MemoriaAlta` | advertencia | Más del 90 % del límite durante 5 minutos |
+| `MemoriaAlta` | advertencia | Más del 90 % del límite durante 5 minutos (solo contenedores con límite, como los de Swarm) |
 
 Las alertas se evalúan y se ven en Prometheus (*Alerts*). No hay envío de notificaciones
 configurado: eso requiere Alertmanager y un canal de destino, y está fuera del alcance.
@@ -142,14 +155,41 @@ reglas estrictas con muy pocos falsos positivos.
 | Conexión saliente inesperada | NOTICE |
 | Intento de escalada de privilegios | CRITICAL |
 
-Para verlo funcionando — útil para el video:
+Solo aplican a los 6 contenedores de la aplicación (y la base, en las de shell y
+escalada), no a los del monitoreo, que también se llaman `livemetric-*` y escriben en sus
+volúmenes todo el tiempo. Detalles que evitan falsos positivos:
 
-```bash
-docker exec -it livemetric-auth sh
-docker logs livemetric-falco | tail -20
-```
+- La regla de shell exige una terminal (`proc.tty != 0`): los healthchecks de Docker corren
+  `sh -c ...` cada 30 segundos, sin terminal, y no son anómalos.
+- La de escrituras ignora a `runc`, que es el propio Docker preparando cada healthcheck.
+- La de conexiones mira el extremo servidor (`fd.sip`, `fd.sport`) y deja pasar el
+  loopback de IPv6, que el scheduler usa en cada ciclo.
+- Falco corre con `rule_matching=all`: por defecto solo emite la primera regla que
+  coincide con cada evento, y sus reglas genéricas se cargan antes y dejarían mudas a las
+  de LiveMetric.
 
-La shell dispara la alerta de inmediato.
+### Cómo levantarlo
+
+Es opcional, con el perfil `falco` (ver "Levantar"), porque instrumenta el kernel del host:
+necesita Linux con un kernel 5.8 o posterior con BTF (`/sys/kernel/btf/vmlinux`), y usa el
+motor eBPF moderno, sin compilar ni cargar ningún módulo. En Docker Desktop (Windows,
+WSL2) los contenedores corren sobre el kernel de una VM y no hay garantías. Las alertas
+salen en JSON y Promtail las lleva a Loki, de donde las toma el tablero.
+
+**Si la PC se suspende, reinicia Falco** (`docker restart livemetric-falco`): al volver de
+una suspensión dejó de ver las conexiones de red (las reglas de procesos seguían
+funcionando), y reiniciarlo lo resolvió.
+
+### Verlo funcionando (útil para el video)
+
+| Ataque | Comando | Alerta |
+|---|---|---|
+| Shell interactiva en un servicio | `docker exec -it livemetric-auth sh` | *Shell abierta en contenedor LiveMetric* (WARNING) |
+| Intento de cambiar de usuario | `docker exec livemetric-voting su -c id` | *Intento de escalada de privilegios* (CRITICAL) |
+| Conexión a Internet desde un servicio | `docker exec livemetric-auth node -e "require('net').connect(80,'1.1.1.1')"` | *Conexión saliente inesperada* (NOTICE), con el destino |
+| Escritura fuera de `/tmp` | `docker exec livemetric-frontend sh -c 'echo x > /usr/share/nginx/html/x'` | Ninguna: el sistema de archivos de solo lectura la impide antes. La regla es la alarma para el día en que alguien quite el `read_only` |
+
+Las alertas aparecen en segundos en el tablero de Grafana y en `docker logs livemetric-falco`.
 
 ## Privilegios elevados: una advertencia honesta
 
@@ -166,6 +206,21 @@ lo que se desplegó.
 Por la misma razón el stack se levanta con un compose **aparte**: el monitoreo no debe
 poder tumbar lo que monitorea. Si Grafana consume memoria de más o Loki llena el disco, la
 votación sigue funcionando.
+
+## Verificado
+
+En un host Linux (Ubuntu, kernel 7.0, Docker 29), con la aplicación y el monitoreo con
+Falco levantados:
+
+- Prometheus: los 7 objetivos en verde (5 sondas de salud, cAdvisor y el propio Prometheus).
+- Las 5 alertas evalúan sin errores. Probadas de verdad:
+  - `ServicioCaido` pasa a *firing* a los 90 segundos de detener voting.
+  - `SchedulerCaido` pasa a *pending* al detener el scheduler.
+  - El panel del worker pasa de ACTIVO a DETENIDO.
+- Loki recibe los logs de todos los contenedores con sus etiquetas, y los paneles de
+  registros muestran datos reales.
+- Falco: ninguna alerta en varios minutos de tráfico normal (logins, API, ciclos del
+  scheduler, sondas), y los tres ataques de la tabla detectados.
 
 ## Trabajo futuro
 

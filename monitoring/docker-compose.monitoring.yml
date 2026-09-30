@@ -64,7 +64,7 @@ services:
   # host: es inherente a su funcion. Se monta todo en solo lectura.
   # ---------------------------------------------------------------------------
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    image: ghcr.io/google/cadvisor:v0.60.6
     container_name: livemetric-cadvisor
     restart: unless-stopped
     privileged: true
@@ -199,20 +199,27 @@ services:
   # Necesita privilegios elevados para instrumentar el kernel. Es inherente a
   # su funcion y debe declararse explicitamente, no disimularse.
   # ---------------------------------------------------------------------------
-    # falco se excluye en este entorno: instrumenta el kernel del host, y en
-  # Docker Desktop los contenedores corren sobre el kernel de la VM de WSL2,
-  # no sobre Windows. Las reglas quedan versionadas en falco/ para un
-  # despliegue sobre host Linux.
-  #falco:
-    #image: falcosecurity/falco:0.38.2
-    #container_name: livemetric-falco
-    #restart: unless-stopped
-    #privileged: true
-    #volumes:
-      #- /var/run/docker.sock:/host/var/run/docker.sock:ro
-      #- /dev:/host/dev
-      #- /proc:/host/proc:ro
-      #- /etc:/host/etc:ro
-      #- ./falco/falco_rules.local.yaml:/etc/falco/rules.d/falco_rules.local.yaml:ro
-    #networks:
-      #- monitoring-net
+  # Es opcional (perfil "falco"): instrumenta el kernel del host, así que
+  # necesita Linux. En Docker Desktop (Windows, WSL2) los contenedores corren
+  # sobre el kernel de una VM y no hay garantías. Se levanta con:
+  #   docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml --profile falco up -d
+  # Usa el motor eBPF moderno (kernel 5.8 o posterior con BTF): no hay que
+  # compilar ni cargar ningún módulo. Las alertas salen en JSON, y Promtail
+  # las lleva a Loki como cualquier otro log.
+  falco:
+    image: falcosecurity/falco:0.45.0
+    container_name: livemetric-falco
+    restart: unless-stopped
+    profiles: ["falco"]
+    privileged: true
+    # rule_matching=all: por defecto Falco emite solo la primera regla que
+    # coincide con cada evento, y las suyas (genericas) se cargan antes que
+    # las de LiveMetric, que quedarian mudas.
+    command: ["/usr/bin/falco", "-o", "engine.kind=modern_ebpf", "-o", "json_output=true", "-o", "rule_matching=all"]
+    volumes:
+      - /var/run/docker.sock:/host/var/run/docker.sock:ro
+      - /proc:/host/proc:ro
+      - /etc:/host/etc:ro
+      - ./falco/falco_rules.local.yaml:/etc/falco/rules.d/livemetric.yaml:ro
+    networks:
+      - monitoring-net

@@ -1,24 +1,43 @@
 {
   "uid": "livemetric-overview",
   "title": "LiveMetric — Estado del sistema electoral",
-  "tags": ["livemetric", "devsecops"],
+  "tags": [
+    "livemetric",
+    "devsecops"
+  ],
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,
   "refresh": "15s",
-  "time": { "from": "now-1h", "to": "now" },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
   "panels": [
     {
       "type": "row",
       "title": "Disponibilidad del servicio",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
     },
     {
       "type": "stat",
       "title": "Microservicios respondiendo",
       "description": "Cuántos de los cinco endpoints de salud responden correctamente. Si alguno cae durante una votación activa, los votantes no pueden votar.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
       "targets": [
         {
           "expr": "sum(probe_success{job=\"blackbox-health\"})",
@@ -34,9 +53,18 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 4 },
-              { "color": "green", "value": 5 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 4
+              },
+              {
+                "color": "green",
+                "value": 5
+              }
             ]
           }
         }
@@ -51,8 +79,16 @@
       "type": "timeseries",
       "title": "Estado de salud por servicio",
       "description": "1 = responde, 0 = caído. Un escalón hacia abajo marca el momento exacto de una caída.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 5, "w": 18, "x": 6, "y": 1 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 18,
+        "x": 6,
+        "y": 1
+      },
       "targets": [
         {
           "expr": "probe_success{job=\"blackbox-health\"}",
@@ -78,8 +114,16 @@
       "type": "timeseries",
       "title": "Latencia de respuesta por servicio",
       "description": "Tiempo que tarda cada microservicio en responder a la sonda de salud. Una latencia creciente suele anticipar una caída.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 6 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
       "targets": [
         {
           "expr": "probe_duration_seconds{job=\"blackbox-health\"}",
@@ -90,13 +134,26 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s",
-          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1 },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 1 },
-              { "color": "red", "value": 2 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
             ]
           }
         }
@@ -106,11 +163,19 @@
       "type": "stat",
       "title": "Worker de programación",
       "description": "El scheduler es el único responsable de abrir, cerrar y certificar elecciones. Si no está activo, el proceso electoral se detiene sin que nadie lo note.",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 6 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
       "targets": [
         {
-          "expr": "(time() - container_last_seen{name=\"livemetric-scheduler\"}) < 120",
+          "expr": "max((time() - container_last_seen{name=\"livemetric-scheduler\"}) < bool 120) or vector(0)",
           "legendFormat": "scheduler",
           "refId": "A"
         }
@@ -121,8 +186,16 @@
             {
               "type": "value",
               "options": {
-                "0": { "text": "DETENIDO", "color": "red", "index": 0 },
-                "1": { "text": "ACTIVO", "color": "green", "index": 1 }
+                "0": {
+                  "text": "DETENIDO",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "ACTIVO",
+                  "color": "green",
+                  "index": 1
+                }
               }
             }
           ]
@@ -137,16 +210,29 @@
     {
       "type": "row",
       "title": "Recursos por contenedor",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 }
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      }
     },
     {
       "type": "timeseries",
       "title": "Uso de CPU",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
       "targets": [
         {
-          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name=~\"livemetric-.*\"}[2m])) * 100",
+          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name=~\"livemetric-(auth|voting|analytics|scrutiny|scheduler|frontend|postgres)\"}[2m])) * 100",
           "legendFormat": "{{name}}",
           "refId": "A"
         }
@@ -154,18 +240,30 @@
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
-          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1 }
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1
+          }
         }
       }
     },
     {
       "type": "timeseries",
       "title": "Uso de memoria",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
       "targets": [
         {
-          "expr": "sum by (name) (container_memory_usage_bytes{name=~\"livemetric-.*\"})",
+          "expr": "sum by (name) (container_memory_usage_bytes{name=~\"livemetric-(auth|voting|analytics|scrutiny|scheduler|frontend|postgres)\"})",
           "legendFormat": "{{name}}",
           "refId": "A"
         }
@@ -173,24 +271,41 @@
       "fieldConfig": {
         "defaults": {
           "unit": "bytes",
-          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1 }
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 1
+          }
         }
       }
     },
     {
       "type": "row",
       "title": "Registros",
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 }
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      }
     },
     {
       "type": "logs",
       "title": "Intentos de autenticación fallidos",
       "description": "Filtra los eventos de login fallido de todos los servicios. Un repunte súbito desde una misma fuente puede indicar un intento de fuerza bruta contra el padrón.",
-      "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 23 },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 23
+      },
       "targets": [
         {
-          "expr": "{contenedor=~\"livemetric-.*\"} |= \"LOGIN_FAILURE\"",
+          "expr": "{contenedor=\"livemetric-auth\"} |= \"LOGIN_FAILURE\" | json | line_format \"{{.auditoria}} · {{.reason}} · actor {{.ref}} · IP {{.ip}}\"",
           "refId": "A"
         }
       ],
@@ -203,11 +318,46 @@
     {
       "type": "logs",
       "title": "Errores de la aplicación",
-      "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 23 },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 23
+      },
       "targets": [
         {
-          "expr": "{contenedor=~\"livemetric-.*\"} |~ \"(?i)error|exception|fatal\"",
+          "expr": "{contenedor=~\"livemetric-(auth|voting|analytics|scrutiny|scheduler|frontend|postgres)\"} |~ \"(?i)\\\\b(error|exception|fatal)\\\\b\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "description": "Líneas de los servicios de la aplicación y la base que contienen las palabras error, exception o fatal. El monitoreo y Falco tienen sus propios paneles."
+    },
+    {
+      "type": "logs",
+      "title": "Actividad del proceso electoral",
+      "description": "Apertura, cierre y certificación de elecciones. Permite verificar que el ciclo automático ocurre en los tiempos previstos.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 32
+      },
+      "targets": [
+        {
+          "expr": "{servicio=~\"scheduler|scrutiny\"}",
           "refId": "A"
         }
       ],
@@ -218,14 +368,90 @@
       }
     },
     {
-      "type": "logs",
-      "title": "Actividad del proceso electoral",
-      "description": "Apertura, cierre y certificación de elecciones. Permite verificar que el ciclo automático ocurre en los tiempos previstos.",
-      "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "type": "row",
+      "title": "Seguridad en tiempo de ejecución (Falco)",
+      "id": 1,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Alertas de Falco (última hora)",
+      "id": 2,
+      "description": "Comportamiento anómalo dentro de los contenedores: shells interactivas, escrituras fuera de /tmp, conexiones a destinos no previstos o intentos de cambiar de usuario (ver monitoring/falco/). En funcionamiento normal es 0. Solo cuenta los eventos de los contenedores de LiveMetric; los del sistema anfitrión quedan en el log de Falco.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 41
+      },
       "targets": [
         {
-          "expr": "{servicio=~\"scheduler|scrutiny\"}",
+          "expr": "sum(count_over_time({contenedor=\"livemetric-falco\"} |= \"\\\"rule\\\"\" | json | output_fields_container_name=~\"livemetric-.*\" [1h])) or vector(0)",
+          "refId": "A",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "logs",
+      "title": "Alertas de Falco",
+      "id": 3,
+      "description": "Cada alerta con su prioridad, la regla y el contenedor. El detalle completo (comando, archivo o destino) está en el mensaje.",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 18,
+        "x": 6,
+        "y": 41
+      },
+      "targets": [
+        {
+          "expr": "{contenedor=\"livemetric-falco\"} |= \"\\\"rule\\\"\" | json | output_fields_container_name=~\"livemetric-.*\" | line_format \"{{.priority}} · {{ regexReplaceAll \\\" container_id=.*$\\\" (regexReplaceAll \\\"^\\\\\\\\S+: \\\\\\\\S+ \\\" .output \\\"\\\") \\\"\\\" }}\"",
           "refId": "A"
         }
       ],

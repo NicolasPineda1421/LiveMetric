@@ -50,6 +50,8 @@ El lineamiento del curso menciona **Bandit**, que analiza código Python. LiveMe
 
 El *Security Gate*, último job del pipeline, resume el resultado real de cada control y falla si alguno falló.
 
+**En operación**, con la aplicación ya desplegada, **Falco** vigila los contenedores en tiempo de ejecución. Detecta shells interactivas, escrituras fuera de `/tmp`, conexiones a destinos no previstos e intentos de cambiar de usuario. Sus alertas llegan al tablero de Grafana. Las reglas, cómo levantarlo y cómo provocar cada alerta están en [Observabilidad](../monitoring/README.md#falco--detección-en-tiempo-de-ejecución).
+
 ## 3. Dónde ver los resultados
 
 | Resultado | Dónde |

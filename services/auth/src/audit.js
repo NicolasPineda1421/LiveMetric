@@ -23,6 +23,14 @@ async function recordAuditEvent({ eventType, actorType, actorRef = null, req, me
   } catch (err) {
     console.error('[audit] No se pudo registrar el evento de auditoría:', err.message);
   }
+  // También al log del contenedor, en una línea JSON: así el monitoreo
+  // (Loki y el tablero de Grafana) ve los ingresos fallidos en tiempo real,
+  // sin leer la base. Son los mismos datos de la tabla, que ya no llevan
+  // cédulas ni contraseñas. Durante las pruebas no se escribe (Jest define
+  // NODE_ENV=test), para no llenar su salida.
+  if (process.env.NODE_ENV !== 'test') {
+    console.log(JSON.stringify({ auditoria: eventType, actor: actorType, ref: actorRef, ip: req?.ip || null, ...metadata }));
+  }
 }
 
 module.exports = { recordAuditEvent };
