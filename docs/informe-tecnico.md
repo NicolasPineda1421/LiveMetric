@@ -777,7 +777,7 @@ Un hallazgo no siempre sale de una herramienta automática: algunos aparecieron 
 | Nonce determinístico en el cifrado del padrón | Modelo de amenazas | Baja | Mitigado (parcial) | Necesario para buscar por cédula; no revela el valor |
 | La base no tiene respaldo automático | Análisis de riesgos | Media | Aceptado | Respaldo manual documentado (`pg_dump` más una copia del `.env`) |
 | En Swarm, los secretos viajan como variables de entorno | Análisis de riesgos | Baja | Aceptado | Pendiente: `docker secret` (sección 7.4) |
-| esbuild, dependencia de Vite 5, permite leer el servidor de desarrollo desde otro sitio | npm audit (incluyendo desarrollo) | Media | Aceptado temporalmente | Solo afecta a `npm run dev`; producción sirve archivos estáticos con nginx. Pendiente: actualizar Vite |
+| esbuild, dependencia de Vite 5, permite leer el servidor de desarrollo desde otro sitio | npm audit (incluyendo desarrollo) | Media | Resuelto | Solo afectaba a `npm run dev`. Se actualizó a Vite 8: `npm audit` da 0 vulnerabilidades también en las dependencias de desarrollo, y la aplicación se recorrió con la CSP activa sin ninguna violación |
 | cAdvisor y Falco corren en modo privilegiado | Diseño del monitoreo | Media | Aceptado | Inherente a su función; el monitoreo está en un compose aparte y sus puertos, solo en `127.0.0.1` |
 | Sin el binario de Gitleaks instalado, el hook de pre-commit dejaba pasar cualquier commit | Prueba del hook | Media | Resuelto | Usa la imagen de Docker de Gitleaks (el proyecto solo exige Docker); un error de la herramienta no bloquea el commit, un secreto sí |
 | Los servicios se conectan a la base como dueños de las tablas, y por eso pueden desactivar el trigger *append-only* | Demostración del ataque a las actas | Media | Mitigado | La firma Ed25519 y el reconteo detectan cualquier alteración del acta (Figura 16). Pendiente: un usuario de base por servicio, sin permiso para cambiar las tablas |
@@ -933,7 +933,7 @@ Además, Falco corre con `rule_matching=all`, porque por defecto sus reglas gen�
 - **Rotación de claves.** Un script para rotar la clave del padrón y un registro de claves públicas anteriores, para que la rotación de la clave de firma no invalide las actas viejas.
 - **Monitoreo.** Métricas de negocio con `prom-client`, notificaciones con Alertmanager y retención de registros según la normativa aplicable.
 - **Operación.** Respaldos automáticos y cifrados de la base.
-- **Dependencias.** Actualizar Vite y mantener las dependencias al día antes de cada versión.
+- **Dependencias.** Mantener las dependencias y las imágenes base al día antes de cada versión, aunque no haya CVE.
 
 ## Anexo. Enlaces y reproducción
 
