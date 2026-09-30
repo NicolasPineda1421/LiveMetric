@@ -26,7 +26,7 @@ node scripts/lib/generar-env.js
 PostgreSQL 16 corre en su propio contenedor (`postgres` en `docker-compose.yml`) y guarda los datos en el volumen `db-data`, que sobrevive a `docker compose down` y a los reinicios.
 
 - **Sin puerto en la PC:** está solo en la red interna `db-net`, sin salida a Internet, y la alcanzan únicamente los 5 servicios de backend. El frontend no está en esa red.
-- **Esquema:** la primera vez, con el volumen vacío, Postgres carga `db/init.sql`, que ya incluye todas las migraciones de `db/migrations/`. Esas migraciones solo hacen falta para una base creada con una versión anterior de `init.sql`.
+- **Esquema:** la primera vez, con el volumen vacío, Postgres carga `db/init.sql`, que ya incluye todas las migraciones de `db/migrations/`. Una base que ya existía (creada con una versión anterior) se pone al día sola: en cada arranque, el servicio `migraciones` de `docker-compose.yml` le aplica esas migraciones antes de que arranquen los servicios, y termina. Son idempotentes: en una base al día no cambian nada. En Swarm lo hace `deploy.sh`.
 - **Padrón de demostración:** `init.sql` lo siembra en texto plano (no conoce la clave de cada instalación) y `auth-service` lo cifra solo al arrancar.
 - **Consola SQL**, para inspeccionar a mano: `docker compose exec postgres psql -U livemetric -d livemetric`.
 
@@ -65,12 +65,20 @@ Al final muestra la URL en esta PC y la URL para el resto de la red local. Con `
 ```bash
 ./scripts/contenedor.sh             # construye, analiza y levanta todo adentro
 ./scripts/contenedor.sh estado      # estado de cada microservicio
-./scripts/contenedor.sh logs        # logs en vivo (o: logs auth-service)
+./scripts/contenedor.sh logs        # logs en vivo (o: logs auth-service, logs grafana, logs falco)
 ./scripts/contenedor.sh shell       # terminal dentro del contenedor global
 ./scripts/contenedor.sh detener     # apaga el contenedor global y todo lo de adentro
 ./scripts/contenedor.sh borrar      # además borra su imagen y la caché
 ```
 
+- **Incluye el monitoreo**, que corre adentro, junto a la aplicación: se conecta a su red, que en este modo solo existe dentro del contenedor global. Queda en esta PC, **solo en `127.0.0.1`** (no desde otra PC):
+  - Grafana en `http://localhost:3010`, con el usuario y la contraseña de `GRAFANA_ADMIN_USER` y `GRAFANA_ADMIN_PASSWORD` del `.env`. Los logs de Loki se consultan desde Grafana (*Explore → Loki*).
+  - Prometheus en `http://localhost:9090`.
+  - Falco, en Linux con eBPF, con sus alertas en el tablero de Grafana. En Windows y macOS no se activa: Docker Desktop corre los contenedores sobre una VM.
+
+  Con Falco, el contenedor global corre además con `--pid=host`. Falco recibe del kernel los números de proceso de la PC y completa cada evento leyendo `/proc`; con el `/proc` propio del contenedor, esos números corresponden a otros procesos, y atribuía a los servicios cosas que hacía la PC. La contra es que el contenedor global ve los procesos de la PC, lo que agrega poco a lo que ya permite `--privileged`.
+
+  Otros puertos: `LIVEMETRIC_PUERTO_GRAFANA=3011 LIVEMETRIC_PUERTO_PROMETHEUS=9091 ./scripts/contenedor.sh`. Sin Falco (y sin `--pid=host`): `LIVEMETRIC_FALCO=0`. Sin monitoreo: `LIVEMETRIC_MONITOREO=0`.
 - El frontend queda en `http://localhost:3000`. Si ese puerto está ocupado (por ejemplo, por el stack levantado con `start.sh`), el script lo avisa; se puede usar otro con `LIVEMETRIC_PUERTO=3100 ./scripts/contenedor.sh`.
 - El `.env` de la carpeta se monta en solo lectura y nunca queda dentro de la imagen. Si no existe, se genera primero en la carpeta (con el Node.js de la imagen, sin instalar nada en la PC).
 - La base de datos vive dentro del contenedor global, en el mismo volumen `livemetric-global-docker`.
@@ -100,6 +108,8 @@ terraform plan    -var-file="terraform.tfvars"
 terraform apply   -var-file="terraform.tfvars"
 terraform destroy -var-file="terraform.tfvars" # para desmontarlo
 ```
+
+`terraform destroy` borra también el volumen de la base, así que cada `apply` después de un `destroy` empieza con una base nueva. Si en cambio se actualiza el código y se vuelve a hacer `apply` sin destruir, la base conserva su esquema: este modo no tiene el servicio `migraciones` de compose, y las de `db/migrations/` se aplican a mano con `docker exec -i livemetric-postgres psql -U <usuario> -d livemetric < db/migrations/<archivo>.sql`.
 
 ## Acceso desde otras PC de la red
 

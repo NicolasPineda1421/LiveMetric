@@ -107,6 +107,38 @@ docker stack deploy \
   --prune \
   "$STACK_NAME"
 
+# -----------------------------------------------------------------------------
+# 7) Migraciones
+#
+# Si el volumen de la base ya existia (un stack desplegado con una version
+# anterior), init.sql no vuelve a correr y la base se queda con el esquema
+# viejo: el codigo nuevo fallaria (por ejemplo, al firmar las actas). Se le
+# aplican las migraciones de db/migrations/, que son idempotentes: en una
+# base nueva no cambian nada. Es lo mismo que hace el servicio "migraciones"
+# de docker-compose.yml, que Swarm no puede correr como tarea de una vez.
+# -----------------------------------------------------------------------------
+echo ""
+echo "🗄️  Aplicando las migraciones de la base..."
+PG_ID=""
+for _ in $(seq 1 60); do
+  PG_ID="$(docker ps -q -f "name=${STACK_NAME}_postgres" | head -n 1)"
+  if [ -n "$PG_ID" ] && docker exec "$PG_ID" pg_isready -h 127.0.0.1 -U "${POSTGRES_USER:-livemetric}" > /dev/null 2>&1; then
+    break
+  fi
+  PG_ID=""
+  sleep 3
+done
+if [ -z "$PG_ID" ]; then
+  echo "❌ La base no quedo lista a tiempo: no se pudieron aplicar las migraciones."
+  echo "   Revisa: docker service logs ${STACK_NAME}_postgres"
+  exit 1
+fi
+for MIGRACION in "${REPO_ROOT}"/db/migrations/*.sql; do
+  docker exec -i -e PGOPTIONS="-c client_min_messages=warning" "$PG_ID" \
+    psql -q -v ON_ERROR_STOP=1 -U "${POSTGRES_USER:-livemetric}" -d "${POSTGRES_DB:-livemetric}" < "$MIGRACION"
+  echo "   ✅ $(basename "$MIGRACION")"
+done
+
 echo ""
 echo "⏳ Esperando a que converjan las replicas..."
 sleep 15

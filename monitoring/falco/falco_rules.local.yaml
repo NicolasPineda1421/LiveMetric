@@ -13,6 +13,11 @@
 #
 # Usan las macros de las reglas por defecto de Falco (spawned_process,
 # open_write, outbound), que se cargan antes que este archivo.
+#
+# Las alertas muestran el uid ademas del nombre de usuario: en el contenedor
+# global, Falco traduce el uid con el /etc/passwd de ese contenedor y no con
+# el del servicio (el uid 100 aparece como "dockremap" y no como el usuario
+# del servicio); el uid es siempre el correcto.
 # =============================================================================
 
 # Los 6 contenedores de la aplicacion. No "livemetric-*": el stack de
@@ -48,7 +53,7 @@
     and proc.tty != 0
   output: >
     Shell abierta en contenedor LiveMetric
-    (usuario=%user.name comando=%proc.cmdline contenedor=%container.name)
+    (usuario=%user.name uid=%user.uid comando=%proc.cmdline contenedor=%container.name)
   priority: WARNING
   tags: [container, shell, livemetric]
 
@@ -56,7 +61,10 @@
 # Los contenedores de la aplicacion tienen el sistema de archivos de solo
 # lectura, salvo /tmp. Una escritura que llega a abrirse fuera de ahi indica
 # que algo logro saltarse esa restriccion (o que alguien la quito). Quedan
-# fuera las de runc, el propio Docker preparando cada healthcheck.
+# fuera las de runc, el propio Docker preparando cada healthcheck, y los
+# logs de nginx del frontend: en su imagen, /var/log/nginx/access.log y
+# error.log son enlaces a la salida estandar, y nginx los abre al arrancar
+# (en un sistema de solo lectura nadie puede cambiar hacia donde apuntan).
 # -----------------------------------------------------------------------------
 - rule: Escritura fuera de tmp en contenedor LiveMetric
   desc: Escritura en el sistema de archivos de solo lectura del contenedor
@@ -67,6 +75,8 @@
     and not fd.name startswith /proc
     and not fd.name startswith /dev
     and not proc.name startswith runc
+    and not (container.name = livemetric-frontend
+             and fd.name in (/var/log/nginx/access.log, /var/log/nginx/error.log))
   output: >
     Escritura inesperada en contenedor de solo lectura
     (archivo=%fd.name proceso=%proc.name contenedor=%container.name)
@@ -106,6 +116,6 @@
     and proc.name in (su, sudo, chroot, setuid)
   output: >
     Intento de escalada de privilegios
-    (comando=%proc.cmdline usuario=%user.name contenedor=%container.name)
+    (comando=%proc.cmdline usuario=%user.name uid=%user.uid contenedor=%container.name)
   priority: CRITICAL
   tags: [container, privilege_escalation, livemetric]

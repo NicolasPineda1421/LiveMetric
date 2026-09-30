@@ -88,7 +88,7 @@ LiveMetric es una **arquitectura de microservicios** con seis unidades desplegab
 
 | Componente | Tecnología | Responsabilidad |
 |---|---|---|
-| Frontend | React 18, Vite, nginx 1.27 | Interfaz de administrador, auditor y votante. Su nginx es el **único punto de entrada**: reenvía `/auth`, `/voting`, `/analytics` y `/scrutiny` |
+| Frontend | React 18, Vite, nginx 1.30 | Interfaz de administrador, auditor y votante. Su nginx es el **único punto de entrada**: reenvía `/auth`, `/voting`, `/analytics` y `/scrutiny` |
 | Auth | Node.js 20, Express | Login de administradores y auditores (usuario y contraseña) y de votantes (cédula y PIN), padrón cifrado, auditoría |
 | Voting | Node.js 20, Express | Plantillas, elecciones y emisión del voto |
 | Analytics | Node.js 20, Express | Resultados en vivo, reportes y verificación independiente de las actas |
@@ -143,7 +143,7 @@ graph TB
 
     subgraph Host["PC con Docker"]
         subgraph appnet["Red app-net (bridge)"]
-            C_FE["frontend<br/>nginx:1.27-alpine, sin root<br/>8080 → 0.0.0.0:3000"]
+            C_FE["frontend<br/>nginx:1.30-alpine, sin root<br/>8080 → 0.0.0.0:3000"]
             C_AUTH["auth-service<br/>node:20-alpine<br/>3001 (solo 127.0.0.1)"]
             C_VOTING["voting-service<br/>node:20-alpine<br/>3002 (solo 127.0.0.1)"]
             C_ANALYTICS["analytics-service<br/>node:20-alpine<br/>3003 (solo 127.0.0.1)"]
@@ -325,10 +325,10 @@ En ejecución, los seis contenedores de la aplicación tienen:
 
 | Artefacto | Uso |
 |---|---|
-| `docker-compose.yml` | Desarrollo y ejecución local; con `docker compose watch` recarga cada servicio al cambiar su código |
+| `docker-compose.yml` | Desarrollo y ejecución local; con `docker compose watch` recarga cada servicio al cambiar su código. Antes que los servicios corre una tarea de una sola vez, `migraciones`, que pone al día una base creada con una versión anterior |
 | `infra/terraform/main.tf` | La misma topología como código, con el provider `kreuzwerker/docker` |
 | `orquestacion/docker-stack.yml` | Docker Swarm: réplicas, *rolling update* con *rollback* automático, límites de recursos y red overlay cifrada |
-| `infra/contenedor-global/` | Un contenedor con Docker adentro, para levantar todo sin instalar nada en la PC |
+| `infra/contenedor-global/` | Un contenedor con Docker adentro, para levantar todo sin instalar nada en la PC, incluido el monitoreo (Grafana y Prometheus publicados solo en `127.0.0.1`) |
 
 *Tabla 3. Formas de desplegar el sistema.*
 
@@ -784,6 +784,9 @@ Un hallazgo no siempre sale de una herramienta automática: algunos aparecieron 
 | Analytics y Scrutiny no confiaban en el proxy: el límite de peticiones contaba a todos los usuarios como uno solo (la IP de nginx), y uno podía agotar el cupo de todos | Simulacro desde cero (un error en los registros de Grafana) | Media (disponibilidad) | Resuelto | `trust proxy` igual que en Auth y Voting; una prueba en cada servicio reproduce dos clientes detrás de nginx y falla sin la corrección |
 | Nombres del padrón, puestos, mesas, plantillas y títulos se guardaban con entidades HTML (`O&#x27;Neil`, `A&amp;B`), que se veían así en el panel y en el acta | Simulacro desde cero | Media (lo que muestra el acta) | Resuelto | Sin `.escape()` al guardar: nada se arma como HTML en el servidor, y React escapa al mostrar. Pruebas con apóstrofes, `&` y `/`. Los datos ya guardados en instalaciones anteriores conservan las entidades |
 | La documentación del monitoreo daba por activo node-exporter, que viene desactivado; y `docker swarm init` falla en una PC con varias direcciones de red | Simulacro desde cero | Baja | Resuelto | Documentados, con su solución en la guía de problemas |
+| Una base creada con una versión anterior no recibía las migraciones: `init.sql` solo corre con el volumen vacío, y no había un ejecutor. Un contenedor global viejo tenía la base sin las columnas de la firma, y la primera certificación habría fallado | Revisión del contenedor global | Alta | Resuelto | Servicio `migraciones` en `docker-compose.yml`, que aplica `db/migrations/` en cada arranque antes que los servicios (todas son idempotentes), y el mismo paso en `deploy.sh` para Swarm. Probado borrando esas columnas: se restauran solas y la elección se certifica firmada |
+| Cuatro CVE altas de OpenSSL (`libssl3` y `libcrypto3` 3.3.7-r1) en la imagen del frontend, publicadas el 30 de septiembre de 2026 | Trivy (imagen) | Alta | Resuelto | La base `nginx:1.27-alpine` quedó sobre Alpine 3.21, que todavía no trae la corrección, y esa línea de nginx ya no se mantiene. El frontend pasa a `nginx:1.30-alpine` (la línea estable, sobre Alpine 3.24): Trivy da 0 CVE, y la aplicación se recorrió con la CSP activa sin ninguna violación. El pipeline lo bloqueó antes de que llegara a ningún despliegue |
+| En el contenedor global, Falco atribuía a los servicios escrituras que hacía la PC (AppArmor, systemd): 60 alertas falsas en dos minutos, todas "de" Scrutiny | Revisión del contenedor global | Media | Resuelto | Falco completa cada evento leyendo `/proc`, y el del contenedor global tiene otra numeración de procesos. Con Falco, ese contenedor corre con `--pid=host`: sin falsos positivos, y se comprobó que sigue detectando una escritura real |
 | Los servicios se conectan a la base como dueños de las tablas, y por eso pueden desactivar el trigger *append-only* | Demostración del ataque a las actas | Media | Mitigado | La firma Ed25519 y el reconteo detectan cualquier alteración del acta (Figura 16). Pendiente: un usuario de base por servicio, sin permiso para cambiar las tablas |
 
 *Tabla 10. Hallazgos con su severidad, estado y justificación.*
@@ -833,7 +836,7 @@ Los servicios no tienen instrumentación propia: no exponen un endpoint `/metric
 
 *Tabla 11. Componentes del monitoreo.*
 
-El monitoreo corre en un compose aparte (`monitoring/docker-compose.monitoring.yml`), para que no pueda tumbar lo que vigila: si Loki llena el disco, la votación sigue funcionando. Grafana exige una contraseña propia, generada en el `.env`, y sus puertos se publican solo en `127.0.0.1`.
+El monitoreo corre en un compose aparte (`monitoring/docker-compose.monitoring.yml`), para que no pueda tumbar lo que vigila: si Loki llena el disco, la votación sigue funcionando. Con el contenedor global se levanta solo, adentro, junto a la aplicación. Grafana exige una contraseña propia, generada en el `.env`, y sus puertos se publican solo en `127.0.0.1`.
 
 ### 6.2 Tablero
 
@@ -883,11 +886,12 @@ Falco es la última capa: ve lo que ocurre **dentro** de los contenedores despu�
 
 *Tabla 13. Reglas propias de Falco.*
 
-Afinar las reglas exigió eliminar tres fuentes de falsos positivos:
+Afinar las reglas exigió eliminar cuatro fuentes de falsos positivos:
 
 - los *healthchecks* de Docker, que abren `sh -c` sin terminal;
 - `runc`, que escribe al preparar cada *healthcheck*;
-- el loopback de IPv6, que el scheduler usa en cada ciclo.
+- el loopback de IPv6, que el scheduler usa en cada ciclo;
+- los logs de nginx, que en su imagen son enlaces a la salida estándar y se abren en cada arranque del frontend.
 
 Además, Falco corre con `rule_matching=all`, porque por defecto sus reglas genéricas se evalúan primero y dejaban sin disparar las propias.
 

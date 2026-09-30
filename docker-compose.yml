@@ -68,6 +68,48 @@ services:
       - /tmp
       - /var/run/postgresql
 
+  # Migraciones: pone al dia una base creada con una version anterior.
+  # init.sql solo corre con el volumen vacio, asi que una base que ya existia
+  # no recibe las columnas y tablas nuevas (por ejemplo, la firma de las
+  # actas): sin esto, el codigo nuevo fallaria contra el esquema viejo. Corre
+  # en cada "up", ANTES que los servicios que usan la base, y termina. Todas
+  # las migraciones de db/migrations/ son idempotentes (IF NOT EXISTS): en
+  # una base nueva o ya al dia no cambian nada.
+  migraciones:
+    image: postgres:16-alpine
+    container_name: livemetric-migraciones
+    labels:
+      # scripts/lib/esperar-contenedores.js: terminar con codigo 0 es su
+      # estado sano, no una falla.
+      livemetric.unica-vez: "true"
+    user: postgres
+    entrypoint:
+      - sh
+      - -c
+      - |
+        for f in /migraciones/*.sql; do
+          psql -q -v ON_ERROR_STOP=1 -f "$$f" || exit 1
+          echo "Aplicada (o ya estaba): $$(basename "$$f")"
+        done
+    environment:
+      PGHOST: postgres
+      PGDATABASE: ${POSTGRES_DB:-livemetric}
+      PGUSER: ${POSTGRES_USER:-livemetric}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en el .env (lo genera scripts/lib/generar-env.js)}
+      # Sin los avisos de "ya existe, se omite" de cada IF NOT EXISTS.
+      PGOPTIONS: "-c client_min_messages=warning"
+    volumes:
+      - ./db/migrations:/migraciones:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - db-net
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+
   auth-service:
     build:
       context: ./services/auth
@@ -100,6 +142,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migraciones:
+        condition: service_completed_successfully
     networks:
       - app-net
       - db-net
@@ -140,6 +184,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migraciones:
+        condition: service_completed_successfully
     networks:
       - app-net
       - db-net
@@ -182,6 +228,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migraciones:
+        condition: service_completed_successfully
       auth-service:
         condition: service_started
     networks:
@@ -232,6 +280,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migraciones:
+        condition: service_completed_successfully
     networks:
       - app-net
       - db-net
@@ -278,6 +328,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migraciones:
+        condition: service_completed_successfully
       scrutiny-service:
         condition: service_started
     networks:

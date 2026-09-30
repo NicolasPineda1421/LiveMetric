@@ -1,0 +1,28 @@
+# LiveMetric - Ajuste del monitoreo para el contenedor global.
+#
+# monitoring/docker-compose.monitoring.yml publica Grafana y Prometheus
+# solo en 127.0.0.1: en una instalacion normal, eso es el 127.0.0.1 de la
+# PC. En el contenedor global el monitoreo corre ADENTRO (donde esta la red
+# livemetric_app-net que necesita), y el 127.0.0.1 de adentro no se alcanza
+# desde la PC. Aca se publican en la interfaz del contenedor global, que
+# NO es la red local: scripts/contenedor.sh los vuelve a publicar en la PC
+# solo en 127.0.0.1 (-p 127.0.0.1:3010:3010 y -p 127.0.0.1:9090:9090), asi
+# que siguen sin poder alcanzarse desde otra PC.
+#
+# Uso (lo hace scripts/contenedor.sh, adentro del contenedor global):
+#   docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml \
+#     -f infra/contenedor-global/monitoreo.override.yml up -d
+#
+# cAdvisor: el motor de Docker de adentro arranca su propio containerd, en
+# otra ruta que la estandar (/run/containerd/containerd.sock). Sin decirle
+# donde esta, cAdvisor no reconoce ningun contenedor de Docker y los paneles
+# de CPU y memoria quedan vacios.
+services:
+  cadvisor:
+    command: ["--containerd=/var/run/docker/containerd/containerd.sock"]
+  prometheus:
+    ports: !override
+      - "9090:9090"
+  grafana:
+    ports: !override
+      - "3010:3000"

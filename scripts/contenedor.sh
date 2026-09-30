@@ -25,16 +25,32 @@
 #     sobrevive a que se recree el contenedor global, igual que la base.
 #   - --restart unless-stopped: si la PC se reinicia, el contenedor global
 #     vuelve solo, y con el los microservicios.
+#   - Adentro corre tambien el monitoreo (monitoring/): Prometheus, Grafana,
+#     Loki, cAdvisor y, en Linux, Falco. Tiene que ser adentro: se conecta a
+#     la red livemetric_app-net, que en este modo solo existe ahi. Grafana y
+#     Prometheus se publican en la PC SOLO en 127.0.0.1 (no desde la red),
+#     igual que con start.sh; ver infra/contenedor-global/monitoreo.override.yml.
+#   - Con Falco, el contenedor global corre ademas con --pid=host: Falco
+#     recibe del kernel los numeros de proceso de la PC y completa cada
+#     evento leyendo /proc; con el /proc propio del contenedor, esos numeros
+#     son de otros procesos, y atribuia a los servicios cosas que hacia la PC
+#     (escrituras de AppArmor o systemd como si fueran de scrutiny). La
+#     contra: el contenedor global ve los procesos de la PC, lo que suma poco
+#     a lo que ya permite --privileged. LIVEMETRIC_FALCO=0 lo evita (sin Falco).
 #
 # Uso:
 #   ./scripts/contenedor.sh [iniciar] [--detalle]   construye, analiza y levanta todo adentro
 #   ./scripts/contenedor.sh estado                  estado de cada contenedor de adentro
-#   ./scripts/contenedor.sh logs [servicio]         logs en vivo del stack de adentro
+#   ./scripts/contenedor.sh logs [servicio]         logs en vivo del stack de adentro (también: logs falco, logs grafana...)
 #   ./scripts/contenedor.sh shell                   terminal dentro del contenedor global
 #   ./scripts/contenedor.sh detener                 apaga el contenedor global y todo lo de adentro
 #   ./scripts/contenedor.sh borrar                  ademas borra su imagen y su volumen (con la BASE DE DATOS)
 #
 #   LIVEMETRIC_PUERTO=3100 ./scripts/contenedor.sh   usa otro puerto del host
+#   LIVEMETRIC_PUERTO_GRAFANA=3011 LIVEMETRIC_PUERTO_PROMETHEUS=9091 ./scripts/contenedor.sh
+#                                                    otros puertos para el monitoreo
+#   LIVEMETRIC_MONITOREO=0 ./scripts/contenedor.sh   sin el monitoreo
+#   LIVEMETRIC_FALCO=0 ./scripts/contenedor.sh       con el monitoreo, pero sin Falco (ni --pid=host)
 
 set -uo pipefail
 
@@ -47,6 +63,17 @@ NOMBRE=livemetric-global
 IMAGEN=livemetric-global
 VOLUMEN=livemetric-global-docker
 PUERTO="${LIVEMETRIC_PUERTO:-3000}"
+PUERTO_GRAFANA="${LIVEMETRIC_PUERTO_GRAFANA:-3010}"
+PUERTO_PROMETHEUS="${LIVEMETRIC_PUERTO_PROMETHEUS:-9090}"
+MONITOREO="${LIVEMETRIC_MONITOREO:-1}"
+FALCO="${LIVEMETRIC_FALCO:-1}"
+
+# El compose del monitoreo, tal como se usa adentro: con el ajuste de puertos
+# y containerd del contenedor global. --profile falco para que "down" y
+# "ps" incluyan a Falco; al levantarlo, el perfil va solo si se puede.
+MONITOREO_COMPOSE=(docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml
+  -f infra/contenedor-global/monitoreo.override.yml)
+SERVICIOS_MONITOREO=" prometheus grafana loki promtail cadvisor blackbox-exporter falco "
 
 uso() { sed -n '/^# Uso:/,/^$/s/^# \{0,1\}//p' "$0"; }
 
@@ -106,16 +133,39 @@ esperar_motor_interno() {
   return 1
 }
 
-puerto_ocupado() { (exec 3<> "/dev/tcp/127.0.0.1/$PUERTO") 2> /dev/null; }
+puerto_ocupado() { (exec 3<> "/dev/tcp/127.0.0.1/$1") 2> /dev/null; }
+
+# Falco instrumenta el kernel con eBPF: necesita Linux con BTF, y no la VM
+# de Docker Desktop (Windows con WSL2 o macOS), donde no hay garantias.
+falco_posible() {
+  [ "$MONITOREO" != 0 ] && [ "$FALCO" != 0 ] && [ "$(uname -s)" = Linux ] \
+    && ! grep -qi microsoft /proc/version 2> /dev/null && [ -e /sys/kernel/btf/vmlinux ]
+}
+
+esperar_grafana() {
+  for _ in $(seq 1 60); do
+    docker exec "$NOMBRE" wget -qO- http://127.0.0.1:3010/api/health > /dev/null 2>&1 && return 0
+    sleep 2
+  done
+  return 1
+}
+
+# Primero el monitoreo: esta conectado a la red de la aplicacion, que si no
+# no se puede borrar al bajarla.
+bajar_monitoreo() {
+  docker exec "$NOMBRE" "${MONITOREO_COMPOSE[@]}" --profile falco down > /dev/null 2>&1
+}
 
 # docker exec con los mismos -i/-t que la terminal de este script.
 adentro() { docker exec "${ARGS_TTY[@]}" "$NOMBRE" "$@"; }
 
 iniciar() {
+  local FASES=4
+  [ "$MONITOREO" != 0 ] && FASES=5
   banner "$C_AZUL" "LiveMetric · contenedor global (el proyecto entero dentro de Docker)"
 
   # 1. Docker en esta PC ------------------------------------------------------
-  fase 1 4 "Docker en esta PC"
+  fase 1 "$FASES" "Docker en esta PC"
   requiere_docker
   ok "Docker (el motor responde)"
 
@@ -124,7 +174,7 @@ iniciar() {
     docker rm -f "$NOMBRE" > /dev/null
   fi
 
-  if puerto_ocupado; then
+  if puerto_ocupado "$PUERTO"; then
     falla "El puerto $PUERTO ya está en uso en esta PC."
     local ocupantes
     ocupantes="$(docker ps --filter "publish=$PUERTO" --format '{{.Names}}' | tr '\n' ' ')"
@@ -139,8 +189,32 @@ iniciar() {
   fi
   ok "Puerto $PUERTO libre"
 
+  local publicar=(-p "$PUERTO:3000")
+  if [ "$MONITOREO" != 0 ]; then
+    local p
+    for p in "$PUERTO_GRAFANA" "$PUERTO_PROMETHEUS"; do
+      if puerto_ocupado "$p"; then
+        falla "El puerto $p (monitoreo) ya está en uso en esta PC."
+        if [ -n "$(docker ps -q --filter name=livemetric-grafana --filter name=livemetric-prometheus)" ]; then
+          info "Lo usa el monitoreo corriendo directo en el host. Bajalo con:"
+          info "  docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml --profile falco down"
+        fi
+        info "O usá otros puertos: LIVEMETRIC_PUERTO_GRAFANA=3011 LIVEMETRIC_PUERTO_PROMETHEUS=9091 ./scripts/contenedor.sh"
+        info "O sin monitoreo: LIVEMETRIC_MONITOREO=0 ./scripts/contenedor.sh"
+        exit 1
+      fi
+    done
+    # Solo en 127.0.0.1: el monitoreo no se alcanza desde otra PC.
+    publicar+=(-p "127.0.0.1:$PUERTO_GRAFANA:3010" -p "127.0.0.1:$PUERTO_PROMETHEUS:9090")
+    ok "Puertos $PUERTO_GRAFANA (Grafana) y $PUERTO_PROMETHEUS (Prometheus) libres"
+  fi
+  # Falco necesita el /proc de la PC (ver arriba). Sin ser el proceso 1, tini
+  # (el init de la imagen) tiene que registrarse para recoger los huérfanos.
+  local procesos=()
+  falco_posible && procesos=(--pid=host -e TINI_SUBREAPER=1)
+
   # 2. Contenedor global ------------------------------------------------------
-  fase 2 4 "Contenedor global"
+  fase 2 "$FASES" "Contenedor global"
   local log_build
   log_build="$(mktemp /tmp/livemetric-global-build.XXXXXX)"
   correr "$log_build" "Construyendo la imagen $IMAGEN" \
@@ -166,8 +240,8 @@ iniciar() {
   fi
   ok "$resultado_env"
 
-  if ! docker run -d --name "$NOMBRE" --privileged --restart unless-stopped \
-      -p "$PUERTO:3000" -v "$VOLUMEN:/var/lib/docker" -v "$PWD/.env:/livemetric/.env:ro" "$IMAGEN" > /dev/null; then
+  if ! docker run -d --name "$NOMBRE" --privileged --restart unless-stopped "${procesos[@]}" \
+      "${publicar[@]}" -v "$VOLUMEN:/var/lib/docker" -v "$PWD/.env:/livemetric/.env:ro" "$IMAGEN" > /dev/null; then
     falla "No se pudo arrancar el contenedor global."
     exit 1
   fi
@@ -182,6 +256,9 @@ iniciar() {
   # cache de imagenes) y, por "restart: unless-stopped", los vuelve a
   # arrancar solo: sin esto, el stack de una corrida anterior -con el codigo
   # de entonces- estaria arriba antes de que el analisis de esta pase.
+  if [ -n "$(docker exec "$NOMBRE" "${MONITOREO_COMPOSE[@]}" --profile falco ps -a -q 2> /dev/null)" ]; then
+    correr /dev/null "Bajando el monitoreo que quedó de una corrida anterior" bajar_monitoreo
+  fi
   if [ -n "$(docker exec "$NOMBRE" docker compose ps -a -q 2> /dev/null)" ]; then
     correr /dev/null "Bajando el stack que quedó de una corrida anterior" \
       docker exec "$NOMBRE" docker compose down --remove-orphans
@@ -190,7 +267,7 @@ iniciar() {
 
 
   # 3. Analisis de seguridad (el mismo que corre en CI) ------------------------
-  fase 3 4 "Análisis de seguridad (adentro del contenedor global)"
+  fase 3 "$FASES" "Análisis de seguridad (adentro del contenedor global)"
   info "Los mismos controles que GitHub Actions. Puede tardar varios minutos:"
   info "construye las 6 imágenes reales (la primera vez, además, descarga todo)."
   # LIVEMETRIC_DESDE_START: que pipeline-local.sh no repita su encabezado,
@@ -209,7 +286,7 @@ iniciar() {
   fi
 
   # 4. Levantar el stack (adentro) ----------------------------------------------
-  fase 4 4 "Levantar LiveMetric (adentro del contenedor global)"
+  fase 4 "$FASES" "Levantar LiveMetric (adentro del contenedor global)"
   local log_compose
   log_compose="$(mktemp /tmp/livemetric-global-compose.XXXXXX)"
   correr "$log_compose" "docker compose up --build (construye y arranca los contenedores)" \
@@ -240,12 +317,42 @@ iniciar() {
     info "  docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay"
   fi
 
+  # 5. Monitoreo (adentro) ------------------------------------------------------
+  local lineas_monitoreo=()
+  if [ "$MONITOREO" != 0 ]; then
+    fase 5 "$FASES" "Monitoreo (adentro del contenedor global)"
+    local perfil=() falco="no disponible en este sistema (necesita Linux con eBPF)"
+    [ "$FALCO" = 0 ] && falco="desactivado (LIVEMETRIC_FALCO=0)"
+    if falco_posible; then
+      perfil=(--profile falco)
+      falco="alertas en el tablero de Grafana"
+    fi
+    local log_monitoreo
+    log_monitoreo="$(mktemp /tmp/livemetric-global-monitoreo.XXXXXX)"
+    if correr "$log_monitoreo" "Levantando Prometheus, Grafana, Loki, cAdvisor${perfil[*]:+ y Falco}" \
+        docker exec "$NOMBRE" "${MONITOREO_COMPOSE[@]}" "${perfil[@]}" up -d \
+      && correr /dev/null "Esperando a Grafana" esperar_grafana; then
+      ok "Monitoreo en marcha${perfil[*]:+, con Falco}"
+      lineas_monitoreo=(
+        ""
+        "  Monitoreo (solo desde esta PC):"
+        "    Grafana:     http://localhost:$PUERTO_GRAFANA   (usuario y contraseña: grep GRAFANA .env)"
+        "    Prometheus:  http://localhost:$PUERTO_PROMETHEUS"
+        "    Loki:        en Grafana, Explore → Loki"
+        "    Falco:       $falco"
+      )
+    else
+      aviso "El monitoreo no arrancó; LiveMetric sí está arriba. Log: $log_monitoreo"
+    fi
+  fi
+
   local url_lan
   url_lan="$(url_red)"
   banner "$C_VERDE" "✔ LiveMetric está arriba (dentro del contenedor global)" \
     "" \
     "  En esta PC:               http://localhost:$PUERTO" \
     "  Desde otra PC de la red:  ${url_lan:-no se detectó una conexión de red}" \
+    "${lineas_monitoreo[@]}" \
     "" \
     "  ./scripts/contenedor.sh estado    estado de cada microservicio" \
     "  ./scripts/contenedor.sh logs      logs en vivo (o: logs auth-service)" \
@@ -258,7 +365,12 @@ estado() {
   requiere_corriendo
   ok "Contenedor global en marcha ($NOMBRE, puerto $PUERTO)"
   echo ""
-  docker exec "$NOMBRE" docker compose ps --format 'table {{.Name}}\t{{.Status}}' | sed 's/^/     /'
+  # Todos los de adentro: la aplicacion y, si esta arriba, el monitoreo.
+  docker exec "$NOMBRE" docker ps -a --format 'table {{.Names}}\t{{.Status}}' | sed 's/^/     /'
+  if docker exec "$NOMBRE" docker ps -q --filter name=livemetric-grafana | grep -q .; then
+    echo ""
+    info "Grafana: http://localhost:$PUERTO_GRAFANA · Prometheus: http://localhost:$PUERTO_PROMETHEUS (solo desde esta PC)"
+  fi
 }
 
 detener() {
@@ -270,6 +382,7 @@ detener() {
   # Primero el stack de adentro: si no, queda guardado en el volumen y vuelve
   # solo la proxima vez que arranque un contenedor global.
   if corriendo; then
+    correr /dev/null "Apagando el monitoreo de adentro" bajar_monitoreo
     correr /dev/null "Apagando los microservicios de adentro" \
       docker exec "$NOMBRE" docker compose down --remove-orphans
   fi
@@ -314,7 +427,11 @@ case "$COMANDO" in
   logs)
     requiere_docker
     requiere_corriendo
-    docker exec "${ARGS_TTY[@]}" "$NOMBRE" docker compose logs -f "$@"
+    if [ -n "${1:-}" ] && [[ "$SERVICIOS_MONITOREO" == *" $1 "* ]]; then
+      docker exec "${ARGS_TTY[@]}" "$NOMBRE" "${MONITOREO_COMPOSE[@]}" --profile falco logs -f "$@"
+    else
+      docker exec "${ARGS_TTY[@]}" "$NOMBRE" docker compose logs -f "$@"
+    fi
     ;;
   shell)
     requiere_docker

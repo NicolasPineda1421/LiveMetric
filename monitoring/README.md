@@ -57,6 +57,11 @@ autenticación.
 
 ### 2. Levantar
 
+**Con el contenedor global** (`./scripts/contenedor.sh`) no hay que hacer nada: el
+monitoreo ya se levanta adentro, junto a la aplicación, con los mismos puertos (3010 y
+9090, solo en `127.0.0.1`) y, en Linux, con Falco. Lo que sigue es para la aplicación
+levantada con `start.sh` o `docker compose`.
+
 ```bash
 # Primero la aplicación, que es quien crea la red app-net
 docker compose up -d
@@ -202,6 +207,11 @@ vigila**, y debe declararse en lugar de disimularse. En un despliegue real, el m
 correría en un plano separado con su propio control de acceso. Conviene mencionarlo en la
 sustentación antes de que lo pregunten: reconocer el trade-off demuestra que se entendió
 lo que se desplegó.
+
+En el contenedor global hay una concesión más: con Falco activado, ese contenedor corre
+con `--pid=host`, porque Falco necesita el `/proc` de la PC para atribuir cada evento al
+proceso y al contenedor correctos (con el del contenedor global atribuía a los servicios
+escrituras que hacía la PC). Se desactiva con `LIVEMETRIC_FALCO=0`.
 
 Por la misma razón el stack se levanta con un compose **aparte**: el monitoreo no debe
 poder tumbar lo que monitorea. Si Grafana consume memoria de más o Loki llena el disco, la

@@ -79,10 +79,10 @@ docker compose exec postgres psql -U livemetric -d livemetric   # consola SQL
 docker compose down -v                                           # borrar la base y empezar de cero
 ```
 
-No hay un ejecutor de migraciones. Un cambio de esquema se hace en dos lugares:
+Un cambio de esquema se hace en dos lugares:
 
 1. En `db/init.sql`, para que toda base nueva lo tenga.
-2. En `db/migrations/00N_<descripcion>.sql`, que se pueda correr varias veces sin romper nada (`IF NOT EXISTS`), para las bases que ya existen.
+2. En `db/migrations/00N_<descripcion>.sql`, para las bases que ya existen. Tiene que poder correr varias veces sin romper nada (`IF NOT EXISTS`): el servicio `migraciones` de `docker-compose.yml` aplica todas las de esa carpeta en cada arranque, antes que los servicios, y en Swarm lo hace `deploy.sh`.
 
 Las tablas `scrutiny_ledger` y `audit_log` son append-only: un trigger rechaza cualquier `UPDATE` o `DELETE`, también durante el desarrollo.
 

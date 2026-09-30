@@ -52,9 +52,18 @@ function consultar() {
       const estado = c.State;
       const salud = estado.Health && estado.Health.Status;
       const checks = (estado.Health && estado.Health.Log) || [];
+      // Tareas de una sola vez (como "migraciones" en docker-compose.yml):
+      // terminar con código 0 es su estado sano.
+      const unicaVez = (c.Config.Labels || {})['livemetric.unica-vez'] === 'true';
       let tipo;
       let texto;
-      if (estado.Status === 'running' && (!salud || salud === 'healthy')) {
+      if (unicaVez && estado.Status === 'exited' && estado.ExitCode === 0) {
+        tipo = 'listo';
+        texto = 'terminó bien (corre una vez al arrancar)';
+      } else if (unicaVez && (estado.Status === 'running' || estado.Status === 'created')) {
+        tipo = 'arrancando';
+        texto = 'trabajando';
+      } else if (estado.Status === 'running' && (!salud || salud === 'healthy')) {
         tipo = 'listo';
         texto = salud ? 'sano (healthy)' : 'en marcha (no define healthcheck)';
       } else if (estado.Status === 'running' && salud === 'starting') {
@@ -75,6 +84,7 @@ function consultar() {
       }
       return {
         nombre: c.Name.replace(/^\//, ''),
+        unicaVez,
         tipo,
         texto,
         ultimoCheck: checks.length ? checks[checks.length - 1].Output : '',
@@ -166,8 +176,11 @@ function actualizar() {
 
   const listos = contenedores.filter((c) => c.tipo === 'listo').length;
   if (listos === contenedores.length) {
+    // En el total, solo los que quedan corriendo: las tareas de una sola vez
+    // ya terminaron (se ven igual en la lista, con su estado).
+    const enMarcha = contenedores.filter((c) => !c.unicaVez).length;
     terminar(0, [
-      `   ${verde(negrita(`${SIMBOLO.ok} Los ${contenedores.length} contenedores están sanos`))} ${gris(`(tardaron ${duracion(segundos())})`)}`,
+      `   ${verde(negrita(`${SIMBOLO.ok} Los ${enMarcha} contenedores están sanos`))} ${gris(`(tardaron ${duracion(segundos())})`)}`,
       ...lineasDeEstado(contenedores),
     ]);
     return;

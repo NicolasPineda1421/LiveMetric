@@ -52,7 +52,7 @@ cd LiveMetric
 |---|---|---|
 | Linux / macOS | `./scripts/start.sh` | Instala lo que falte, corre el análisis de seguridad y, solo si pasa, levanta el stack |
 | Windows | `scripts\start.bat` | Lo mismo, desde `cmd.exe` |
-| Solo Docker | `./scripts/contenedor.sh` | Lo mismo, pero todo dentro de un contenedor global: en la PC no se instala nada más |
+| Solo Docker | `./scripts/contenedor.sh` | Lo mismo, pero todo dentro de un contenedor global: en la PC no se instala nada más. Incluye el monitoreo (Grafana en `http://localhost:3010`) |
 
 La primera vez tarda varios minutos (construye y analiza las 6 imágenes). Al terminar, cuando los 7 contenedores están sanos, el script muestra las direcciones:
 

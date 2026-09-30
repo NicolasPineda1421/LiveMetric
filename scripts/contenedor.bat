@@ -8,19 +8,25 @@ REM quedan ADENTRO del global. En la PC solo hace falta Docker Desktop: este
 REM script no instala ni modifica nada de Windows (start.bat no se usa).
 REM
 REM El detalle de como funciona (--privileged, el volumen de cache, el .env
-REM montado en solo lectura, etc.) esta al principio de scripts/contenedor.sh.
+REM montado en solo lectura, el monitoreo de adentro, etc.) esta al
+REM principio de scripts/contenedor.sh. Adentro corre tambien el monitoreo
+REM (Prometheus, Grafana, Loki y cAdvisor), publicado en la PC SOLO en
+REM 127.0.0.1. Falco no: en Docker Desktop los contenedores corren sobre la
+REM VM de WSL2 y no hay garantias de que pueda instrumentar ese kernel.
 REM Los textos de este archivo van sin acentos: cmd.exe no lee los .bat como
 REM UTF-8.
 REM
 REM Uso (desde la raiz del repo, en un cmd.exe normal):
 REM   scripts\contenedor.bat [iniciar] [--detalle]   construye, analiza y levanta todo adentro
 REM   scripts\contenedor.bat estado                  estado de cada contenedor de adentro
-REM   scripts\contenedor.bat logs [servicio]         logs en vivo del stack de adentro
+REM   scripts\contenedor.bat logs [servicio]         logs en vivo del stack de adentro (tambien: logs grafana, logs loki...)
 REM   scripts\contenedor.bat shell                   terminal dentro del contenedor global
 REM   scripts\contenedor.bat detener                 apaga el contenedor global y todo lo de adentro
 REM   scripts\contenedor.bat borrar                  ademas borra su imagen y su volumen (con la BASE DE DATOS)
 REM
 REM   set LIVEMETRIC_PUERTO=3100 y despues scripts\contenedor.bat   usa otro puerto de la PC
+REM   set LIVEMETRIC_PUERTO_GRAFANA=3011 y LIVEMETRIC_PUERTO_PROMETHEUS=9091   otros puertos para el monitoreo
+REM   set LIVEMETRIC_MONITOREO=0 y despues scripts\contenedor.bat   sin el monitoreo
 
 setlocal enabledelayedexpansion
 cd /d "%~dp0.."
@@ -30,6 +36,17 @@ set "IMAGEN=livemetric-global"
 set "VOLUMEN=livemetric-global-docker"
 set "PUERTO=%LIVEMETRIC_PUERTO%"
 if not defined PUERTO set "PUERTO=3000"
+set "PUERTO_GRAFANA=%LIVEMETRIC_PUERTO_GRAFANA%"
+if not defined PUERTO_GRAFANA set "PUERTO_GRAFANA=3010"
+set "PUERTO_PROMETHEUS=%LIVEMETRIC_PUERTO_PROMETHEUS%"
+if not defined PUERTO_PROMETHEUS set "PUERTO_PROMETHEUS=9090"
+set "MONITOREO=%LIVEMETRIC_MONITOREO%"
+if not defined MONITOREO set "MONITOREO=1"
+set "FASES=5"
+if "%MONITOREO%"=="0" set "FASES=4"
+REM El compose del monitoreo tal como se usa adentro: con el ajuste de puertos
+REM y containerd del contenedor global (infra\contenedor-global\monitoreo.override.yml).
+set "MONITOREO_COMPOSE=docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml -f infra/contenedor-global/monitoreo.override.yml"
 
 REM Colores ANSI (cmd.exe de Windows 10+ los interpreta). ESC es el
 REM caracter de escape, que en batch no se puede escribir literal.
@@ -95,6 +112,24 @@ if not errorlevel 1 (
 )
 call :ok "Puerto %PUERTO% libre"
 
+set "PUBLICAR=-p %PUERTO%:3000"
+if "%MONITOREO%"=="0" goto :sin_puertos_monitoreo
+for %%p in (%PUERTO_GRAFANA% %PUERTO_PROMETHEUS%) do (
+  netstat -ano | findstr /r /c:":%%p .*LISTENING" >nul
+  if not errorlevel 1 (
+    call :falla "El puerto %%p, del monitoreo, ya esta en uso en esta PC."
+    call :info "Si es el monitoreo corriendo directo en la PC, bajalo con:"
+    call :info "  docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml down"
+    call :info "O usa otros puertos: set LIVEMETRIC_PUERTO_GRAFANA=3011 y set LIVEMETRIC_PUERTO_PROMETHEUS=9091"
+    call :info "O sin monitoreo: set LIVEMETRIC_MONITOREO=0"
+    goto :fin_error
+  )
+)
+REM Solo en 127.0.0.1: el monitoreo no se alcanza desde otra PC.
+set "PUBLICAR=%PUBLICAR% -p 127.0.0.1:%PUERTO_GRAFANA%:3010 -p 127.0.0.1:%PUERTO_PROMETHEUS%:9090"
+call :ok "Puertos %PUERTO_GRAFANA% para Grafana y %PUERTO_PROMETHEUS% para Prometheus libres"
+:sin_puertos_monitoreo
+
 REM --- 2. Contenedor global -------------------------------------------------
 call :fase 2 "Contenedor global"
 set "LOG_BUILD=%TEMP%\livemetric-global-build-%RANDOM%.log"
@@ -120,7 +155,7 @@ if errorlevel 1 (
   call :falla "No se pudo preparar el .env."
   goto :fin_error
 )
-docker run -d --name %NOMBRE% --privileged --restart unless-stopped -p %PUERTO%:3000 -v %VOLUMEN%:/var/lib/docker -v "%cd%\.env:/livemetric/.env:ro" %IMAGEN% >nul
+docker run -d --name %NOMBRE% --privileged --restart unless-stopped %PUBLICAR% -v %VOLUMEN%:/var/lib/docker -v "%cd%\.env:/livemetric/.env:ro" %IMAGEN% >nul
 if errorlevel 1 (
   call :falla "No se pudo arrancar el contenedor global."
   goto :fin_error
@@ -150,6 +185,16 @@ REM El motor de adentro guarda sus contenedores en el volumen (junto con la
 REM cache de imagenes) y, por "restart: unless-stopped", los vuelve a
 REM arrancar solo: sin esto, el stack de una corrida anterior, con el codigo
 REM de entonces, estaria arriba antes de que el analisis de esta pase.
+REM Primero el monitoreo: esta conectado a la red de la aplicacion, que si
+REM no, no se puede borrar al bajarla.
+set "MONITOREO_ANTERIOR="
+for /f %%c in ('docker exec %NOMBRE% %MONITOREO_COMPOSE% --profile falco ps -a -q 2^>nul') do set "MONITOREO_ANTERIOR=1"
+if defined MONITOREO_ANTERIOR (
+  <nul set /p "=%GRIS%   ... bajando el monitoreo que quedo de una corrida anterior%RESET%"
+  docker exec %NOMBRE% %MONITOREO_COMPOSE% --profile falco down >nul 2>nul
+  echo.
+  call :ok "Monitoreo anterior bajado"
+)
 set "STACK_ANTERIOR="
 for /f %%c in ('docker exec %NOMBRE% docker compose ps -a -q 2^>nul') do set "STACK_ANTERIOR=1"
 if defined STACK_ANTERIOR (
@@ -208,6 +253,36 @@ REM alguno, crearAdmin.js --si-no-hay no hace nada.
 echo.
 docker exec -it %NOMBRE% docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay
 
+REM --- 5. Monitoreo, adentro ---------------------------------------------------
+set "MONITOREO_OK=0"
+if "%MONITOREO%"=="0" goto :sin_monitoreo
+call :fase 5 "Monitoreo, adentro del contenedor global"
+set "LOG_MONITOREO=%TEMP%\livemetric-global-monitoreo-%RANDOM%.log"
+<nul set /p "=%GRIS%   ... levantando Prometheus, Grafana, Loki y cAdvisor%RESET%"
+docker exec %NOMBRE% %MONITOREO_COMPOSE% up -d > "%LOG_MONITOREO%" 2>&1
+if errorlevel 1 (
+  echo.
+  call :aviso "El monitoreo no arranco; LiveMetric si esta arriba. Log: %LOG_MONITOREO%"
+  goto :sin_monitoreo
+)
+for /l %%i in (1,1,60) do (
+  if "!MONITOREO_OK!"=="0" (
+    docker exec %NOMBRE% wget -qO- http://127.0.0.1:3010/api/health >nul 2>nul
+    if not errorlevel 1 (
+      set MONITOREO_OK=1
+    ) else (
+      timeout /t 2 /nobreak >nul
+    )
+  )
+)
+echo.
+if "%MONITOREO_OK%"=="1" (
+  call :ok "Monitoreo en marcha"
+) else (
+  call :aviso "Grafana no respondio a tiempo; LiveMetric si esta arriba. Log: %LOG_MONITOREO%"
+)
+:sin_monitoreo
+
 REM URL para otras PCs de la red: la IP de ESTA PC (la de la ruta hacia
 REM afuera). Se calcula aca porque adentro del contenedor solo se ve la suya.
 set "IP_LAN="
@@ -224,6 +299,14 @@ if defined IP_LAN (
   echo %VERDE%    Desde otra PC de la red:  http://%IP_LAN%:%PUERTO%%RESET%
 ) else (
   echo %VERDE%    Desde otra PC de la red:  no se detecto una conexion de red%RESET%
+)
+if "%MONITOREO_OK%"=="1" (
+  echo.
+  echo %VERDE%    Monitoreo, solo desde esta PC:%RESET%
+  echo %VERDE%      Grafana:     http://localhost:%PUERTO_GRAFANA%   usuario y contrasena: findstr GRAFANA .env%RESET%
+  echo %VERDE%      Prometheus:  http://localhost:%PUERTO_PROMETHEUS%%RESET%
+  echo %VERDE%      Loki:        en Grafana, Explore y la fuente Loki%RESET%
+  echo %VERDE%      Falco:       no disponible con Docker Desktop%RESET%
 )
 echo.
 echo %VERDE%    scripts\contenedor.bat estado    estado de cada microservicio%RESET%
@@ -249,12 +332,23 @@ call :requiere_corriendo
 if errorlevel 1 exit /b 1
 call :ok "Contenedor global en marcha (%NOMBRE%, puerto %PUERTO%)"
 echo.
-docker exec %NOMBRE% docker compose ps --format "table {{.Name}}\t{{.Status}}"
+REM Todos los de adentro: la aplicacion y, si esta arriba, el monitoreo.
+docker exec %NOMBRE% docker ps -a --format "table {{.Names}}\t{{.Status}}"
+for /f %%g in ('docker exec %NOMBRE% docker ps -q --filter "name=livemetric-grafana" 2^>nul') do (
+  echo.
+  call :info "Grafana: http://localhost:%PUERTO_GRAFANA% - Prometheus: http://localhost:%PUERTO_PROMETHEUS%, solo desde esta PC"
+)
 exit /b 0
 
 :logs
 call :requiere_corriendo
 if errorlevel 1 exit /b 1
+for %%s in (prometheus grafana loki promtail cadvisor blackbox-exporter falco) do (
+  if /i "%~2"=="%%s" (
+    docker exec -it %NOMBRE% %MONITOREO_COMPOSE% --profile falco logs -f %2
+    exit /b !errorlevel!
+  )
+)
 docker exec -it %NOMBRE% docker compose logs -f %2
 exit /b %errorlevel%
 
@@ -274,7 +368,8 @@ if errorlevel 1 (
 )
 REM Primero el stack de adentro: si no, queda guardado en el volumen y
 REM vuelve solo la proxima vez que arranque un contenedor global.
-<nul set /p "=%GRIS%   ... apagando los microservicios de adentro y el contenedor global%RESET%"
+<nul set /p "=%GRIS%   ... apagando el monitoreo y los microservicios de adentro, y el contenedor global%RESET%"
+docker exec %NOMBRE% %MONITOREO_COMPOSE% --profile falco down >nul 2>nul
 docker exec %NOMBRE% docker compose down --remove-orphans >nul 2>nul
 docker rm -f %NOMBRE% >nul
 echo.
@@ -329,7 +424,7 @@ exit /b 0
 REM :fase <n> <titulo> - encabezado de cada etapa grande.
 :fase
 echo.
-echo %AZUL%%NEGRITA%== %~1/4  %~2 ==============================================%RESET%
+echo %AZUL%%NEGRITA%== %~1/%FASES%  %~2 ==============================================%RESET%
 goto :eof
 
 REM Lineas de estado, con el mismo codigo de colores que start.bat. Ningun

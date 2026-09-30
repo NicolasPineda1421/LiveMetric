@@ -70,6 +70,8 @@ como verificada. Las anteriores a v1.2.0, además, se conectaban a Supabase y no
 que este stack espera de la base local (el cifrado del padrón al arrancar y
 `crearAdmin.js --si-no-hay`).
 
+Después de desplegar, el script aplica las migraciones de `db/migrations/` a la base: si el volumen ya existía (un stack de una versión anterior), la pone al día; si es nueva, no cambian nada.
+
 El script valida, antes de desplegar, que Swarm esté activo, que el `.env` exista con
 todas las variables obligatorias y que las seis imágenes de esa versión estén realmente
 publicadas en el registro. Fallar en la validación es mucho más barato que desplegar y
