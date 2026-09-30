@@ -15,7 +15,7 @@ RUN npm run build
 # escribir su cache; por eso nginx escucha en 8080 (ver nginx.conf; hacia
 # afuera sigue siendo el 3000) y las carpetas que escribe pasan a ser del
 # usuario nginx.
-FROM nginx:1.27-alpine
+FROM nginx:1.30-alpine
 
 # Parchea paquetes de SO (zlib, libxml2, musl, etc.) del snapshot de Alpine
 # de la imagen base oficial, que suele quedar unos dias detras de los

@@ -100,7 +100,7 @@ Por cada paquete vulnerable muestra la severidad, la vía por la que entra (depe
 
 La tabla trae la librería o el paquete del sistema, el CVE, la severidad, la versión instalada y la versión que lo corrige (`Fixed Version`). Con `--ignore-unfixed`, solo aparecen los que ya tienen corrección.
 
-- **En una imagen**, casi siempre se resuelve actualizando la imagen base (`node:20-alpine`, `nginx:1.27-alpine`, `postgres:16-alpine`) y reconstruyendo.
+- **En una imagen**, casi siempre se resuelve actualizando la imagen base (`node:20-alpine`, `nginx:1.30-alpine`, `postgres:16-alpine`) y reconstruyendo.
 - **En dependencias**, se actualiza el paquete.
 - **Si un CVE no aplica** (por ejemplo, la función vulnerable no se usa), va a `.trivyignore` con el motivo y la fecha en que se volverá a revisar. Hoy no hay ninguna excepción.
 

@@ -152,7 +152,7 @@ graph TB
 
     subgraph Host["PC con Docker"]
         subgraph appnet["Red app-net (bridge)"]
-            C_FE["Contenedor: frontend<br/>nginx:1.27-alpine, sin root<br/>8080 → 0.0.0.0:3000"]
+            C_FE["Contenedor: frontend<br/>nginx:1.30-alpine, sin root<br/>8080 → 0.0.0.0:3000"]
             C_AUTH["Contenedor: auth-service<br/>node:20-alpine<br/>3001 (solo 127.0.0.1)"]
             C_VOTING["Contenedor: voting-service<br/>node:20-alpine<br/>3002 (solo 127.0.0.1)"]
             C_ANALYTICS["Contenedor: analytics-service<br/>node:20-alpine<br/>3003 (solo 127.0.0.1)"]
