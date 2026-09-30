@@ -1,0 +1,14 @@
+{
+  "name": "livemetric-informe",
+  "private": true,
+  "type": "module",
+  "description": "Genera docs/informe-tecnico.pdf a partir de docs/informe-tecnico.md, con los diagramas Mermaid dibujados",
+  "scripts": {
+    "pdf": "node generar-pdf.mjs"
+  },
+  "dependencies": {
+    "marked": "18.0.14",
+    "mermaid": "11.17.2",
+    "playwright": "1.63.0"
+  }
+}
