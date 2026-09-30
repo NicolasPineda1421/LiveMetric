@@ -301,12 +301,15 @@ jobs:
           category: checkov-terraform
 
   # -------------------------------------------------------------------------
-  # 6) PRUEBAS UNITARIAS/INTEGRACION - Jest + Supertest, contra la app de
-  #    Express en memoria (sin desplegar nada) y una base PostgreSQL real
-  #    pero desechable: cada "npm test" la levanta en un contenedor propio,
-  #    le carga db/init.sql y la borra al final (scripts/lib/jest-db-setup.js).
-  #    No necesita ningun secreto: los de la aplicacion se generan al azar
-  #    en cada corrida (services/*/jest.setup.js).
+  # 6) PRUEBAS UNITARIAS/INTEGRACION - Jest.
+  #    - Servicios: Supertest contra la app de Express en memoria (sin
+  #      desplegar nada) y una base PostgreSQL real pero desechable: cada
+  #      "npm test" la levanta en un contenedor propio, le carga db/init.sql
+  #      y la borra al final (scripts/lib/jest-db-setup.js). No necesita
+  #      ningun secreto: los de la aplicacion se generan al azar en cada
+  #      corrida (services/*/jest.setup.js).
+  #    - Frontend: React Testing Library sobre jsdom, con el cliente HTTP
+  #      reemplazado por un doble (sin base ni servicios).
   # -------------------------------------------------------------------------
   unit-tests:
     name: Pruebas unitarias - ${{ matrix.service }}
@@ -315,7 +318,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [auth, voting, analytics, scrutiny, scheduler]
+        service: [auth, voting, analytics, scrutiny, scheduler, frontend]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -326,7 +329,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: services/${{ matrix.service }}/package-lock.json
 
-      - name: Instalar dependencias (incluye Jest/Supertest)
+      - name: Instalar dependencias (incluye Jest)
         working-directory: services/${{ matrix.service }}
         run: npm ci --ignore-scripts
 
@@ -345,7 +348,7 @@ jobs:
 
   # -------------------------------------------------------------------------
   # 6b) INSIGNIA DE COBERTURA - junta la cobertura de las pruebas de los 5
-  #     servicios y la publica en GitHub Pages: coverage.json (el formato
+  #     servicios y del frontend, y la publica en GitHub Pages: coverage.json (el formato
   #     que lee shields.io para la insignia del README) y una pagina con el
   #     detalle por servicio. Solo en pushes a main, para que la insignia
   #     refleje la rama principal y no un PR a medio camino. No es un
@@ -527,7 +530,7 @@ jobs:
           check "${{ needs.sca-scan.result }}" "📦 SCA (Trivy fs, sobre package.json) — sin CVEs de severidad alta o mayor"
           check "${{ needs.container-scan.result }}" "🐳 Container Scan (Trivy, imagenes reales) — sin CVEs critical/high sin excepcion"
           check "${{ needs.iac-scan.result }}" "☁️ IaC Guard (Checkov sobre Terraform)"
-          check "${{ needs.unit-tests.result }}" "🧪 Pruebas unitarias (Jest + Supertest, 5 microservicios)"
+          check "${{ needs.unit-tests.result }}" "🧪 Pruebas unitarias (Jest: 5 microservicios y frontend)"
           check "${{ needs.iac-deploy.result }}" "🏗️ Despliegue automatizado (Terraform apply + smoke test + destroy)"
           check "${{ needs.staging-deploy-and-dast.result }}" "🕷️ DAST (OWASP ZAP Baseline Scan)"
           echo ""

@@ -117,6 +117,9 @@ jobs:
       # -----------------------------------------------------------------------
       # Etiquetas y metadatos OCI. metadata-action genera automaticamente:
       #   livemetric/livemetric-auth:1.0.0   (version exacta)
+      #   livemetric/livemetric-auth:v1.0.0  (la misma, escrita igual que el
+      #                                       tag de git: de "git tag" a
+      #                                       "docker pull" sin traducir)
       #   livemetric/livemetric-auth:1.0     (linea menor, para recibir parches)
       #   livemetric/livemetric-auth:latest  (ultima version estable)
       # y ademas inyecta labels OCI (fuente, revision, fecha) en la imagen,
@@ -130,6 +133,7 @@ jobs:
           images: ${{ vars.DOCKERHUB_NAMESPACE }}/livemetric-${{ matrix.service }}
           tags: |
             type=semver,pattern={{version}},value=${{ needs.version.outputs.semver }}
+            type=raw,value=${{ needs.version.outputs.semver }}
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.version.outputs.semver }}
             type=raw,value=latest
           labels: |
@@ -233,6 +237,8 @@ jobs:
             for s in auth voting analytics scrutiny scheduler frontend; do
               echo "| ${s} | \`${NS}/livemetric-${s}:${CLEAN}\` |"
             done
+            echo ""
+            echo "Cada imagen tambien queda como \`${VERSION}\` (igual que el tag de git), \`${CLEAN%.*}\` y \`latest\`."
             echo ""
             echo "Todas las imagenes superaron el escaneo de Trivy (CRITICAL/HIGH) antes de publicarse."
             echo ""

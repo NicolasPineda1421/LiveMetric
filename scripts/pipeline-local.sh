@@ -48,7 +48,6 @@ for arg in "$@"; do
 done
 
 SERVICES=(auth voting analytics scrutiny scheduler frontend)
-BACKEND_SERVICES=(auth voting analytics scrutiny scheduler)
 
 for requisito in docker node npm; do
   if ! command -v "$requisito" &> /dev/null; then
@@ -235,10 +234,11 @@ pruebas() {
   npm test
 }
 
-# Cada "npm test" levanta su propia base PostgreSQL desechable (ver
-# scripts/lib/jest-db-setup.js): no hace falta .env ni ninguna base externa.
+# Cada "npm test" de los servicios levanta su propia base PostgreSQL
+# desechable (ver scripts/lib/jest-db-setup.js): no hace falta .env ni
+# ninguna base externa. Las del frontend no usan base: corren en jsdom.
 paso 5
-for svc in "${BACKEND_SERVICES[@]}"; do
+for svc in "${SERVICES[@]}"; do
   correr "$LOG_DIR/test-$svc.log" "$svc · pruebas" pruebas "$svc"
   resumir pruebas "$svc" $? "$LOG_DIR/test-$svc.log"
 done

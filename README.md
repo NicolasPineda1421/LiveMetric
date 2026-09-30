@@ -32,7 +32,7 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 | Contenedores e infraestructura | Docker, Docker Compose, Docker Hub, Terraform (provider `kreuzwerker/docker`), Docker-in-Docker |
 | Orquestación y observabilidad | Docker Swarm, Prometheus, Grafana, Loki + Promtail, Falco |
 | CI/CD y seguridad | GitHub Actions, Gitleaks, Semgrep, ESLint (`eslint-plugin-security`), npm audit, Trivy, Checkov, OWASP ZAP |
-| Pruebas | Jest, Supertest |
+| Pruebas | Jest, Supertest, React Testing Library |
 | Modelado de amenazas | OWASP Threat Dragon, STRIDE |
 
 ## Inicio rápido
@@ -67,7 +67,7 @@ La primera vez tarda varios minutos (construye y analiza las 6 imágenes). Al te
 
 ## Imágenes en Docker Hub
 
-Las 6 imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspineda1421) con cada versión de git (`vX.Y.Z`), etiquetadas con la versión exacta (`1.3.2`), la línea menor (`1.3`) y `latest`. Antes de subirse, cada una se escanea con Trivy: si tiene CVE críticas o altas, no se publica (ver [`release.yml`](.github/workflows/release.yml)). Son las que usa el [despliegue con Docker Swarm](orquestacion/README.md).
+Las 6 imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspineda1421) con cada versión de git (`vX.Y.Z`), etiquetadas con la versión exacta (`1.3.2`), la línea menor (`1.3`) y `latest`; desde la v1.3.3, también con el mismo nombre del tag de git (`v1.3.3`). Antes de subirse, cada una se escanea con Trivy: si tiene CVE críticas o altas, no se publica (ver [`release.yml`](.github/workflows/release.yml)). Son las que usa el [despliegue con Docker Swarm](orquestacion/README.md).
 
 | Servicio | Imagen |
 |---|---|

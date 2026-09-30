@@ -65,7 +65,7 @@ const PASOS = [
   ['Código fuente', 'Semgrep busca patrones inseguros (no bloquea); ESLint aplica reglas de seguridad en cada servicio (bloquea).'],
   ['Dependencias de cada servicio', 'npm audit y Trivy buscan CVE altas o críticas en las librerías.'],
   ['Imágenes Docker', 'Construye las 6 imágenes reales; Trivy busca CVE altas o críticas.'],
-  ['Pruebas unitarias', 'Jest + Supertest sobre los 5 servicios de backend.'],
+  ['Pruebas unitarias', 'Jest: Supertest en los 5 servicios de backend y React Testing Library en el frontend.'],
 ];
 
 // Parte una linea larga en renglones de hasta <ancho> caracteres (cortando

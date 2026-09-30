@@ -44,7 +44,7 @@ Todas son de código abierto y corren en el pipeline de GitHub Actions (`.github
 | **Trivy** (imagen) | CVE en las 6 imágenes construidas (sistema base y librerías) | Igual que el anterior. También en `release.yml`: una imagen con CVE críticas o altas no se publica en Docker Hub | **Sí** |
 | **Checkov** | Terraform (`infra/terraform`): redes, privilegios, límites, secretos | `soft_fail: false`. Excepción: `#checkov:skip=<ID>:<motivo>` en el recurso | **Sí** |
 | **OWASP ZAP** (baseline) | La aplicación desplegada, como caja negra, en `http://localhost:3000` | Escaneo pasivo, con las reglas alfa (`-a`) | No: el reporte queda como artefacto |
-| **Jest** | Pruebas unitarias y de integración (incluye un ataque simulado contra las actas) | Base desechable y secretos aleatorios por corrida | **Sí** |
+| **Jest** | Pruebas unitarias y de integración de los servicios (incluye un ataque simulado contra las actas) y de la interfaz (sello del acta, papeleta, roles, XSS) | Base desechable y secretos aleatorios por corrida | **Sí** |
 
 El lineamiento del curso menciona **Bandit**, que analiza código Python. LiveMetric está escrito en Node.js: el análisis estático equivalente lo hacen ESLint (con las reglas de seguridad) y Semgrep.
 

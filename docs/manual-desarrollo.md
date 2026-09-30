@@ -91,7 +91,7 @@ Con la base recién creada hace falta un administrador: `docker compose exec aut
 ## 5. Pruebas
 
 ```bash
-cd services/auth
+cd services/auth                     # o cualquier otro servicio, o services/frontend
 npm test                             # todas las pruebas del servicio
 npm test -- --coverage               # con cobertura (como en el pipeline)
 npx jest src/__tests__/app.test.js   # un solo archivo
@@ -102,7 +102,7 @@ npm run lint                         # ESLint con las reglas de seguridad
 - **Unitarias**: funciones puras sin base de datos, como la estadística avanzada (`advancedStats.test.js`) o la firma de las actas (`actaSignature.test.js`).
 - **De integración**: `app.test.js` en cada servicio. Llaman a los endpoints HTTP reales con Supertest, contra un **PostgreSQL de verdad**.
 - **La base de las pruebas es desechable**: cada `npm test` levanta un PostgreSQL en un contenedor propio, le carga `db/init.sql` y lo borra al terminar (`scripts/lib/jest-db-setup.js`). Por eso las pruebas necesitan Docker, pero no el `.env` ni el stack, y nunca tocan la base de desarrollo. Los secretos también son aleatorios en cada corrida (`jest.setup.js`).
-- **El frontend no tiene pruebas unitarias.** Lo cubren ESLint, la compilación de Vite en el pipeline y el DAST con OWASP ZAP sobre la aplicación desplegada.
+- **Frontend** (`services/frontend/src/__tests__/`): Jest con React Testing Library sobre jsdom. No usan base ni servicios, ni Docker: el cliente HTTP (`api.js`) se reemplaza por un doble (`apiFalsa.js`) y cada prueba decide qué responde. Cubren lo que se ve en pantalla y no debe fallar: el sello de veracidad del acta (verde solo si todo cuadra, también si la verificación llega tarde), la papeleta (no vuelve a aparecer en una elección ya votada, el historial no dice por quién se votó, un nombre con HTML se muestra como texto), qué pestañas ve cada rol, que la sesión no quede guardada en el navegador y las confirmaciones antes de detener una elección o regenerar un PIN. Los gráficos (Recharts) y la exportación a PDF no se prueban aquí: necesitan medir y dibujar la página, y jsdom no lo hace.
 
 Todo el análisis del pipeline (Gitleaks, Semgrep, ESLint, npm audit, Trivy, imágenes y pruebas) corre en la PC con `./scripts/pipeline-local.sh` (o `scripts\pipeline-local.bat`) en unos 5 minutos. Ver [Pipeline DevSecOps](pipeline-devsecops.md#correr-el-mismo-análisis-en-la-pc).
 
@@ -153,4 +153,4 @@ git tag -a v1.4.0 -m "LiveMetric v1.4.0: <resumen>"
 git push origin v1.4.0
 ```
 
-El tag dispara `.github/workflows/release.yml`: construye las 6 imágenes, las escanea con Trivy (si alguna tiene CVE críticas o altas no se publica) y las sube a Docker Hub como `1.4.0`, `1.4` y `latest`. Se usa versionado semántico: el tercer número para correcciones, el segundo para funcionalidad nueva compatible y el primero para cambios que rompen compatibilidad.
+El tag dispara `.github/workflows/release.yml`: construye las 6 imágenes, las escanea con Trivy (si alguna tiene CVE críticas o altas no se publica) y las sube a Docker Hub como `1.4.0`, `v1.4.0` (igual que el tag de git), `1.4` y `latest`. Se usa versionado semántico: el tercer número para correcciones, el segundo para funcionalidad nueva compatible y el primero para cambios que rompen compatibilidad.

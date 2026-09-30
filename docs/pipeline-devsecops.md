@@ -28,8 +28,8 @@ Todas las actions de terceros están **fijadas a un SHA de commit** (con la vers
 
 | Job | Herramienta | Qué cubre |
 |---|---|---|
-| `unit-tests` | **Jest + Supertest** | Pruebas contra la app de Express en memoria de cada servicio y un PostgreSQL 16 de verdad: uno **desechable** por corrida, que levanta `scripts/lib/jest-db-setup.js` con el esquema de `db/init.sql` y se borra al terminar. Los secretos también son aleatorios en cada corrida (`jest.setup.js`), así que el job no necesita ningún *secret* del repositorio. Mide la **cobertura** de cada servicio. Localmente, con Docker: `cd services/<nombre> && npm test`. |
-| `coverage-badge` | GitHub Pages | Solo en `main`: junta la cobertura de los 5 servicios y la publica en GitHub Pages (`coverage.json` para la insignia del README y una página con el detalle). |
+| `unit-tests` | **Jest + Supertest**, **React Testing Library** | Servicios: pruebas contra la app de Express en memoria de cada uno y un PostgreSQL 16 de verdad: uno **desechable** por corrida, que levanta `scripts/lib/jest-db-setup.js` con el esquema de `db/init.sql` y se borra al terminar. Los secretos también son aleatorios en cada corrida (`jest.setup.js`), así que el job no necesita ningún *secret* del repositorio. Frontend: los componentes de React sobre jsdom, con el cliente HTTP reemplazado por un doble. Mide la **cobertura** de cada uno. Localmente: `cd services/<nombre> && npm test` (los servicios necesitan Docker; el frontend, no). |
+| `coverage-badge` | GitHub Pages | Solo en `main`: junta la cobertura de los 5 servicios y del frontend, y la publica en GitHub Pages (`coverage.json` para la insignia del README y una página con el detalle). |
 | `staging-deploy-and-dast` | **OWASP ZAP** (baseline) | Levanta el stack completo, con su propia base y un `.env` generado como en una instalación nueva, y lo ataca en `http://localhost:3000` como caja negra. El reporte queda como artefacto (`zap-baseline-report`); por ahora es un gate de **reporte**, no bloqueante. |
 
 **Fase 5 — Despliegue.**

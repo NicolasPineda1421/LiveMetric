@@ -44,7 +44,6 @@ for %%R in (docker node npm) do (
 )
 
 set SERVICES=auth voting analytics scrutiny scheduler frontend
-set BACKEND_SERVICES=auth voting analytics scrutiny scheduler
 set "LOG_DIR=%TEMP%\livemetric-pipeline-local-%RANDOM%%RANDOM%"
 mkdir "%LOG_DIR%"
 set "RESULTADOS=%LOG_DIR%\resultados.jsonl"
@@ -129,11 +128,12 @@ for %%S in (%SERVICES%) do (
 )
 
 REM --- 6. Pruebas unitarias -------------------------------------------------
-REM Cada "npm test" levanta su propia base PostgreSQL desechable (ver
-REM scripts\lib\jest-db-setup.js): no hace falta .env ni ninguna base externa.
+REM Cada "npm test" de los servicios levanta su propia base PostgreSQL
+REM desechable (ver scripts\lib\jest-db-setup.js): no hace falta .env ni
+REM ninguna base externa. Las del frontend no usan base: corren en jsdom.
 REM Las dependencias (Jest incluido) ya las instalo el paso de ESLint.
 call :paso 5
-for %%S in (%BACKEND_SERVICES%) do (
+for %%S in (%SERVICES%) do (
   call :en_curso "%%S - pruebas"
   pushd services\%%S
   call npm test > "%LOG_DIR%\test-%%S.log" 2>&1
