@@ -57,15 +57,15 @@ Estilo arquitectónico resumido:
 
 ### 3.1 Frontend (React + Vite + nginx)
 
-**Responsabilidad:** interfaz para administradores (gestión de plantillas, elecciones, padrón, usuarios, auditoría) y para votantes (login por cédula, boleta, confirmación de voto).
+**Responsabilidad:** interfaz para administradores (gestión de plantillas, elecciones, padrón, usuarios, auditoría, reportes y escrutinio), para auditores (resultados y reportes, solo lectura) y para votantes (login con cédula y PIN, boleta, confirmación de voto). Su nginx es además el **único punto de entrada** del sistema: reenvía `/auth`, `/voting`, `/analytics` y `/scrutiny` a cada microservicio.
 
 **Por qué así:** una SPA evita recargas de página completas durante el flujo de votación (importante en un puesto físico con muchos votantes en fila). Se sirve con nginx en producción (no con el servidor de desarrollo de Vite) porque nginx es el estándar de facto para servir estáticos de forma eficiente y porque permite inyectar configuración en tiempo de arranque del contenedor (ver `docker-entrypoint.sh`) sin reconstruir la imagen.
 
-**Decisión de seguridad notable:** el proceso maestro de nginx corre como `root` (no se fuerza un usuario no-root), a diferencia del resto de contenedores del proyecto. Esto se documenta explícitamente en el ADR-006: es el modelo estándar de nginx (el maestro necesita abrir el puerto 80 y preparar su caché; los *workers* que procesan tráfico externo corren sin privilegios por configuración propia de la imagen oficial), y forzarlo rompía funcionalidad sin aportar seguridad real.
+**Decisión de seguridad notable:** nginx corre entero sin root, también su proceso maestro (ADR-006). Escucha en el puerto 8080 dentro del contenedor, porque un usuario sin privilegios no puede abrir puertos menores a 1024 (hacia afuera sigue siendo el 3000), y todo lo que escribe (buffers, pid y el `config.js` generado al arrancar) va a `/tmp`, lo único escribible de un sistema de archivos de solo lectura. Envía además una Content-Security-Policy estricta y las cabeceras de aislamiento del navegador (`cabeceras-seguridad.conf`).
 
 ### 3.2 Microservicio A — Auth
 
-**Responsabilidad:** dos flujos de login completamente distintos (administrador con usuario/contraseña; votante con cédula), gestión de identidad (crear admins, cargar el padrón electoral) y el módulo de auditoría.
+**Responsabilidad:** dos flujos de login completamente distintos (administrador o auditor con usuario y contraseña; votante con cédula y un PIN de 6 dígitos que genera el administrador), gestión de identidad (crear administradores y auditores, cargar el padrón electoral cifrado, generar y regenerar PIN) y el módulo de auditoría.
 
 **Por qué es un servicio separado:** la autenticación es el único lugar del sistema que debe conocer el salt privado usado para pseudonimizar la cédula (`VOTER_ID_SALT`). Aislarlo minimiza la superficie de código que maneja ese secreto.
 
@@ -148,33 +148,35 @@ graph TB
 
 ```mermaid
 graph TB
-    subgraph Host["Host Docker local (127.0.0.1)"]
+    Navegador(["Navegador<br/>(red local)"])
+
+    subgraph Host["PC con Docker"]
         subgraph appnet["Red app-net (bridge)"]
-            C_FE["Contenedor: frontend<br/>nginx:1.27-alpine<br/>puerto 80→3000"]
-            C_AUTH["Contenedor: auth-service<br/>node:20-alpine<br/>puerto 3001"]
-            C_VOTING["Contenedor: voting-service<br/>node:20-alpine<br/>puerto 3002"]
-            C_ANALYTICS["Contenedor: analytics-service<br/>node:20-alpine<br/>puerto 3003"]
-            C_SCRUTINY["Contenedor: scrutiny-service<br/>node:20-alpine<br/>puerto 3004"]
-            C_SCHED["Contenedor: scheduler-worker<br/>node:20-alpine<br/>sin puerto publicado"]
+            C_FE["Contenedor: frontend<br/>nginx:1.27-alpine, sin root<br/>8080 → 0.0.0.0:3000"]
+            C_AUTH["Contenedor: auth-service<br/>node:20-alpine<br/>3001 (solo 127.0.0.1)"]
+            C_VOTING["Contenedor: voting-service<br/>node:20-alpine<br/>3002 (solo 127.0.0.1)"]
+            C_ANALYTICS["Contenedor: analytics-service<br/>node:20-alpine<br/>3003 (solo 127.0.0.1)"]
+            C_SCRUTINY["Contenedor: scrutiny-service<br/>node:20-alpine<br/>3004 (solo 127.0.0.1)"]
+            C_SCHED["Contenedor: scheduler-worker<br/>node:20-alpine<br/>sin puerto"]
         end
-        subgraph dbnet["Red db-net (internal: true — sin salida a Internet ni al host)"]
-            C_DB["Contenedor: postgres<br/>postgres:16-alpine<br/>sin puerto publicado"]
+        subgraph dbnet["Red db-net (internal: true, sin salida a Internet ni al host)"]
+            C_DB["Contenedor: postgres<br/>postgres:16-alpine<br/>sin puerto"]
         end
-        V_PG[("Volumen: pgdata")]
+        V_PG[("Volumen: db-data")]
     end
 
-    Navegador -->|"HTTPS/HTTP :3000"| C_FE
-    Navegador -->|":3001 :3002 :3003 :3004"| C_AUTH
-    Navegador --> C_VOTING
-    Navegador --> C_ANALYTICS
-    Navegador --> C_SCRUTINY
-
-    C_AUTH --- dbnet
-    C_VOTING --- dbnet
-    C_ANALYTICS --- dbnet
-    C_SCRUTINY --- dbnet
-    C_SCHED --- dbnet
+    Navegador -->|"HTTP :3000"| C_FE
+    C_FE -->|"/auth"| C_AUTH
+    C_FE -->|"/voting"| C_VOTING
+    C_FE -->|"/analytics"| C_ANALYTICS
+    C_FE -->|"/scrutiny"| C_SCRUTINY
     C_SCHED -.->|"X-Internal-Token"| C_SCRUTINY
+
+    C_AUTH --- C_DB
+    C_VOTING --- C_DB
+    C_ANALYTICS --- C_DB
+    C_SCRUTINY --- C_DB
+    C_SCHED --- C_DB
 
     C_DB --> V_PG
 
@@ -183,43 +185,46 @@ graph TB
 ```
 
 **Notas de despliegue:**
-- `db-net` está marcada `internal: true`: PostgreSQL no tiene ruta de salida a Internet ni es alcanzable desde el host — solo los contenedores conectados a esa red pueden hablarle.
-- Ningún puerto se publica en `0.0.0.0`; todos los `ports:` del `docker-compose.yml` usan explícitamente `127.0.0.1:<puerto>:<puerto>`.
-- El volumen `pgdata` es el único estado persistente fuera de la imagen; borrar el volumen (`docker compose down -v`) reinicia el sistema al seed de arranque.
-- Terraform (`infra/terraform/main.tf`) reproduce exactamente esta misma topología usando el proveedor `kreuzwerker/docker`, como alternativa a Docker Compose.
+- El navegador solo habla con el frontend, el único puerto abierto a la red local (3000). nginx reenvía cada ruta del API a su servicio dentro de `app-net`, resolviéndolo en cada petición: el stack arranca en cualquier orden.
+- Los servicios publican su puerto solo en `127.0.0.1`, para probar el API desde la misma PC; en Swarm no publican ninguno.
+- `db-net` está marcada `internal: true`: PostgreSQL no tiene salida a Internet ni es alcanzable desde el host, y el frontend no está conectado a esa red. Solo los 5 servicios de backend llegan a la base.
+- Los seis servicios de la aplicación corren sin root, con el sistema de archivos de solo lectura (salvo `/tmp`) y sin poder ganar privilegios (`no-new-privileges` en compose, `cap_drop: ALL` en Swarm).
+- El volumen `db-data` es el único estado persistente. Borrarlo (`docker compose down -v`) deja una base vacía, sin administradores: el primero se crea con `crearAdmin.js`.
+- Terraform (`infra/terraform/main.tf`) reproduce esta misma topología con el provider `kreuzwerker/docker`, y Docker Swarm (`orquestacion/docker-stack.yml`) la despliega con réplicas y la red overlay cifrada.
 
 ---
 
 ## 6. Diagrama de Secuencia — Autenticación de votante
 
-Se eligió el login de votante como "flujo crítico" (en vez del de administrador) porque es el que introduce las decisiones de seguridad más particulares de este dominio: la cédula funciona como usuario y contraseña a la vez, y de ahí en adelante todo el sistema debe operar sobre una identidad pseudonimizada.
+Se eligió el login de votante como flujo crítico (en vez del de administrador) porque concentra las decisiones de seguridad propias de este dominio: el votante se identifica con un dato que otros pueden conocer (su cédula), así que necesita un segundo factor que solo él tenga (el PIN), y de ahí en adelante todo el sistema opera sobre una identidad pseudonimizada.
 
 ```mermaid
 sequenceDiagram
     actor Votante
-    participant FE as Frontend (React)
+    participant FE as Frontend (nginx + React)
     participant AUTH as Auth
     participant DB as PostgreSQL
 
-    Votante->>FE: Ingresa cédula (usuario y contraseña)
-    FE->>AUTH: POST /login/voter {cedula, password}
-    AUTH->>AUTH: Verifica cedula === password
-    AUTH->>DB: SELECT * FROM voters WHERE cedula = ?
-    DB-->>AUTH: voter {pollingPlace, votingTable, isActive}
+    Votante->>FE: Ingresa cédula y PIN
+    FE->>AUTH: POST /auth/login/voter {cedula, pin}
+    AUTH->>AUTH: Límite: 8 intentos fallidos cada 15 min por IP
+    AUTH->>AUTH: Valida el formato de cédula y PIN
+    AUTH->>DB: SELECT … FROM voters WHERE cedula = cifrado(cedula)
+    DB-->>AUTH: votante {activo, puesto y mesa cifrados, bcrypt del PIN}
 
-    alt Cédula válida y activa en el padrón
+    alt Votante activo, con PIN, y el PIN coincide (bcrypt)
         AUTH->>AUTH: voterIdHash = SHA256(cedula + salt privado)
-        AUTH->>AUTH: Firma JWT {role: "voter", voterIdHash,<br/>pollingPlace, votingTable} (exp: 10 min)
+        AUTH->>AUTH: Firma JWT HS256 {role: "voter", voterIdHash,<br/>puesto, mesa} que vence en 10 min
         AUTH->>DB: INSERT INTO audit_log (LOGIN_SUCCESS_VOTER)
-        AUTH-->>FE: 200 OK {token, expiresIn}
-        FE-->>Votante: Acceso concedido a la boleta
-    else Cédula no encontrada o inactiva
-        AUTH->>DB: INSERT INTO audit_log (LOGIN_FAILURE_VOTER)
-        AUTH-->>FE: 401 Unauthorized (mensaje genérico)
+        AUTH-->>FE: 200 {token, puesto, mesa}
+        FE-->>Votante: Boleta de las elecciones abiertas
+    else No existe, inactivo, sin PIN o PIN incorrecto
+        AUTH->>DB: INSERT INTO audit_log (LOGIN_FAILURE_VOTER, motivo)
+        AUTH-->>FE: 401 "Cédula o PIN incorrectos" (el mismo mensaje en todos los casos)
         FE-->>Votante: Error de acceso
     end
 
-    Note over Votante,DB: Ningún servicio distinto de Auth conoce jamás<br/>la cédula en texto plano ni el salt usado para el hash.
+    Note over Votante,DB: Ningún servicio distinto de Auth conoce la cédula en texto plano<br/>ni el salt del hash. El JWT solo vive en la memoria de la página.
 ```
 
 ---
@@ -231,6 +236,7 @@ sequenceDiagram
 ```mermaid
 graph LR
     Admin(("👤 Administrador"))
+    Auditor(("👤 Auditor"))
     Votante(("👤 Votante"))
     Reloj(("⏱️ Worker Scheduler"))
 
@@ -239,16 +245,19 @@ graph LR
         UC2(["Crear plantillas<br/>(genéricas / presidenciales)"])
         UC3(["Programar elección"])
         UC4(["Detener elección"])
-        UC5(["Consultar resultados<br/>en vivo / certificados"])
+        UC5(["Consultar resultados<br/>en vivo / certificados<br/>con el sello de veracidad"])
         UC6(["Descargar Acta<br/>de Escrutinio (PDF)"])
-        UC7(["Verificar cadena<br/>de escrutinio"])
-        UC8(["Crear administradores"])
-        UC9(["Cargar padrón electoral"])
+        UC7(["Verificar las actas<br/>(hash, cadena y firma)"])
+        UC8(["Crear administradores<br/>y auditores"])
+        UC9(["Cargar padrón<br/>y generar PIN"])
         UC10(["Consultar log<br/>de auditoría"])
+        UC15(["Armar tableros<br/>de reportes"])
+        UC16(["Ver tableros<br/>de reportes"])
         UC11(["Consultar elecciones activas"])
         UC12(["Emitir voto"])
+        UC17(["Consultar su historial<br/>(sin elección ni opción)"])
         UC13(["Activar / cerrar<br/>elecciones por horario"])
-        UC14(["Solicitar certificación"])
+        UC14(["Certificar y firmar el acta"])
     end
 
     Admin --> UC1
@@ -261,10 +270,17 @@ graph LR
     Admin --> UC8
     Admin --> UC9
     Admin --> UC10
+    Admin --> UC15
+    Admin --> UC16
+
+    Auditor --> UC1
+    Auditor --> UC5
+    Auditor --> UC16
 
     Votante --> UC1
     Votante --> UC11
     Votante --> UC12
+    Votante --> UC17
 
     Reloj --> UC13
     Reloj --> UC14
@@ -310,7 +326,7 @@ llegan los servicios que usan la base.
 | ADR-003 | JWT de votante con expiración de 10 minutos | Misma expiración que el JWT de administrador (1 hora) | El login de votante no protege un secreto real (cédula = usuario y contraseña); acortar la ventana de validez es el control compensatorio principal frente a ese riesgo aceptado |
 | ADR-004 | `scheduler-worker` como proceso independiente con `node-cron` | `setInterval` dentro de `voting-service`, o un cron del sistema operativo host | Aísla el fallo: si el worker cae, votar y consultar resultados siguen funcionando; solo se retrasa la apertura/cierre automático |
 | ADR-005 | Base de datos compartida entre los cuatro microservicios | Una base de datos por servicio (patrón "database per service" puro) | Simplificación consciente para el alcance del proyecto: las invariantes transaccionales críticas (`UNIQUE` anti-doble-voto) exigen que "votes" y "elections" convivan en la misma base transaccional; se documenta como deuda técnica aceptada, no como omisión |
-| ADR-006 | El proceso maestro de nginx (frontend) corre como `root` | Forzar `USER` no-root en toda la imagen (como en los demás servicios) | Se intentó primero forzar no-root y rompió dos veces (permisos de escritura, apertura de puerto 80); se revirtió al modelo estándar de nginx, donde los *workers* que procesan tráfico externo sí corren sin privilegios |
+| ADR-006 | nginx (frontend) corre entero sin root, también su proceso maestro | Dejar el maestro como `root`, el modelo estándar de la imagen oficial (solo los *workers* sin privilegios) | Fue la decisión inicial, porque forzar no-root rompía la escritura y la apertura del puerto 80; Semgrep lo señaló y se resolvió de raíz: nginx escucha en el 8080 (hacia afuera, el 3000) y escribe solo en `/tmp`. Así ninguno de los seis servicios de la aplicación corre como root, y la misma imagen funciona en compose, Swarm y Terraform |
 | ADR-007 | Terminología del dominio: "elección", nunca "encuesta" | Mantener "poll/encuesta" como en la primera iteración del proyecto | El valor del sistema es la integridad electoral, no la recolección de opiniones; el lenguaje del código y la UI debe reflejar ese dominio para evitar decisiones de diseño "de encuesta" (ej. permitir cambiar el voto) que serían incorrectas en un contexto electoral |
 | ADR-008 | El Acta de Escrutinio se genera como PDF real (`pdfkit`) | Mostrar solo un JSON/tabla en el panel de administración | El escrutinio de una elección real termina en un documento firmable; un JSON en pantalla no cumple esa función simbólica ni práctica (no se puede archivar, imprimir ni entregar) |
 | ADR-009 | Cada acta se firma con Ed25519, además de encadenarse por hash | Solo la cadena de hashes (como hasta la v1.2.0) | La cadena detecta cambios sueltos, pero no a quien reescribe el acta y recalcula todos los hashes; la firma solo la puede producir quien tiene la clave privada (solo Scrutiny). Ed25519 viene en el módulo `crypto` de Node, sin dependencias nuevas, con claves y firmas cortas (32 y 64 bytes) |
@@ -330,19 +346,22 @@ erDiagram
     ELECTIONS ||--o{ VOTES : recibe
     ELECTION_OPTIONS ||--o{ VOTES : referencia
     ELECTIONS ||--o| SCRUTINY_LEDGER : certifica
+    ELECTIONS ||--o{ REPORT_DASHBOARDS : tiene
 
     ADMINS {
         int id PK
         string username
         string password_hash
+        string role
     }
     VOTERS {
         int id PK
-        string cedula
+        string cedula "cifrada"
         string full_name
-        string polling_place
-        string voting_table
+        string polling_place "cifrado"
+        string voting_table "cifrada"
         bool is_active
+        string access_code_hash "bcrypt del PIN"
     }
     ELECTION_TEMPLATES {
         int id PK
@@ -389,11 +408,19 @@ erDiagram
         string signature
         string signing_key_id
     }
+    REPORT_DASHBOARDS {
+        int id PK
+        int election_id FK
+        string name
+        jsonb layout
+    }
     AUDIT_LOG {
         bigint id PK
         string event_type
         string actor_type
         string actor_ref
+        string ip_address
+        jsonb metadata
     }
 ```
 
