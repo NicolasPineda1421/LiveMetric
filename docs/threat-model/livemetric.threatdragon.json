@@ -1,5 +1,5 @@
 {
-  "version": "2.4.0",
+  "version": "2.6.2",
   "summary": {
     "title": "LiveMetric — Sistema de votación",
     "owner": "Equipo LiveMetric",
@@ -15,74 +15,216 @@
         "diagramType": "STRIDE",
         "placeholder": "Vista de contexto: quién interactúa con el sistema y con qué se persiste.",
         "thumbnail": "./public/content/images/thumbnail.stride.jpg",
-        "version": "2.4.0",
+        "version": "2.6.2",
         "cells": [
+          {
+            "id": "boundary-system",
+            "shape": "trust-boundary-box",
+            "position": {
+              "x": 360,
+              "y": 40
+            },
+            "size": {
+              "width": 820,
+              "height": 760
+            },
+            "zIndex": -50,
+            "visible": true,
+            "attrs": {
+              "label": {
+                "text": "Sistema LiveMetric (red de Docker)"
+              }
+            },
+            "data": {
+              "type": "tm.BoundaryBox",
+              "name": "Sistema LiveMetric (red de Docker)",
+              "description": "Todo lo que corre en la PC, en Docker: frontend, microservicios y la base. Hacia la red local solo se abre el puerto 3000.",
+              "isTrustBoundary": true,
+              "hasOpenThreats": false
+            }
+          },
           {
             "id": "actor-votante",
             "shape": "actor",
-            "position": { "x": 40, "y": 60 },
-            "size": { "width": 100, "height": 60 },
-            "attrs": { "text": { "text": "Votante" } },
-            "data": { "type": "tm.Actor", "name": "Votante", "description": "Persona que ingresa con cédula + PIN de acceso para emitir un voto.", "outOfScope": false, "threats": [] }
+            "position": {
+              "x": 40,
+              "y": 80
+            },
+            "size": {
+              "width": 120,
+              "height": 60
+            },
+            "attrs": {
+              "text": {
+                "text": "Votante"
+              },
+              "body": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Actor",
+              "name": "Votante",
+              "description": "Persona que ingresa con cédula + PIN de acceso para emitir un voto.",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 2,
+            "visible": true
           },
           {
             "id": "actor-admin",
             "shape": "actor",
-            "position": { "x": 40, "y": 220 },
-            "size": { "width": 100, "height": 60 },
-            "attrs": { "text": { "text": "Administrador" } },
-            "data": { "type": "tm.Actor", "name": "Administrador", "description": "Gestiona padrón, plantillas, elecciones, usuarios y ve reportes.", "outOfScope": false, "threats": [] }
+            "position": {
+              "x": 40,
+              "y": 380
+            },
+            "size": {
+              "width": 120,
+              "height": 60
+            },
+            "attrs": {
+              "text": {
+                "text": "Administrador"
+              },
+              "body": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Actor",
+              "name": "Administrador",
+              "description": "Gestiona padrón, plantillas, elecciones, usuarios y ve reportes.",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 2,
+            "visible": true
           },
           {
             "id": "actor-auditor",
             "shape": "actor",
-            "position": { "x": 40, "y": 380 },
-            "size": { "width": 100, "height": 60 },
-            "attrs": { "text": { "text": "Auditor" } },
-            "data": { "type": "tm.Actor", "name": "Auditor", "description": "Rol de solo lectura: ve resultados y reportes, no puede gestionar nada.", "outOfScope": false, "threats": [] }
-          },
-          {
-            "id": "boundary-system",
-            "shape": "trust-boundary-box",
-            "position": { "x": 260, "y": 40 },
-            "size": { "width": 260, "height": 420 },
-            "attrs": { "text": { "text": "Sistema LiveMetric" } },
-            "data": { "type": "tm.TrustBoundary", "name": "Sistema LiveMetric", "description": "Todos los microservicios, corriendo en la misma red Docker interna.", "isTrustBoundary": true }
+            "position": {
+              "x": 40,
+              "y": 680
+            },
+            "size": {
+              "width": 120,
+              "height": 60
+            },
+            "attrs": {
+              "text": {
+                "text": "Auditor"
+              },
+              "body": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Actor",
+              "name": "Auditor",
+              "description": "Rol de solo lectura: ve resultados y reportes, no puede gestionar nada.",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 2,
+            "visible": true
           },
           {
             "id": "process-system",
             "shape": "process",
-            "position": { "x": 300, "y": 210 },
-            "size": { "width": 180, "height": 80 },
-            "attrs": { "text": { "text": "Sistema LiveMetric" } },
+            "position": {
+              "x": 470,
+              "y": 350
+            },
+            "size": {
+              "width": 200,
+              "height": 120
+            },
+            "attrs": {
+              "text": {
+                "text": "Sistema LiveMetric"
+              },
+              "body": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "strokeDasharray": null
+              }
+            },
             "data": {
               "type": "tm.Process",
               "name": "Sistema LiveMetric",
               "description": "Vista agregada de los 5 microservicios (ver DFD Nivel 1).",
               "outOfScope": false,
-              "threats": []
-            }
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 3,
+            "visible": true
           },
           {
             "id": "store-postgres",
             "shape": "store",
-            "position": { "x": 620, "y": 220 },
-            "size": { "width": 160, "height": 60 },
-            "attrs": { "text": { "text": "Postgres (local)" } },
+            "position": {
+              "x": 960,
+              "y": 380
+            },
+            "size": {
+              "width": 200,
+              "height": 60
+            },
+            "attrs": {
+              "text": {
+                "text": "Postgres (local)"
+              },
+              "topLine": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5
+              },
+              "bottomLine": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5
+              }
+            },
             "data": {
               "type": "tm.Store",
               "name": "Postgres (local)",
               "description": "PostgreSQL 16 en su propio contenedor, en la red interna db-net (sin puerto en la PC ni salida a Internet); el padrón se guarda cifrado (ver DFD Nivel 1).",
               "outOfScope": false,
-              "threats": []
-            }
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 3,
+            "visible": true
           },
           {
             "id": "flow-votante-login",
             "shape": "flow",
-            "source": { "cell": "actor-votante" },
-            "target": { "cell": "process-system" },
-            "attrs": { "text": { "text": "Login (cédula+PIN) y voto" } },
+            "source": {
+              "cell": "actor-votante"
+            },
+            "target": {
+              "cell": "process-system"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
             "data": {
               "type": "tm.Flow",
               "name": "Login (cédula+PIN) y voto",
@@ -90,112 +232,440 @@
               "outOfScope": false,
               "threats": [
                 {
-                  "id": "T1",
+                  "id": "bfaeff40-74ee-5567-87a2-f0b8c0f51be8",
                   "title": "Suplantación de un votante conociendo su cédula",
-                  "type": "Spoofing",
                   "status": "Mitigated",
                   "severity": "High",
+                  "type": "Spoofing",
                   "description": "La cédula es información semipública; antes del PIN, usuario y contraseña eran ambos la cédula.",
-                  "mitigation": "Login exige cédula + PIN de 6 dígitos generado por el admin, no derivable de la cédula (migración 003_voter_access_codes.sql)."
+                  "mitigation": "Login exige cédula + PIN de 6 dígitos generado por el admin, no derivable de la cédula (migración 003_voter_access_codes.sql).",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 1,
+                  "score": ""
                 },
                 {
-                  "id": "T2",
+                  "id": "8fc9c5c3-7b7a-534d-b54d-6c2591963f45",
                   "title": "Fuerza bruta del PIN de votante",
-                  "type": "Denial of Service",
                   "status": "Mitigated",
                   "severity": "Medium",
+                  "type": "Denial of Service",
                   "description": "Intentar muchos PIN distintos hasta acertar.",
-                  "mitigation": "Rate limiting: 8 intentos fallidos cada 15 min por IP (voterLoginLimiter en services/auth/src/app.js); los ingresos correctos no cuentan, para que un puesto con un solo equipo atienda a todos sus votantes."
+                  "mitigation": "Rate limiting: 8 intentos fallidos cada 15 min por IP (voterLoginLimiter en services/auth/src/app.js); los ingresos correctos no cuentan, para que un puesto con un solo equipo atienda a todos sus votantes.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 2,
+                  "score": ""
                 }
-              ]
-            }
+              ],
+              "protocol": "HTTP",
+              "isPublicNetwork": true,
+              "isEncrypted": false,
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "Login (cédula+PIN) y voto",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": [
+              {
+                "x": 359,
+                "y": 222
+              }
+            ]
           },
           {
             "id": "flow-votante-confirmacion",
             "shape": "flow",
-            "source": { "cell": "process-system" },
-            "target": { "cell": "actor-votante" },
-            "attrs": { "text": { "text": "Confirmación / historial (sin detalle)" } },
+            "source": {
+              "cell": "process-system"
+            },
+            "target": {
+              "cell": "actor-votante"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
             "data": {
               "type": "tm.Flow",
               "name": "Confirmación / historial (sin detalle)",
               "description": "El historial de votos del propio votante nunca expone en qué elección ni qué opción eligió.",
               "outOfScope": false,
-              "threats": []
-            }
+              "threats": [],
+              "protocol": "HTTP",
+              "isPublicNetwork": true,
+              "isEncrypted": false,
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "Confirmación / historial (sin detalle)",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": [
+              {
+                "x": 311,
+                "y": 298
+              }
+            ]
           },
           {
             "id": "flow-admin-gestion",
             "shape": "flow",
-            "source": { "cell": "actor-admin" },
-            "target": { "cell": "process-system" },
-            "attrs": { "text": { "text": "Gestión (padrón, plantillas, elecciones, usuarios)" } },
-            "data": { "type": "tm.Flow", "name": "Gestión (padrón, plantillas, elecciones, usuarios)", "description": "Operaciones administrativas de escritura.", "outOfScope": false, "threats": [] }
+            "source": {
+              "cell": "actor-admin"
+            },
+            "target": {
+              "cell": "process-system"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "Gestión (padrón, plantillas, elecciones, usuarios)",
+              "description": "Operaciones administrativas de escritura.",
+              "outOfScope": false,
+              "threats": [],
+              "protocol": "HTTP",
+              "isPublicNetwork": true,
+              "isEncrypted": false,
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "Gestión (padrón, plantillas, elecciones, usuarios)",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": [
+              {
+                "x": 335,
+                "y": 365
+              }
+            ]
           },
           {
             "id": "flow-admin-reportes",
             "shape": "flow",
-            "source": { "cell": "process-system" },
-            "target": { "cell": "actor-admin" },
-            "attrs": { "text": { "text": "Resultados, reportes, auditoría" } },
-            "data": { "type": "tm.Flow", "name": "Resultados, reportes, auditoría", "description": "Lectura de resultados y del registro de auditoría.", "outOfScope": false, "threats": [] }
+            "source": {
+              "cell": "process-system"
+            },
+            "target": {
+              "cell": "actor-admin"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "Resultados, reportes, auditoría",
+              "description": "Lectura de resultados y del registro de auditoría.",
+              "outOfScope": false,
+              "threats": [],
+              "protocol": "HTTP",
+              "isPublicNetwork": true,
+              "isEncrypted": false,
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "Resultados, reportes, auditoría",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": [
+              {
+                "x": 335,
+                "y": 455
+              }
+            ]
           },
           {
             "id": "flow-auditor-lectura",
             "shape": "flow",
-            "source": { "cell": "actor-auditor" },
-            "target": { "cell": "process-system" },
-            "attrs": { "text": { "text": "Consulta de solo lectura" } },
+            "source": {
+              "cell": "actor-auditor"
+            },
+            "target": {
+              "cell": "process-system"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
             "data": {
               "type": "tm.Flow",
               "name": "Consulta de solo lectura (resultados, reportes)",
               "description": "El auditor solo puede leer, nunca escribir.",
               "outOfScope": false,
-              "threats": [
-                {
-                  "id": "T11",
-                  "title": "Un auditor intenta crear/editar/borrar un tablero de reportes",
-                  "type": "Elevation of Privilege",
-                  "status": "Mitigated",
-                  "severity": "Medium",
-                  "description": "El rol auditor debería ser estrictamente de solo lectura.",
-                  "mitigation": "requireRole('admin','auditor') para lectura vs. requireRole('admin') exclusivo para escritura en cada endpoint de report_dashboards."
-                }
-              ]
-            }
+              "threats": [],
+              "protocol": "HTTP",
+              "isPublicNetwork": true,
+              "isEncrypted": false,
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "Consulta de solo lectura (resultados, reportes)",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
           },
           {
             "id": "flow-system-db",
             "shape": "flow",
-            "source": { "cell": "process-system" },
-            "target": { "cell": "store-postgres" },
-            "attrs": { "text": { "text": "Lectura/escritura cifrada del padrón" } },
+            "source": {
+              "cell": "process-system"
+            },
+            "target": {
+              "cell": "store-postgres"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
             "data": {
               "type": "tm.Flow",
-              "name": "Lectura/escritura cifrada del padrón",
-              "description": "cedula, polling_place y voting_table viajan y se guardan cifrados (AES-256-GCM).",
+              "name": "SQL: padrón cifrado, votos, actas, auditoría",
+              "description": "Todos los datos del sistema. cedula, polling_place y voting_table se guardan cifrados (AES-256-GCM) y las actas, firmadas (Ed25519).",
               "outOfScope": false,
               "threats": [
                 {
-                  "id": "T5",
+                  "id": "2e4f6f91-4228-57ea-a443-151535dfb8fa",
                   "title": "Fuga de la base de datos expone identidades del padrón",
-                  "type": "Information Disclosure",
                   "status": "Mitigated",
                   "severity": "High",
+                  "type": "Information Disclosure",
                   "description": "Si alguien obtiene acceso directo a Postgres.",
-                  "mitigation": "cedula/polling_place/voting_table cifrados (services/auth/src/voterCrypto.js); solo full_name queda en texto plano a propósito."
+                  "mitigation": "cedula/polling_place/voting_table cifrados (services/auth/src/voterCrypto.js); solo full_name queda en texto plano a propósito.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 5,
+                  "score": ""
                 },
                 {
-                  "id": "T14",
+                  "id": "94fb1552-d6eb-5b9b-8766-7087c5a1ca8f",
                   "title": "Llegar a la base desde el frontend comprometido o desde la red local",
-                  "type": "Elevation of Privilege",
                   "status": "Mitigated",
                   "severity": "High",
+                  "type": "Elevation of Privilege",
                   "description": "El frontend es lo único expuesto a la red local; si se compromete, el siguiente paso sería conectarse directo a Postgres.",
-                  "mitigation": "Postgres solo está en la red interna db-net (internal: true), sin puerto en la PC; a esa red solo están conectados los 5 servicios de backend, no el frontend. La contraseña de la base es aleatoria y propia de cada instalación."
+                  "mitigation": "Postgres solo está en la red interna db-net (internal: true), sin puerto en la PC; a esa red solo están conectados los 5 servicios de backend, no el frontend. La contraseña de la base es aleatoria y propia de cada instalación.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 14,
+                  "score": ""
                 }
-              ]
-            }
+              ],
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "SQL: padrón cifrado, votos, actas, auditoría",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
           }
         ]
       },
@@ -205,134 +675,1916 @@
         "diagramType": "STRIDE",
         "placeholder": "Vista desagregada: cada microservicio real y los almacenes de datos que usa.",
         "thumbnail": "./public/content/images/thumbnail.stride.jpg",
-        "version": "2.4.0",
+        "version": "2.6.2",
         "cells": [
-          { "id": "l1-actor-votante", "shape": "actor", "position": { "x": 20, "y": 40 }, "size": { "width": 100, "height": 60 }, "attrs": { "text": { "text": "Votante" } }, "data": { "type": "tm.Actor", "name": "Votante", "outOfScope": false, "threats": [] } },
-          { "id": "l1-actor-admin", "shape": "actor", "position": { "x": 20, "y": 260 }, "size": { "width": 100, "height": 60 }, "attrs": { "text": { "text": "Administrador" } }, "data": { "type": "tm.Actor", "name": "Administrador", "outOfScope": false, "threats": [] } },
-          { "id": "l1-actor-auditor", "shape": "actor", "position": { "x": 20, "y": 460 }, "size": { "width": 100, "height": 60 }, "attrs": { "text": { "text": "Auditor" } }, "data": { "type": "tm.Actor", "name": "Auditor", "outOfScope": false, "threats": [] } },
-
-          { "id": "l1-proc-auth", "shape": "process", "position": { "x": 220, "y": 40 }, "size": { "width": 150, "height": 70 }, "attrs": { "text": { "text": "auth-service" } }, "data": { "type": "tm.Process", "name": "auth-service", "description": "Login dual, gestión de identidad, auditoría.", "outOfScope": false, "threats": [] } },
-          { "id": "l1-proc-voting", "shape": "process", "position": { "x": 220, "y": 160 }, "size": { "width": 150, "height": 70 }, "attrs": { "text": { "text": "voting-service" } }, "data": {
-            "type": "tm.Process", "name": "voting-service", "description": "Recibe votos, plantillas y elecciones.", "outOfScope": false,
-            "threats": [
-              {
-                "id": "T6",
-                "title": "Un votante emite más de un voto en la misma elección",
-                "type": "Elevation of Privilege",
-                "status": "Mitigated",
-                "severity": "Critical",
-                "description": "Doble voto rompería la integridad del resultado.",
-                "mitigation": "Restricción UNIQUE(election_id, voter_id_hash) a nivel de base de datos."
+          {
+            "id": "boundary-app",
+            "shape": "trust-boundary-box",
+            "position": {
+              "x": 434,
+              "y": 20
+            },
+            "size": {
+              "width": 202,
+              "height": 1050
+            },
+            "zIndex": -50,
+            "visible": true,
+            "attrs": {
+              "label": {
+                "text": "Servicios (red app-net)"
+              }
+            },
+            "data": {
+              "type": "tm.BoundaryBox",
+              "name": "Servicios (red app-net)",
+              "description": "Los 5 servicios de backend. El navegador llega a ellos solo a través del frontend (nginx), que no está en la red de la base.",
+              "isTrustBoundary": true,
+              "hasOpenThreats": false
+            }
+          },
+          {
+            "id": "boundary-db",
+            "shape": "trust-boundary-box",
+            "position": {
+              "x": 1000,
+              "y": 10
+            },
+            "size": {
+              "width": 310,
+              "height": 940
+            },
+            "zIndex": -50,
+            "visible": true,
+            "attrs": {
+              "label": {
+                "text": "Base de datos (red interna db-net)"
+              }
+            },
+            "data": {
+              "type": "tm.BoundaryBox",
+              "name": "Base de datos (red interna db-net)",
+              "description": "PostgreSQL en una red interna: sin salida a Internet, sin puerto en la PC y solo alcanzable por los 5 servicios.",
+              "isTrustBoundary": true,
+              "hasOpenThreats": false
+            }
+          },
+          {
+            "id": "l1-actor-votante",
+            "shape": "actor",
+            "position": {
+              "x": 30,
+              "y": 70
+            },
+            "size": {
+              "width": 130,
+              "height": 60
+            },
+            "attrs": {
+              "text": {
+                "text": "Votante"
               },
+              "body": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Actor",
+              "name": "Votante",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 2,
+            "visible": true
+          },
+          {
+            "id": "l1-actor-admin",
+            "shape": "actor",
+            "position": {
+              "x": 30,
+              "y": 470
+            },
+            "size": {
+              "width": 130,
+              "height": 60
+            },
+            "attrs": {
+              "text": {
+                "text": "Administrador"
+              },
+              "body": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Actor",
+              "name": "Administrador",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 2,
+            "visible": true
+          },
+          {
+            "id": "l1-actor-auditor",
+            "shape": "actor",
+            "position": {
+              "x": 30,
+              "y": 900
+            },
+            "size": {
+              "width": 130,
+              "height": 60
+            },
+            "attrs": {
+              "text": {
+                "text": "Auditor"
+              },
+              "body": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Actor",
+              "name": "Auditor",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 2,
+            "visible": true
+          },
+          {
+            "id": "l1-proc-auth",
+            "shape": "process",
+            "position": {
+              "x": 450,
+              "y": 70
+            },
+            "size": {
+              "width": 170,
+              "height": 90
+            },
+            "attrs": {
+              "text": {
+                "text": "auth-service"
+              },
+              "body": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Process",
+              "name": "auth-service",
+              "description": "Login dual, gestión de identidad, auditoría.",
+              "outOfScope": false,
+              "threats": [],
+              "providesAuthentication": true,
+              "hasOpenThreats": false
+            },
+            "zIndex": 3,
+            "visible": true
+          },
+          {
+            "id": "l1-proc-voting",
+            "shape": "process",
+            "position": {
+              "x": 450,
+              "y": 290
+            },
+            "size": {
+              "width": 170,
+              "height": 90
+            },
+            "attrs": {
+              "text": {
+                "text": "voting-service"
+              },
+              "body": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Process",
+              "name": "voting-service",
+              "description": "Recibe votos, plantillas y elecciones.",
+              "outOfScope": false,
+              "threats": [
+                {
+                  "id": "3103e34a-c91c-5e9e-97fd-071ee446c1e0",
+                  "title": "Un votante emite más de un voto en la misma elección",
+                  "status": "Mitigated",
+                  "severity": "Critical",
+                  "type": "Elevation of Privilege",
+                  "description": "Doble voto rompería la integridad del resultado.",
+                  "mitigation": "Restricción UNIQUE(election_id, voter_id_hash) a nivel de base de datos.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 6,
+                  "score": ""
+                },
+                {
+                  "id": "f017b43e-caae-52bf-b4c4-5546eed9af50",
+                  "title": "Votar fuera de la ventana de tiempo programada",
+                  "status": "Mitigated",
+                  "severity": "High",
+                  "type": "Tampering",
+                  "description": "Votar antes de abrir o después de cerrar una elección.",
+                  "mitigation": "Se valida status='active' AND now() BETWEEN scheduled_start AND scheduled_end en cada voto, no solo al abrir.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 7,
+                  "score": ""
+                }
+              ],
+              "hasOpenThreats": false
+            },
+            "zIndex": 3,
+            "visible": true
+          },
+          {
+            "id": "l1-proc-analytics",
+            "shape": "process",
+            "position": {
+              "x": 450,
+              "y": 510
+            },
+            "size": {
+              "width": 170,
+              "height": 90
+            },
+            "attrs": {
+              "text": {
+                "text": "analytics-service"
+              },
+              "body": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Process",
+              "name": "analytics-service",
+              "description": "Resultados, métricas y tableros de reportes.",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 3,
+            "visible": true
+          },
+          {
+            "id": "l1-proc-scrutiny",
+            "shape": "process",
+            "position": {
+              "x": 450,
+              "y": 730
+            },
+            "size": {
+              "width": 170,
+              "height": 90
+            },
+            "attrs": {
+              "text": {
+                "text": "scrutiny-service"
+              },
+              "body": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Process",
+              "name": "scrutiny-service",
+              "description": "Certifica resultados con hash encadenado.",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 3,
+            "visible": true
+          },
+          {
+            "id": "l1-proc-scheduler",
+            "shape": "process",
+            "position": {
+              "x": 450,
+              "y": 950
+            },
+            "size": {
+              "width": 170,
+              "height": 90
+            },
+            "attrs": {
+              "text": {
+                "text": "scheduler-worker"
+              },
+              "body": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Process",
+              "name": "scheduler-worker",
+              "description": "Abre/cierra elecciones según su ventana de tiempo y dispara la certificación.",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 3,
+            "visible": true
+          },
+          {
+            "id": "l1-store-voters",
+            "shape": "store",
+            "position": {
+              "x": 1040,
+              "y": 60
+            },
+            "size": {
+              "width": 230,
+              "height": 60
+            },
+            "attrs": {
+              "text": {
+                "text": "Padrón (voters)"
+              },
+              "topLine": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5
+              },
+              "bottomLine": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5
+              }
+            },
+            "data": {
+              "type": "tm.Store",
+              "name": "Padrón (voters)",
+              "description": "cedula/polling_place/voting_table cifrados; full_name en texto plano; access_code_hash (bcrypt del PIN).",
+              "outOfScope": false,
+              "threats": [
+                {
+                  "id": "3e13cd6f-f0c8-5048-91ff-8bc57a0979f4",
+                  "title": "Alguien con acceso directo a Postgres altera cédula/puesto/mesa",
+                  "status": "Mitigated",
+                  "severity": "Medium",
+                  "type": "Tampering",
+                  "description": "Modificación directa de filas cifradas.",
+                  "mitigation": "Cifrado AES-256-GCM en reposo. Residual: nonce determinístico permite notar si dos filas cifran igual, no leer el valor.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 4,
+                  "score": ""
+                }
+              ],
+              "isEncrypted": true,
+              "hasOpenThreats": false
+            },
+            "zIndex": 3,
+            "visible": true
+          },
+          {
+            "id": "l1-store-elections",
+            "shape": "store",
+            "position": {
+              "x": 1040,
+              "y": 560
+            },
+            "size": {
+              "width": 230,
+              "height": 60
+            },
+            "attrs": {
+              "text": {
+                "text": "Elecciones y votos"
+              },
+              "topLine": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5
+              },
+              "bottomLine": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5
+              }
+            },
+            "data": {
+              "type": "tm.Store",
+              "name": "Elecciones y votos",
+              "description": "elections, election_options, votes (voter_id_hash, nunca la cédula).",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 3,
+            "visible": true
+          },
+          {
+            "id": "l1-store-ledger",
+            "shape": "store",
+            "position": {
+              "x": 1040,
+              "y": 860
+            },
+            "size": {
+              "width": 230,
+              "height": 60
+            },
+            "attrs": {
+              "text": {
+                "text": "Acta de escrutinio (scrutiny_ledger)"
+              },
+              "topLine": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5
+              },
+              "bottomLine": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5
+              }
+            },
+            "data": {
+              "type": "tm.Store",
+              "name": "Acta de escrutinio (scrutiny_ledger)",
+              "description": "Append-only, hash SHA-256 encadenado.",
+              "outOfScope": false,
+              "threats": [
+                {
+                  "id": "11987db5-750d-5870-9702-d2c1edf1e294",
+                  "title": "Alterar el resultado de un acta ya certificada",
+                  "status": "Mitigated",
+                  "severity": "Critical",
+                  "type": "Tampering",
+                  "description": "Modificar un resultado oficial después de certificado.",
+                  "mitigation": "Tabla append-only (trigger prevent_row_mutation) + cadena de hashes; alterar una rompe la cadena hacia adelante, detectable vía /verify. Y aunque se recalculen todos los hashes, la firma digital Ed25519 de cada acta (clave privada solo en scrutiny-service, verificada por analytics con la pública) deja de corresponder: el indicador de veracidad la marca como alterada.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 9,
+                  "score": ""
+                },
+                {
+                  "id": "739c7295-8133-5ab8-b8ac-665f90c55343",
+                  "title": "Reescribir un acta y recalcular todos los hashes, o insertar un acta que Scrutiny no emitió",
+                  "status": "Mitigated",
+                  "severity": "Critical",
+                  "type": "Tampering",
+                  "description": "La cadena de hashes no usa secretos: con acceso total a la base se puede rehacer.",
+                  "mitigation": "Firma digital Ed25519 de cada acta con una clave privada que solo tiene scrutiny-service; analytics verifica con la pública. El indicador de veracidad la marca como alterada.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 15,
+                  "score": ""
+                }
+              ],
+              "isSigned": true,
+              "hasOpenThreats": false
+            },
+            "zIndex": 3,
+            "visible": true
+          },
+          {
+            "id": "l1-store-audit",
+            "shape": "store",
+            "position": {
+              "x": 1040,
+              "y": 300
+            },
+            "size": {
+              "width": 230,
+              "height": 60
+            },
+            "attrs": {
+              "text": {
+                "text": "Audit log"
+              },
+              "topLine": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5
+              },
+              "bottomLine": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5
+              }
+            },
+            "data": {
+              "type": "tm.Store",
+              "name": "Audit log",
+              "description": "Append-only (trigger trg_audit_no_update).",
+              "outOfScope": false,
+              "threats": [
+                {
+                  "id": "29c41bb9-3544-518e-bfc6-3852f36272b7",
+                  "title": "Borrar/modificar un evento para ocultar un incidente",
+                  "status": "Mitigated",
+                  "severity": "High",
+                  "type": "Repudiation",
+                  "description": "Un actor malicioso con acceso a la base intenta cubrir sus huellas.",
+                  "mitigation": "Trigger trg_audit_no_update, append-only igual que el acta de escrutinio.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 10,
+                  "score": ""
+                }
+              ],
+              "isALog": true,
+              "hasOpenThreats": false
+            },
+            "zIndex": 3,
+            "visible": true
+          },
+          {
+            "id": "l1-flow-1",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-actor-votante"
+            },
+            "target": {
+              "cell": "l1-proc-auth"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "login (cédula+PIN)",
+              "outOfScope": false,
+              "threats": [],
+              "protocol": "HTTP",
+              "isPublicNetwork": true,
+              "isEncrypted": false,
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
               {
-                "id": "T7",
-                "title": "Votar fuera de la ventana de tiempo programada",
-                "type": "Tampering",
-                "status": "Mitigated",
-                "severity": "High",
-                "description": "Votar antes de abrir o después de cerrar una elección.",
-                "mitigation": "Se valida status='active' AND now() BETWEEN scheduled_start AND scheduled_end en cada voto, no solo al abrir."
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "login (cédula+PIN)",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": [
+              {
+                "x": 316,
+                "y": 68
               }
             ]
-          } },
-          { "id": "l1-proc-analytics", "shape": "process", "position": { "x": 220, "y": 280 }, "size": { "width": 150, "height": 70 }, "attrs": { "text": { "text": "analytics-service" } }, "data": { "type": "tm.Process", "name": "analytics-service", "description": "Resultados, métricas y tableros de reportes.", "outOfScope": false, "threats": [] } },
-          { "id": "l1-proc-scrutiny", "shape": "process", "position": { "x": 220, "y": 400 }, "size": { "width": 150, "height": 70 }, "attrs": { "text": { "text": "scrutiny-service" } }, "data": { "type": "tm.Process", "name": "scrutiny-service", "description": "Certifica resultados con hash encadenado.", "outOfScope": false, "threats": [] } },
-          { "id": "l1-proc-scheduler", "shape": "process", "position": { "x": 220, "y": 520 }, "size": { "width": 150, "height": 70 }, "attrs": { "text": { "text": "scheduler-worker" } }, "data": { "type": "tm.Process", "name": "scheduler-worker", "description": "Abre/cierra elecciones según su ventana de tiempo y dispara la certificación.", "outOfScope": false, "threats": [] } },
-
-          { "id": "l1-store-voters", "shape": "store", "position": { "x": 500, "y": 40 }, "size": { "width": 170, "height": 60 }, "attrs": { "text": { "text": "Padrón (voters)" } }, "data": {
-            "type": "tm.Store", "name": "Padrón (voters)", "description": "cedula/polling_place/voting_table cifrados; full_name en texto plano; access_code_hash (bcrypt del PIN).", "outOfScope": false,
-            "threats": [
+          },
+          {
+            "id": "l1-flow-2",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-proc-auth"
+            },
+            "target": {
+              "cell": "l1-actor-votante"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "JWT votante (10 min)",
+              "outOfScope": false,
+              "threats": [],
+              "protocol": "HTTP",
+              "isPublicNetwork": true,
+              "isEncrypted": false,
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
               {
-                "id": "T4",
-                "title": "Alguien con acceso directo a Postgres altera cédula/puesto/mesa",
-                "type": "Tampering",
-                "status": "Mitigated",
-                "severity": "Medium",
-                "description": "Modificación directa de filas cifradas.",
-                "mitigation": "Cifrado AES-256-GCM en reposo. Residual: nonce determinístico permite notar si dos filas cifran igual, no leer el valor."
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "JWT votante (10 min)",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": [
+              {
+                "x": 314,
+                "y": 147
               }
             ]
-          } },
-          { "id": "l1-store-elections", "shape": "store", "position": { "x": 500, "y": 160 }, "size": { "width": 170, "height": 60 }, "attrs": { "text": { "text": "Elecciones y votos" } }, "data": { "type": "tm.Store", "name": "Elecciones y votos", "description": "elections, election_options, votes (voter_id_hash, nunca la cédula).", "outOfScope": false, "threats": [] } },
-          { "id": "l1-store-ledger", "shape": "store", "position": { "x": 500, "y": 280 }, "size": { "width": 170, "height": 60 }, "attrs": { "text": { "text": "Acta de escrutinio" } }, "data": {
-            "type": "tm.Store", "name": "Acta de escrutinio (scrutiny_ledger)", "description": "Append-only, hash SHA-256 encadenado.", "outOfScope": false,
-            "threats": [
+          },
+          {
+            "id": "l1-flow-3",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-actor-votante"
+            },
+            "target": {
+              "cell": "l1-proc-voting"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "red",
+                "strokeWidth": 2.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "emitir voto (JWT)",
+              "outOfScope": false,
+              "threats": [
+                {
+                  "id": "62492ba8-6fda-55b1-b005-a184ece9b734",
+                  "title": "El votante niega haber votado, o alguien niega que fue él quien votó",
+                  "status": "Open",
+                  "severity": "Low",
+                  "type": "Repudiation",
+                  "description": "El sistema registra que un voto ocurrió (voter_id_hash), pero no liga el voto a la identidad real más allá de ese hash.",
+                  "mitigation": "Aceptado por diseño: es el costo del voto secreto, no un descuido. Queda abierto como riesgo residual.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 3,
+                  "score": ""
+                }
+              ],
+              "protocol": "HTTP",
+              "isPublicNetwork": true,
+              "isEncrypted": false,
+              "hasOpenThreats": true
+            },
+            "zIndex": 10,
+            "labels": [
               {
-                "id": "T9",
-                "title": "Alterar el resultado de un acta ya certificada",
-                "type": "Tampering",
-                "status": "Mitigated",
-                "severity": "Critical",
-                "description": "Modificar un resultado oficial después de certificado.",
-                "mitigation": "Tabla append-only (trigger prevent_row_mutation) + cadena de hashes; alterar una rompe la cadena hacia adelante, detectable vía /verify. Y aunque se recalculen todos los hashes, la firma digital Ed25519 de cada acta (clave privada solo en scrutiny-service, verificada por analytics con la pública) deja de corresponder: el indicador de veracidad la marca como alterada."
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "emitir voto (JWT)",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": [
+              {
+                "x": 334,
+                "y": 182
               }
             ]
-          } },
-          { "id": "l1-store-audit", "shape": "store", "position": { "x": 500, "y": 400 }, "size": { "width": 170, "height": 60 }, "attrs": { "text": { "text": "Audit log" } }, "data": {
-            "type": "tm.Store", "name": "Audit log", "description": "Append-only (trigger trg_audit_no_update).", "outOfScope": false,
-            "threats": [
+          },
+          {
+            "id": "l1-flow-4",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-proc-voting"
+            },
+            "target": {
+              "cell": "l1-store-elections"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "INSERT voto",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
               {
-                "id": "T10",
-                "title": "Borrar/modificar un evento para ocultar un incidente",
-                "type": "Repudiation",
-                "status": "Mitigated",
-                "severity": "High",
-                "description": "Un actor malicioso con acceso a la base intenta cubrir sus huellas.",
-                "mitigation": "Trigger trg_audit_no_update, append-only igual que el acta de escrutinio."
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "INSERT voto",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.55
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
+          },
+          {
+            "id": "l1-flow-5",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-actor-votante"
+            },
+            "target": {
+              "cell": "l1-proc-voting"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "/my-votes (sin election/option)",
+              "outOfScope": false,
+              "threats": [],
+              "protocol": "HTTP",
+              "isPublicNetwork": true,
+              "isEncrypted": false,
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "/my-votes (sin election/option)",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.4
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": [
+              {
+                "x": 296,
+                "y": 253
               }
             ]
-          } },
-
-          { "id": "l1-flow-1", "shape": "flow", "source": { "cell": "l1-actor-votante" }, "target": { "cell": "l1-proc-auth" }, "attrs": { "text": { "text": "login (cédula+PIN)" } }, "data": { "type": "tm.Flow", "name": "login (cédula+PIN)", "outOfScope": false, "threats": [] } },
-          { "id": "l1-flow-2", "shape": "flow", "source": { "cell": "l1-proc-auth" }, "target": { "cell": "l1-actor-votante" }, "attrs": { "text": { "text": "JWT votante (10 min)" } }, "data": { "type": "tm.Flow", "name": "JWT votante (10 min)", "outOfScope": false, "threats": [] } },
-          { "id": "l1-flow-3", "shape": "flow", "source": { "cell": "l1-actor-votante" }, "target": { "cell": "l1-proc-voting" }, "attrs": { "text": { "text": "emitir voto (JWT)" } }, "data": { "type": "tm.Flow", "name": "emitir voto (JWT)", "outOfScope": false, "threats": [] } },
-          { "id": "l1-flow-4", "shape": "flow", "source": { "cell": "l1-proc-voting" }, "target": { "cell": "l1-store-elections" }, "attrs": { "text": { "text": "INSERT voto" } }, "data": { "type": "tm.Flow", "name": "INSERT voto", "outOfScope": false, "threats": [] } },
-          { "id": "l1-flow-5", "shape": "flow", "source": { "cell": "l1-actor-votante" }, "target": { "cell": "l1-proc-voting" }, "attrs": { "text": { "text": "/my-votes (sin election/option)" } }, "data": { "type": "tm.Flow", "name": "/my-votes (sin election/option)", "outOfScope": false, "threats": [] } },
-
-          { "id": "l1-flow-6", "shape": "flow", "source": { "cell": "l1-actor-admin" }, "target": { "cell": "l1-proc-auth" }, "attrs": { "text": { "text": "login / gestión padrón y usuarios" } }, "data": { "type": "tm.Flow", "name": "login / gestión padrón y usuarios", "outOfScope": false, "threats": [] } },
-          { "id": "l1-flow-7", "shape": "flow", "source": { "cell": "l1-proc-auth" }, "target": { "cell": "l1-store-voters" }, "attrs": { "text": { "text": "R/W cifrado" } }, "data": { "type": "tm.Flow", "name": "R/W cifrado", "outOfScope": false, "threats": [] } },
-          { "id": "l1-flow-8", "shape": "flow", "source": { "cell": "l1-proc-auth" }, "target": { "cell": "l1-store-audit" }, "attrs": { "text": { "text": "escribe evento" } }, "data": { "type": "tm.Flow", "name": "escribe evento", "outOfScope": false, "threats": [] } },
-          { "id": "l1-flow-9", "shape": "flow", "source": { "cell": "l1-actor-admin" }, "target": { "cell": "l1-proc-voting" }, "attrs": { "text": { "text": "crear plantillas/elecciones" } }, "data": { "type": "tm.Flow", "name": "crear plantillas/elecciones", "outOfScope": false, "threats": [] } },
-
-          { "id": "l1-flow-10", "shape": "flow", "source": { "cell": "l1-actor-admin" }, "target": { "cell": "l1-proc-analytics" }, "attrs": { "text": { "text": "resultados/métricas/reportes" } }, "data": { "type": "tm.Flow", "name": "resultados/métricas/reportes (admin)", "outOfScope": false, "threats": [] } },
-          { "id": "l1-flow-11", "shape": "flow", "source": { "cell": "l1-actor-auditor" }, "target": { "cell": "l1-proc-analytics" }, "attrs": { "text": { "text": "resultados/reportes (solo lectura)" } }, "data": {
-            "type": "tm.Flow", "name": "resultados/reportes (solo lectura)", "outOfScope": false,
-            "threats": [
-              {
-                "id": "T11b",
-                "title": "Un auditor intenta crear/editar/borrar un tablero de reportes",
-                "type": "Elevation of Privilege",
-                "status": "Mitigated",
-                "severity": "Medium",
-                "description": "El rol auditor debería ser estrictamente de solo lectura.",
-                "mitigation": "requireRole('admin','auditor') para lectura vs. requireRole('admin') exclusivo para escritura en cada endpoint de report_dashboards."
+          },
+          {
+            "id": "l1-flow-6",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-actor-admin"
+            },
+            "target": {
+              "cell": "l1-proc-auth"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
               }
-            ]
-          } },
-          { "id": "l1-flow-12", "shape": "flow", "source": { "cell": "l1-proc-analytics" }, "target": { "cell": "l1-store-elections" }, "attrs": { "text": { "text": "lectura (resultados en vivo)" } }, "data": { "type": "tm.Flow", "name": "lectura (resultados en vivo)", "outOfScope": false, "threats": [] } },
-          { "id": "l1-flow-13", "shape": "flow", "source": { "cell": "l1-proc-analytics" }, "target": { "cell": "l1-store-voters" }, "attrs": { "text": { "text": "lectura (participación)" } }, "data": { "type": "tm.Flow", "name": "lectura (participación)", "outOfScope": false, "threats": [] } },
-          { "id": "l1-flow-14", "shape": "flow", "source": { "cell": "l1-proc-analytics" }, "target": { "cell": "l1-store-ledger" }, "attrs": { "text": { "text": "lectura (si cerrada/certificada)" } }, "data": { "type": "tm.Flow", "name": "lectura (si cerrada/certificada)", "outOfScope": false, "threats": [] } },
-
-          { "id": "l1-flow-15", "shape": "flow", "source": { "cell": "l1-proc-scheduler" }, "target": { "cell": "l1-store-elections" }, "attrs": { "text": { "text": "cambia status" } }, "data": { "type": "tm.Flow", "name": "cambia status", "outOfScope": false, "threats": [] } },
-          { "id": "l1-flow-16", "shape": "flow", "source": { "cell": "l1-proc-scheduler" }, "target": { "cell": "l1-proc-scrutiny" }, "attrs": { "text": { "text": "dispara certificación (INTERNAL_SERVICE_TOKEN)" } }, "data": {
-            "type": "tm.Flow", "name": "dispara certificación (INTERNAL_SERVICE_TOKEN)", "outOfScope": false,
-            "threats": [
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "login / gestión padrón y usuarios",
+              "outOfScope": false,
+              "threats": [],
+              "protocol": "HTTP",
+              "isPublicNetwork": true,
+              "isEncrypted": false,
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
               {
-                "id": "T8",
-                "title": "Un servicio no autorizado dispara una certificación falsa",
-                "type": "Spoofing",
-                "status": "Mitigated",
-                "severity": "Critical",
-                "description": "Cualquiera que alcance el endpoint interno de certificación podría forzar una certificación fuera de tiempo.",
-                "mitigation": "INTERNAL_SERVICE_TOKEN compartido solo entre scheduler-worker y scrutiny-service, nunca expuesto al navegador."
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "login / gestión padrón y usuarios",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
               }
-            ]
-          } },
-          { "id": "l1-flow-17", "shape": "flow", "source": { "cell": "l1-proc-scrutiny" }, "target": { "cell": "l1-store-elections" }, "attrs": { "text": { "text": "lee votos" } }, "data": { "type": "tm.Flow", "name": "lee votos", "outOfScope": false, "threats": [] } },
-          { "id": "l1-flow-18", "shape": "flow", "source": { "cell": "l1-proc-scrutiny" }, "target": { "cell": "l1-store-ledger" }, "attrs": { "text": { "text": "escribe acta (hash encadenado)" } }, "data": { "type": "tm.Flow", "name": "escribe acta (hash encadenado)", "outOfScope": false, "threats": [] } },
-          { "id": "l1-flow-19", "shape": "flow", "source": { "cell": "l1-actor-admin" }, "target": { "cell": "l1-proc-scrutiny" }, "attrs": { "text": { "text": "descarga acta PDF / verificar cadena" } }, "data": { "type": "tm.Flow", "name": "descarga acta PDF / verificar cadena", "outOfScope": false, "threats": [] } }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
+          },
+          {
+            "id": "l1-flow-7",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-proc-auth"
+            },
+            "target": {
+              "cell": "l1-store-voters"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "R/W cifrado",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "R/W cifrado",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
+          },
+          {
+            "id": "l1-flow-8",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-proc-auth"
+            },
+            "target": {
+              "cell": "l1-store-audit"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "escribe y consulta eventos",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "escribe y consulta eventos",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
+          },
+          {
+            "id": "l1-flow-9",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-actor-admin"
+            },
+            "target": {
+              "cell": "l1-proc-voting"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "crear plantillas/elecciones",
+              "outOfScope": false,
+              "threats": [],
+              "protocol": "HTTP",
+              "isPublicNetwork": true,
+              "isEncrypted": false,
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "crear plantillas/elecciones",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
+          },
+          {
+            "id": "l1-flow-10",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-actor-admin"
+            },
+            "target": {
+              "cell": "l1-proc-analytics"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "resultados/métricas/reportes (admin)",
+              "outOfScope": false,
+              "threats": [],
+              "protocol": "HTTP",
+              "isPublicNetwork": true,
+              "isEncrypted": false,
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "resultados/métricas/reportes (admin)",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
+          },
+          {
+            "id": "l1-flow-11",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-actor-auditor"
+            },
+            "target": {
+              "cell": "l1-proc-analytics"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "resultados/reportes (solo lectura)",
+              "outOfScope": false,
+              "threats": [
+                {
+                  "id": "dd4a54b9-1f9a-5402-a3f3-235db4a39207",
+                  "title": "Un auditor intenta crear/editar/borrar un tablero de reportes",
+                  "status": "Mitigated",
+                  "severity": "Medium",
+                  "type": "Elevation of Privilege",
+                  "description": "El rol auditor debería ser estrictamente de solo lectura.",
+                  "mitigation": "requireRole('admin','auditor') para lectura vs. requireRole('admin') exclusivo para escritura en cada endpoint de report_dashboards.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 11,
+                  "score": ""
+                }
+              ],
+              "protocol": "HTTP",
+              "isPublicNetwork": true,
+              "isEncrypted": false,
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "resultados/reportes (solo lectura)",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
+          },
+          {
+            "id": "l1-flow-12",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-proc-analytics"
+            },
+            "target": {
+              "cell": "l1-store-elections"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "lectura (resultados en vivo)",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "lectura (resultados en vivo)",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
+          },
+          {
+            "id": "l1-flow-13",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-proc-analytics"
+            },
+            "target": {
+              "cell": "l1-store-voters"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "lectura (participación)",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "lectura (participación)",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.55
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
+          },
+          {
+            "id": "l1-flow-14",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-proc-analytics"
+            },
+            "target": {
+              "cell": "l1-store-ledger"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "lectura (si cerrada/certificada)",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "lectura (si cerrada/certificada)",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.3
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
+          },
+          {
+            "id": "l1-flow-15",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-proc-scheduler"
+            },
+            "target": {
+              "cell": "l1-store-elections"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "cambia status",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "cambia status",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
+          },
+          {
+            "id": "l1-flow-16",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-proc-scheduler"
+            },
+            "target": {
+              "cell": "l1-proc-scrutiny"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "dispara certificación (INTERNAL_SERVICE_TOKEN)",
+              "outOfScope": false,
+              "threats": [
+                {
+                  "id": "79b88243-9671-553c-b323-19156c400f68",
+                  "title": "Un servicio no autorizado dispara una certificación falsa",
+                  "status": "Mitigated",
+                  "severity": "Critical",
+                  "type": "Spoofing",
+                  "description": "Cualquiera que alcance el endpoint interno de certificación podría forzar una certificación fuera de tiempo.",
+                  "mitigation": "INTERNAL_SERVICE_TOKEN compartido solo entre scheduler-worker y scrutiny-service, nunca expuesto al navegador.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 8,
+                  "score": ""
+                }
+              ],
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "dispara certificación (INTERNAL_SERVICE_TOKEN)",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
+          },
+          {
+            "id": "l1-flow-17",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-proc-scrutiny"
+            },
+            "target": {
+              "cell": "l1-store-elections"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "lee votos",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "lee votos",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.35
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
+          },
+          {
+            "id": "l1-flow-18",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-proc-scrutiny"
+            },
+            "target": {
+              "cell": "l1-store-ledger"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "escribe acta (hash encadenado)",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "escribe acta (hash encadenado)",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.7
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
+          },
+          {
+            "id": "l1-flow-19",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-actor-admin"
+            },
+            "target": {
+              "cell": "l1-proc-scrutiny"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "descarga acta PDF / verificar cadena",
+              "outOfScope": false,
+              "threats": [],
+              "protocol": "HTTP",
+              "isPublicNetwork": true,
+              "isEncrypted": false,
+              "hasOpenThreats": false
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "descarga acta PDF / verificar cadena",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.45
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
+          },
+          {
+            "id": "l1-flow-20",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-proc-voting"
+            },
+            "target": {
+              "cell": "l1-store-audit"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "escribe evento (detención manual)",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false,
+              "description": "Registra en audit_log la detención manual de una elección (POLL_STOPPED_MANUALLY)."
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "escribe evento (detención manual)",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.5
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
+          },
+          {
+            "id": "l1-flow-21",
+            "shape": "flow",
+            "source": {
+              "cell": "l1-proc-analytics"
+            },
+            "target": {
+              "cell": "l1-store-audit"
+            },
+            "attrs": {
+              "line": {
+                "stroke": "#333333",
+                "strokeWidth": 1.5,
+                "targetMarker": {
+                  "name": "block"
+                },
+                "strokeDasharray": null
+              }
+            },
+            "data": {
+              "type": "tm.Flow",
+              "name": "lectura (métricas de auditoría)",
+              "outOfScope": false,
+              "threats": [],
+              "hasOpenThreats": false,
+              "description": "Solo lectura: eventos de una elección y los logins del periodo, para los tableros."
+            },
+            "zIndex": 10,
+            "labels": [
+              {
+                "markup": [
+                  {
+                    "tagName": "ellipse",
+                    "selector": "labelBody"
+                  },
+                  {
+                    "tagName": "text",
+                    "selector": "labelText"
+                  }
+                ],
+                "attrs": {
+                  "labelText": {
+                    "text": "lectura (métricas de auditoría)",
+                    "textAnchor": "middle",
+                    "textVerticalAnchor": "middle"
+                  },
+                  "labelBody": {
+                    "ref": "labelText",
+                    "refRx": "50%",
+                    "refRy": "60%",
+                    "fill": "#fff",
+                    "strokeWidth": 0
+                  }
+                },
+                "position": 0.65
+              }
+            ],
+            "connector": "normal",
+            "width": 200,
+            "height": 100,
+            "vertices": []
+          }
         ]
       }
-    ]
+    ],
+    "diagramTop": 2,
+    "reviewer": "",
+    "threatTop": 15
   }
 }

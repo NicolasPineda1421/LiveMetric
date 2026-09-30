@@ -1,7 +1,7 @@
 # Manual de Arquitectura — LiveMetric
 
 > Sistema de Elecciones y Escrutinio en Tiempo Real
-> Este documento corresponde a la sección 4.2 de la documentación obligatoria del curso. Todos los diagramas están escritos en **Mermaid** (código versionable dentro del repositorio) y se renderizan de forma nativa al ver este archivo en GitHub.
+> Este documento corresponde a la sección 4.2 de la documentación obligatoria del curso. Los diagramas de componentes, despliegue, secuencia, casos de uso y del modelo de datos están escritos en **Mermaid** (código versionable dentro del repositorio) y se renderizan de forma nativa al ver este archivo en GitHub. Los dos DFD son el modelo de amenazas de **OWASP Threat Dragon**, exportado desde la herramienta.
 
 ## Tabla de contenido
 
@@ -274,75 +274,30 @@ graph LR
 
 ## 8. DFD Nivel 0
 
-```mermaid
-flowchart LR
-    Votante["Votante"]
-    Admin["Administrador"]
-    Sistema(("LiveMetric"))
-    DB[("Base de datos<br/>PostgreSQL")]
+Los dos DFD son el modelo de amenazas de OWASP Threat Dragon
+([`threat-model/livemetric.threatdragon.json`](threat-model/livemetric.threatdragon.json)),
+exportados desde la propia herramienta: los mismos diagramas sobre los que se
+analizaron las 15 amenazas STRIDE de
+[`threat-model/STRIDE-analysis.md`](threat-model/STRIDE-analysis.md). Las líneas
+punteadas son fronteras de confianza, y el flujo en rojo, el que tiene una amenaza
+abierta (el repudio del voto, aceptado por diseño para preservar el anonimato).
 
-    Votante -->|"cédula"| Sistema
-    Sistema -->|"JWT + confirmación de voto"| Votante
-    Admin -->|"credenciales · configuración"| Sistema
-    Sistema -->|"resultados · actas · logs"| Admin
-    Sistema <-->|"lectura / escritura"| DB
-```
+![DFD de nivel 0: votante, administrador y auditor frente al sistema LiveMetric y su base de datos](threat-model/dfd-nivel-0.png)
+
+[Versión vectorial (SVG)](threat-model/dfd-nivel-0.svg)
 
 ---
 
 ## 9. DFD Nivel 1
 
-```mermaid
-flowchart TB
-    Votante(["Votante"])
-    Admin(["Administrador"])
-    Reloj(["Reloj del sistema"])
+El sistema desagregado en sus cinco servicios y en los cuatro almacenes lógicos de
+la base (todos en el mismo PostgreSQL). Las dos fronteras son las dos redes de
+Docker: `app-net`, donde corren los servicios, y `db-net`, interna, a la que solo
+llegan los servicios que usan la base.
 
-    P1(("1.0<br/>Autenticar"))
-    P2(("2.0<br/>Emitir voto"))
-    P3(("3.0<br/>Administrar padrón<br/>y plantillas"))
-    P4(("4.0<br/>Programar<br/>apertura / cierre"))
-    P5(("5.0<br/>Certificar<br/>escrutinio"))
-    P6(("6.0<br/>Servir<br/>resultados"))
+![DFD de nivel 1: flujos entre actores, los cinco servicios y los almacenes padrón, audit log, elecciones y votos, y acta de escrutinio](threat-model/dfd-nivel-1.png)
 
-    DS1[("Almacén:<br/>admins / voters")]
-    DS2[("Almacén:<br/>elections / election_options")]
-    DS3[("Almacén:<br/>votes")]
-    DS4[("Almacén:<br/>scrutiny_ledger")]
-    DS5[("Almacén:<br/>audit_log")]
-
-    Votante --> P1
-    Admin --> P1
-    P1 --> DS1
-    P1 --> DS5
-
-    Admin --> P3
-    P3 --> DS1
-    P3 --> DS2
-
-    Votante --> P2
-    P2 --> DS2
-    P2 --> DS3
-
-    Reloj --> P4
-    P4 --> DS2
-    P4 --> P5
-
-    P5 --> DS3
-    P5 --> DS4
-
-    Admin --> P6
-    P6 --> DS2
-    P6 --> DS3
-    P6 --> DS4
-    P6 --> Admin
-
-    P1 -.-> DS5
-    P3 -.-> DS5
-    P4 -.-> DS5
-```
-
-**Nota metodológica:** este DFD se documentó manualmente siguiendo la notación estándar (procesos numerados, almacenes como bordes abiertos/cilindros, entidades externas como rectángulos). Para la entrega final del curso se recomienda además exportar el modelo equivalente como `threat-model.json` usando **OWASP Threat Dragon**, de forma que quede versionado junto a este archivo.
+[Versión vectorial (SVG)](threat-model/dfd-nivel-1.svg)
 
 ---
 

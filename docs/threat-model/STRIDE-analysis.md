@@ -8,39 +8,48 @@ del sistema (ver `docs/arquitectura.md`), no un ejemplo genérico: cada
 amenaza está anclada a un flujo o proceso que existe de verdad en el código,
 y cita la mitigación real ya implementada cuando la hay.
 
+## Cómo se generan los diagramas
+
+Las dos imágenes de abajo las dibujó y exportó **OWASP Threat Dragon 2.6.2** a
+partir de `livemetric.threatdragon.json`: son el modelo mismo, no un dibujo
+aparte. Para abrirlo en la versión web, se entra con *Login to Local Session*,
+se va a la página de importación (`/#/local/threatmodel/import`), se pega el
+contenido del archivo y se pulsa *Import*; en la de escritorio, se abre el
+archivo con *Open an existing threat model*. Cada diagrama se abre haciendo
+clic en su título. Cada vez que el modelo
+cambia, las imágenes se vuelven a exportar desde el menú *Export* del
+diagrama (PNG y SVG) y se reemplazan aquí.
+
+En los diagramas, las líneas punteadas son las fronteras de confianza y el
+flujo en rojo es el que tiene una amenaza abierta (la 3, aceptada por diseño).
+
 ## DFD Nivel 0 — Contexto
 
-```
-   ┌──────────┐        login (cédula+PIN) / voto        ┌─────────────────────┐
-   │ Votante  │ ───────────────────────────────────────▶│                     │
-   │          │◀─────────────────────────────────────── │                     │
-   └──────────┘   confirmación / historial (sin detalle) │                     │
-                                                          │  Sistema LiveMetric │        ┌───────────────────┐
-   ┌──────────────┐  gestión (padrón, plantillas,        │  (trust boundary)   │───────▶│ Postgres          │
-   │ Administrador│  elecciones, usuarios)                │                     │◀───────│ (local, db-net)   │
-   │              │──────────────────────────────────────▶│                     │        │ lectura/escritura │
-   │              │◀────────────────────────────────────  │                     │        │ cifrada del padrón│
-   └──────────────┘   resultados, reportes, auditoría     └─────────────────────┘        └───────────────────┘
-                                                                 ▲
-   ┌──────────┐   consulta de solo lectura                       │
-   │ Auditor  │───────────────────────────────────────────────────┘
-   │          │◀── resultados y reportes (sin poder editar nada) ─┘
-   └──────────┘
-```
+![DFD de nivel 0 de LiveMetric, exportado de OWASP Threat Dragon](./dfd-nivel-0.png)
+
+[Versión vectorial (SVG)](./dfd-nivel-0.svg)
 
 ## DFD Nivel 1 — Desagregado por microservicio
 
+![DFD de nivel 1 de LiveMetric, exportado de OWASP Threat Dragon](./dfd-nivel-1.png)
+
+[Versión vectorial (SVG)](./dfd-nivel-1.svg)
+
+Los mismos flujos, en texto:
+
 ```
 Votante ──login(cédula+PIN)──▶ auth-service ──JWT votante (10 min)──▶ Votante
-Votante ──voto (JWT)──────────▶ voting-service ──INSERT──▶ [Elecciones y votos]
+Votante ──emitir voto (JWT)───▶ voting-service ──INSERT voto──▶ [Elecciones y votos]
 Votante ──/my-votes───────────▶ voting-service ──SELECT (sin election/option)──▶ Votante
 
 Administrador ──login/gestión padrón/usuarios──▶ auth-service ──R/W cifrado──▶ [Padrón (voters)]
 Administrador ──crear plantillas/elecciones────▶ voting-service ──R/W──▶ [Elecciones y votos]
+    voting-service ──escribe evento (detención manual)──▶ [Audit log]
 Administrador/Auditor ──resultados/métricas/reportes──▶ analytics-service
     analytics-service ──lectura (en vivo)──▶ [Elecciones y votos]
     analytics-service ──lectura (participación)──▶ [Padrón (voters)]
     analytics-service ──lectura (si cerrada/certificada)──▶ [Acta de escrutinio]
+    analytics-service ──lectura (métricas de auditoría)──▶ [Audit log]
 
 scheduler-worker ──cambia status──▶ [Elecciones y votos]
 scheduler-worker ──dispara certificación (INTERNAL_SERVICE_TOKEN)──▶ scrutiny-service
@@ -48,7 +57,7 @@ scheduler-worker ──dispara certificación (INTERNAL_SERVICE_TOKEN)──▶ 
     scrutiny-service ──escribe acta (hash encadenado)──▶ [Acta de escrutinio]
 Administrador/Auditor ──descarga acta PDF / verificar cadena──▶ scrutiny-service
 
-auth-service ──escribe evento──▶ [Audit log] (append-only)
+auth-service ──escribe y consulta eventos──▶ [Audit log] (append-only)
 ```
 
 Almacenes de datos (todos en el mismo PostgreSQL local de la instalación,
@@ -69,7 +78,7 @@ separados aquí por responsabilidad):
 |---|---|---|---|---|---|
 | 1 | Flujo Votante → auth-service (login) | Spoofing | Alguien que conozca la cédula de un votante intenta suplantarlo | Mitigado | Login exige cédula **+ PIN** de 6 dígitos generado por el admin (no derivable de la cédula) — ver migración `003_voter_access_codes.sql`. Antes del cambio, usuario y contraseña eran ambos la cédula. |
 | 2 | Flujo Votante → auth-service (login) | Denial of Service | Fuerza bruta del PIN de votante | Mitigado | Rate limiting: 8 intentos **fallidos** cada 15 min por IP (`voterLoginLimiter`, `services/auth/src/app.js`); los ingresos correctos no cuentan, para que un puesto con un solo equipo atienda a todos sus votantes. Además, el reporte de accesos sospechosos detecta PIN fallidos repetidos para una misma cédula. |
-| 3 | Flujo Votante → auth-service (login) | Repudiation | El votante niega haber votado, o alguien niega que fue él quien votó | Aceptado (por diseño) | El sistema registra que "un voto ocurrió" (`voter_id_hash`) pero deliberadamente NO liga el voto a la identidad real más allá de ese hash — es el trade-off de anonimato del voto, no un descuido. |
+| 3 | Flujo Votante → voting-service (emitir voto) | Repudiation | El votante niega haber votado, o alguien niega que fue él quien votó | Aceptado (por diseño) | El sistema registra que "un voto ocurrió" (`voter_id_hash`) pero deliberadamente NO liga el voto a la identidad real más allá de ese hash — es el trade-off de anonimato del voto, no un descuido. |
 | 4 | Proceso auth-service ↔ Padrón (voters) | Tampering | Alguien con acceso directo a Postgres altera cédula/puesto/mesa de un votante | Mitigado (parcial) | Cifrado AES-256-GCM en reposo (`services/auth/src/voterCrypto.js`). Residual: nonce determinístico (necesario para poder buscar `WHERE cedula = ...`) permite notar si dos filas cifran igual, aunque no leer el valor. |
 | 5 | Proceso auth-service ↔ Padrón (voters) | Information Disclosure | Una fuga de la base de datos expone identidades del padrón | Mitigado | `cedula`, `polling_place`, `voting_table` cifrados; solo `full_name` queda en texto plano a propósito (gestión legible del padrón). |
 | 6 | Proceso voting-service (`/vote`) | Elevation of Privilege | Un votante emite más de un voto en la misma elección | Mitigado | Restricción `UNIQUE(election_id, voter_id_hash)` a nivel de base de datos — no depende solo de lógica de aplicación. |
