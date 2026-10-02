@@ -97,15 +97,18 @@ const html = `<!doctype html>
   .pie { text-align: center; font-size: 8.5pt; color: var(--gris); font-style: italic; margin: 0 0 12pt; }
   blockquote { margin: 0 0 9pt; padding: 5pt 10pt; border-left: 2pt solid var(--linea); color: var(--gris); }
   blockquote p:last-child { margin: 0; }
-  /* Portada */
-  .portada { height: 255mm; display: flex; flex-direction: column; }
-  .portada .marca { font-size: 11pt; letter-spacing: 3pt; color: var(--oro); font-weight: 600; text-transform: uppercase; }
-  .portada .titulo { font-size: 34pt; font-weight: 700; margin: 42mm 0 4mm; line-height: 1.1; }
-  .portada .subtitulo { font-size: 14pt; color: var(--gris); margin-bottom: 14mm; max-width: 150mm; }
-  .portada .curso { font-size: 11pt; border-top: 2pt solid var(--oro); padding-top: 5mm; max-width: 150mm; }
-  .portada dl { margin-top: auto; display: grid; grid-template-columns: 38mm 1fr; row-gap: 3pt; font-size: 10pt; }
-  .portada dt { color: var(--gris); }
-  .portada dd { margin: 0; }
+  /* Portada: el formato de la universidad (encabezado institucional y
+     bloques centrados en mayúsculas). */
+  .portada { height: 255mm; display: flex; flex-direction: column; font-family: Arial, 'Liberation Sans', 'IBM Plex Sans', sans-serif; color: #000; }
+  .portada .encabezado { font-family: Carlito, Calibri, 'IBM Plex Sans', sans-serif; }
+  .portada .universidad { font-size: 15pt; }
+  .portada .programa { font-size: 10.5pt; line-height: 1.35; margin-top: 2pt; }
+  .portada .centro { text-align: center; font-weight: 700; font-size: 10.5pt; margin-top: 16mm; }
+  .portada .centro p { margin: 0 0 17mm; text-align: center; }
+  .portada .centro p.junto { margin-bottom: 4mm; }
+  .portada .centro p.subtitulo { font-weight: 400; margin-top: 2mm; }
+  .portada .integrantes { text-align: center; font-size: 10.5pt; line-height: 1.4; margin-top: auto; }
+  .portada .cierre { text-align: center; font-size: 10.5pt; line-height: 1.4; margin-top: 18mm; margin-bottom: 10mm; }
   /* Índice */
   .indice ol { list-style: none; padding: 0; margin: 0; }
   .indice li { margin: 0; padding: 0.5pt 0; border-bottom: 0.5pt dotted var(--linea); line-height: 1.3; }

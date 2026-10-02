@@ -163,6 +163,7 @@ graph TB
             C_DB["Contenedor: postgres<br/>postgres:16-alpine<br/>sin puerto"]
         end
         V_PG[("Volumen: db-data")]
+        C_MIG["Contenedor: migraciones<br/>postgres:16-alpine<br/>corre una vez y termina"]
     end
 
     Navegador -->|"HTTP :3000"| C_FE
@@ -178,6 +179,7 @@ graph TB
     C_SCRUTINY --- C_DB
     C_SCHED --- C_DB
 
+    C_MIG -->|"db-net · db/migrations/"| C_DB
     C_DB --> V_PG
 
     classDef net fill:none,stroke:#b8860b,stroke-dasharray: 4 3;
@@ -189,6 +191,7 @@ graph TB
 - Los servicios publican su puerto solo en `127.0.0.1`, para probar el API desde la misma PC; en Swarm no publican ninguno.
 - `db-net` está marcada `internal: true`: PostgreSQL no tiene salida a Internet ni es alcanzable desde el host, y el frontend no está conectado a esa red. Solo los 5 servicios de backend llegan a la base.
 - Los seis servicios de la aplicación corren sin root, con el sistema de archivos de solo lectura (salvo `/tmp`) y sin poder ganar privilegios (`no-new-privileges` en compose, `cap_drop: ALL` en Swarm).
+- `migraciones` es una tarea de una sola vez: en cada arranque, antes que los servicios, le aplica a la base las migraciones de `db/migrations/` (todas idempotentes) y termina. Así una base creada con una versión anterior se pone al día sola.
 - El volumen `db-data` es el único estado persistente. Borrarlo (`docker compose down -v`) deja una base vacía, sin administradores: el primero se crea con `crearAdmin.js`.
 - Terraform (`infra/terraform/main.tf`) reproduce esta misma topología con el provider `kreuzwerker/docker`, y Docker Swarm (`orquestacion/docker-stack.yml`) la despliega con réplicas y la red overlay cifrada.
 

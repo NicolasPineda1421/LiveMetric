@@ -1,18 +1,18 @@
 <div class="portada">
-<div class="marca">Informe técnico</div>
-<div class="titulo">LiveMetric</div>
-<div class="subtitulo">Sistema de elecciones y escrutinio en tiempo real, construido con microservicios y un ciclo DevSecOps completo</div>
-<div class="curso">Trabajo final de curso: <strong>Pipeline DevSecOps de ciclo completo para una aplicación contenerizada de libre uso</strong><br>Especialización en Ciberseguridad, énfasis DevSecOps</div>
-<dl>
-<dt>Integrantes</dt><dd>[Nombre completo del integrante 1]<br>[Nombre completo del integrante 2]<br>[Nombre completo del integrante 3]<br>[Nombre completo del integrante 4]</dd>
-<dt>Docente</dt><dd>[Nombre del docente]</dd>
-<dt>Institución</dt><dd>[Nombre de la institución]</dd>
-<dt>Fecha</dt><dd>[Fecha de entrega]</dd>
-<dt>Versión documentada</dt><dd>v1.3.4</dd>
-<dt>Licencia</dt><dd>MIT</dd>
-<dt>Repositorio</dt><dd>github.com/NicolasPineda1421/LiveMetric</dd>
-<dt>Imágenes</dt><dd>hub.docker.com/u/nicolaspineda1421</dd>
-</dl>
+<div class="encabezado">
+<div class="universidad">Corporación Universitaria Minuto de Dios</div>
+<div class="programa">Especialización en ciberseguridad<br>Seguridad en Entornos Cloud y DevOps</div>
+</div>
+<div class="centro">
+<p>CORPORACIÓN UNIVERSITARIA MINUTO DE DIOS</p>
+<p>ESPECIALIZACIÓN EN CIBERSEGURIDAD</p>
+<p>SEGURIDAD EN ENTORNOS CLOUD Y DEVOPS</p>
+<p class="junto">TRABAJO FINAL</p>
+<p class="junto">LIVEMETRIC</p>
+<p class="subtitulo">Sistema de elecciones y escrutinio en tiempo real,<br>con un pipeline DevSecOps de ciclo completo</p>
+</div>
+<div class="integrantes"><strong>Integrantes:</strong> William Andres Mosquera Vela<br>Juan Nicolas Pineda Alvarado<br>Johnny Albeiro Mallama Mejia<br>Juan Esteban Contreras Gonzalez</div>
+<div class="cierre"><strong>Docente:</strong> Jaider Ospina Navas<br><strong>Fecha:</strong> 02/10/2026<br><strong>Licencia:</strong> MIT</div>
 </div>
 
 <!-- indice -->
@@ -71,7 +71,7 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 | Base de datos de código abierto | PostgreSQL 16, en una red interna sin puerto hacia la PC |
 | Autenticación JWT con roles | JWT HS256 con los roles `admin`, `auditor` y `voter`, verificados en cada servicio |
 | Dockerfile por servicio, docker-compose | Seis Dockerfile multietapa sobre Alpine, sin root; `docker-compose.yml` para desarrollo |
-| Imágenes en Docker Hub con versión semántica | Seis imágenes publicadas por `release.yml` con `1.3.4`, `v1.3.4`, `1.3` y `latest`, solo si Trivy las aprueba |
+| Imágenes en Docker Hub con versión semántica | Seis imágenes publicadas por `release.yml` con `1.3.5`, `v1.3.5`, `1.3` y `latest`, solo si Trivy las aprueba |
 | Pipeline DevSecOps | 37 jobs en GitHub Actions, con un *Security Gate* final (sección 4) |
 | IaC y orquestación | Terraform (provider `kreuzwerker/docker`) y Docker Swarm |
 | Documentación en Markdown | README y manuales de arquitectura, desarrollo, despliegue, seguridad y usuario |
@@ -154,6 +154,7 @@ graph TB
             C_DB["postgres<br/>postgres:16-alpine<br/>sin puerto"]
         end
         V_PG[("Volumen db-data")]
+        C_MIG["migraciones<br/>postgres:16-alpine<br/>corre una vez y termina"]
     end
 
     Navegador -->|"HTTP :3000"| C_FE
@@ -167,6 +168,7 @@ graph TB
     C_ANALYTICS --- C_DB
     C_SCRUTINY --- C_DB
     C_SCHED --- C_DB
+    C_MIG -->|"db-net · db/migrations/"| C_DB
     C_DB --> V_PG
 ```
 
@@ -553,7 +555,7 @@ El job `container-scan` construye las seis imágenes reales, igual que en produc
 
 ### 4.5 Fase 4 — Pruebas
 
-**Pruebas unitarias y de integración.** Jest corre en los seis componentes: **269 pruebas** en la corrida sobre la v1.3.4.
+**Pruebas unitarias y de integración.** Jest corre en los seis componentes: **269 pruebas** en la corrida sobre la v1.3.5.
 
 - **Servicios.** Supertest llama a la app de Express en memoria contra un PostgreSQL 16 real y desechable: cada `npm test` lo levanta en un contenedor, le carga `db/init.sql` y lo borra al terminar.
 - **Frontend.** React Testing Library prueba los componentes sobre jsdom, con el cliente HTTP reemplazado por un doble.
@@ -620,7 +622,7 @@ definition:
             type=raw,value=latest
 ```
 
-*Fragmento 6. Etiquetas de cada imagen publicada (`release.yml`): `1.3.4`, `v1.3.4`, `1.3` y `latest`.*
+*Fragmento 6. Etiquetas de cada imagen publicada (`release.yml`): `1.3.5`, `v1.3.5`, `1.3` y `latest`.*
 
 ### 4.7 Fase 6 — Operación y monitoreo
 
@@ -647,11 +649,11 @@ Los mismos controles, salvo Checkov, Terraform y ZAP, corren en la PC con `./scr
 
 ### 5.1 Resumen de la última corrida
 
-Los datos de esta sección salen de la corrida del pipeline sobre la versión v1.3.4, del 30 de septiembre de 2026, y del pipeline local sobre ese mismo código.
+Los datos de esta sección salen de la corrida del pipeline sobre la versión v1.3.5, del 2 de octubre de 2026, y del pipeline local sobre ese mismo código.
 
 | Control | Resultado |
 |---|---|
-| Gitleaks | Sin secretos en los 75 commits del historial |
+| Gitleaks | Sin secretos en los 81 commits del historial |
 | Semgrep | 289 reglas sobre 185 archivos: 0 hallazgos de severidad alta o media; 33 informativos |
 | ESLint | 0 hallazgos en los 6 servicios; 11 excepciones justificadas en el código |
 | npm audit | 0 vulnerabilidades en las dependencias de producción de los 6 servicios |
@@ -670,7 +672,7 @@ Los datos de esta sección salen de la corrida del pipeline sobre la versión v1
 
 ```
   Todo el repositorio
-   ✔ Secretos  · Gitleaks    sin secretos expuestos (75 commits revisados)
+   ✔ Secretos  · Gitleaks    sin secretos expuestos (81 commits revisados)
    ✔ Código    · Semgrep     sin hallazgos para revisar · 33 informativos
 
   Por servicio Código     Dependencias          Imagen Docker         Pruebas
@@ -688,8 +690,8 @@ Los datos de esta sección salen de la corrida del pipeline sobre la versión v1
 **Gitleaks.** Revisa el historial completo con las reglas por defecto, más una propia para `JWT_SECRET`. Cuatro huellas de falsos positivos ya revisados están en `.gitleaksignore`, cada una con su motivo: una contraseña deliberadamente incorrecta en una prueba y los ejemplos de la documentación que muestran cómo comprobar que Gitleaks bloquea.
 
 ```
-INF 75 commits scanned.
-INF scanned ~3213295 bytes (3.21 MB) in 870ms
+INF 81 commits scanned.
+INF scanned ~3253519 bytes (3.25 MB) in 1.14s
 INF no leaks found
 ```
 
@@ -785,7 +787,7 @@ Un hallazgo no siempre sale de una herramienta automática: algunos aparecieron 
 | Nombres del padrón, puestos, mesas, plantillas y títulos se guardaban con entidades HTML (`O&#x27;Neil`, `A&amp;B`), que se veían así en el panel y en el acta | Simulacro desde cero | Media (lo que muestra el acta) | Resuelto | Sin `.escape()` al guardar: nada se arma como HTML en el servidor, y React escapa al mostrar. Pruebas con apóstrofes, `&` y `/`. Los datos ya guardados en instalaciones anteriores conservan las entidades |
 | La documentación del monitoreo daba por activo node-exporter, que viene desactivado; y `docker swarm init` falla en una PC con varias direcciones de red | Simulacro desde cero | Baja | Resuelto | Documentados, con su solución en la guía de problemas |
 | Una base creada con una versión anterior no recibía las migraciones: `init.sql` solo corre con el volumen vacío, y no había un ejecutor. Un contenedor global viejo tenía la base sin las columnas de la firma, y la primera certificación habría fallado | Revisión del contenedor global | Alta | Resuelto | Servicio `migraciones` en `docker-compose.yml`, que aplica `db/migrations/` en cada arranque antes que los servicios (todas son idempotentes), y el mismo paso en `deploy.sh` para Swarm. Probado borrando esas columnas: se restauran solas y la elección se certifica firmada |
-| Cuatro CVE altas de OpenSSL (`libssl3` y `libcrypto3` 3.3.7-r1) en la imagen del frontend, publicadas el 30 de septiembre de 2026 | Trivy (imagen) | Alta | Resuelto | La base `nginx:1.27-alpine` quedó sobre Alpine 3.21, que todavía no trae la corrección, y esa línea de nginx ya no se mantiene. El frontend pasa a `nginx:1.30-alpine` (la línea estable, sobre Alpine 3.24): Trivy da 0 CVE, y la aplicación se recorrió con la CSP activa sin ninguna violación. El pipeline lo bloqueó antes de que llegara a ningún despliegue |
+| Cuatro CVE altas de OpenSSL (`libssl3` y `libcrypto3` 3.3.7-r1) en la imagen del frontend, publicadas el 30 de septiembre de 2026 | Trivy (imagen) | Alta | Resuelto | La base `nginx:1.27-alpine` quedó sobre Alpine 3.21, que todavía no trae la corrección, y esa línea de nginx ya no se mantiene. El frontend pasa a `nginx:1.30-alpine` (la línea estable, sobre Alpine 3.24) desde la v1.3.5: Trivy da 0 CVE, y la aplicación se recorrió con la CSP activa sin ninguna violación. El pipeline lo bloqueó antes de que llegara a ningún despliegue |
 | En el contenedor global, Falco atribuía a los servicios escrituras que hacía la PC (AppArmor, systemd): 60 alertas falsas en dos minutos, todas "de" Scrutiny | Revisión del contenedor global | Media | Resuelto | Falco completa cada evento leyendo `/proc`, y el del contenedor global tiene otra numeración de procesos. Con Falco, ese contenedor corre con `--pid=host`: sin falsos positivos, y se comprobó que sigue detectando una escritura real |
 | Los servicios se conectan a la base como dueños de las tablas, y por eso pueden desactivar el trigger *append-only* | Demostración del ataque a las actas | Media | Mitigado | La firma Ed25519 y el reconteo detectan cualquier alteración del acta (Figura 16). Pendiente: un usuario de base por servicio, sin permiso para cambiar las tablas |
 
@@ -956,7 +958,7 @@ Además, Falco corre con `rule_matching=all`, porque por defecto sus reglas gen�
 |---|---|
 | Repositorio | https://github.com/NicolasPineda1421/LiveMetric |
 | Imágenes | https://hub.docker.com/u/nicolaspineda1421 |
-| Versión documentada | v1.3.4 (release en GitHub y tags en Docker Hub) |
+| Versión documentada | v1.3.5 (release en GitHub y tags en Docker Hub) |
 | Modelo de amenazas | `docs/threat-model/livemetric.threatdragon.json` y `STRIDE-analysis.md` |
 | Pipeline | `.github/workflows/devsecops.yml` y `release.yml` |
 | Manuales | `docs/` (arquitectura, desarrollo, instalación y despliegue, seguridad, usuario) |
