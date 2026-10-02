@@ -84,6 +84,24 @@ docker pull nicolaspineda1421/livemetric-auth:1.3.5
 
 Para publicar una versión nueva basta con crear el tag: `git tag -a v1.4.0 -m "..." && git push origin v1.4.0`.
 
+## Estructura del repositorio
+
+La estructura sigue la que propone el enunciado del curso. Dos carpetas tienen el nombre corto que se usa en los proyectos de software (`infra/` y `services/`); el pipeline, los scripts y la documentación usan esas rutas.
+
+| Carpeta del enunciado | En este repositorio | Contenido |
+|---|---|---|
+| `LICENSE`, `README.md`, `docker-compose.yml` | Igual | Licencia MIT, este documento y el stack completo |
+| `.github/workflows/` | Igual | [`devsecops.yml`](.github/workflows/devsecops.yml) (pipeline de seguridad) y [`release.yml`](.github/workflows/release.yml) (publicación en Docker Hub) |
+| `infraestructura/` | [`infra/`](infra/) | Terraform (IaC, con las políticas propias de Checkov) y el contenedor global |
+| `orquestacion/` | Igual | Docker Swarm: stack con réplicas, rolling updates y red cifrada |
+| `servicios/` | [`services/`](services/) | Un directorio por microservicio: `auth`, `voting`, `analytics`, `scrutiny`, `scheduler` (worker) y `frontend` |
+| `docs/` | Igual | Informe técnico, manuales, modelo de amenazas (Threat Dragon) y sustentación |
+| Además | [`db/`](db/) | Esquema inicial de PostgreSQL y migraciones |
+| Además | [`monitoring/`](monitoring/) | Prometheus, Grafana, Loki + Promtail y Falco |
+| Además | [`scripts/`](scripts/) | Arranque, pipeline local, hook de Gitleaks, demo del ataque al acta y generación del PDF del informe |
+
+El árbol completo, archivo por archivo, está en [Arquitectura](docs/arquitectura.md#estructura-del-repositorio).
+
 ## Documentación
 
 | Documento | Contenido |
