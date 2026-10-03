@@ -138,15 +138,16 @@ El requisito común es [Docker Desktop](https://www.docker.com/products/docker-d
 ## Recorrido por la interfaz
 
 1. Entra a **http://localhost:3000** → "Administrador" → con tu cuenta.
-2. En **Padrón**, genera el PIN de las cédulas de demostración que vayas a usar ("Regenerar PIN"; anótalo, se muestra una sola vez). En **Usuarios** puedes crear más administradores o auditores.
+2. En **Padrón**, genera el PIN de las cédulas de demostración que vayas a usar ("Regenerar PIN"; anótalo, se muestra una sola vez). Marca **Voto asistido** en una de ellas (por ejemplo, `1000000002`, de la Mesa 1). En **Usuarios**, crea un **jurado de mesa** para `Puesto Central` / `Mesa 1`; también puedes crear más administradores o auditores.
 3. En **Plantillas**, usa "Elección Presidencial de Ejemplo" o crea una nueva con candidatos (número, nombre y foto).
 4. En **Elecciones**, instancia una con una ventana corta (2–3 minutos) para ver el ciclo completo.
-5. En una ventana de incógnito → "Votante" → cédula `1000000001` con el PIN que generaste → vota. Repite con `1000000003` (otra mesa) para tener votos en más de una mesa.
-6. En **Elecciones** puedes pulsar "Detener" para cerrarla antes de tiempo.
-7. En **Resultados**: mientras está activa, solo cuántas personas votaron, en vivo (los votos por opción no se publican antes del acta); tras cerrarla, el indicador de veracidad del acta ("✓ Acta verificada": firma digital válida, sin modificaciones y con los votos guardados coincidiendo), el ganador y el desglose por mesa. El PDF del acta lleva el mismo veredicto en el encabezado.
-8. En **Escrutinio**, "Verificar actas" muestra acta por acta si su contenido, la cadena y la firma digital están en orden.
-9. En **Reportes**, arma un tablero con widgets: resultados, participación, proyección, momento de definición, integridad del acta, accesos sospechosos, etc. Se exporta a PDF.
-10. En **Auditoría**, revisa todos los intentos de ingreso, exitosos y fallidos.
+5. En una ventana de incógnito → "Votante" → cédula `1000000001` con el PIN que generaste. La primera vez aparece un QR: escanéalo con **Microsoft Authenticator** o **Google Authenticator** en tu celular y escribe el código de 6 dígitos → vota. Repite con `1000000003` (otra mesa) para tener votos en más de una mesa.
+6. **Voto asistido:** entra como el jurado (pestaña "Administrador / Auditor / Jurado"; la primera vez registra su autenticador) y verás su mesa y a la votante asistida. En otra ventana de incógnito, entra con `1000000002` y su PIN: la pantalla pide la autorización del jurado; escribe su usuario y el código de su app → vota.
+7. En **Elecciones** puedes pulsar "Detener" para cerrarla antes de tiempo.
+8. En **Resultados**: mientras está activa, solo cuántas personas votaron, en vivo (los votos por opción no se publican antes del acta); tras cerrarla, el indicador de veracidad del acta ("✓ Acta verificada": firma digital válida, sin modificaciones y con los votos guardados coincidiendo), el ganador y el desglose por mesa. El PDF del acta lleva el mismo veredicto en el encabezado.
+9. En **Escrutinio**, "Verificar actas" muestra acta por acta si su contenido, la cadena y la firma digital están en orden.
+10. En **Reportes**, arma un tablero con widgets: resultados, participación, proyección, momento de definición, integridad del acta, accesos sospechosos, etc. Se exporta a PDF.
+11. En **Auditoría**, revisa todos los intentos de ingreso, exitosos y fallidos, los registros de autenticadores y cada voto asistido con el jurado que lo autorizó.
 
 ## Flujo por línea de comandos
 
@@ -164,9 +165,14 @@ docker compose logs -f scheduler-worker   # el worker no expone puerto
 curl -X POST http://127.0.0.1:3001/login/admin \
   -H "Content-Type: application/json" -d '{"username":"<usuario>","password":"<password>"}'
 
-# Login de votante (cédula + PIN)
+# Login de votante, en dos pasos. 1) Cédula + PIN: devuelve "next" y un desafío de 5 minutos
+#    (y, la primera vez, "secret" y "otpauthUri" para registrar la app autenticadora)
 curl -X POST http://127.0.0.1:3001/login/voter \
   -H "Content-Type: application/json" -d '{"cedula":"1000000001","pin":"<pin>"}'
+# 2) El código de 6 dígitos de la app: /login/voter/registro la primera vez, /login/voter/codigo después
+#    (en un votante asistido: /login/voter/asistido con {"challenge","juradoUsername","juradoCode"})
+curl -X POST http://127.0.0.1:3001/login/voter/codigo \
+  -H "Content-Type: application/json" -d '{"challenge":"<desafio>","code":"<codigo>"}'
 
 # Crear una elección desde la plantilla de ejemplo (id=1)
 curl -X POST http://127.0.0.1:3002/admin/elections \
@@ -202,6 +208,11 @@ Lo primero, casi siempre: `docker compose ps` (qué contenedor no está sano) y 
 | `npm audit` o Trivy "no pudo completar el análisis" (`EAI_AGAIN`, `ENOTFOUND`, `network is unreachable`, `failed to download vulnerability DB`) | La red no respondió: el registro de npm o la base de vulnerabilidades de Trivy no se pudieron descargar. El pipeline local ya lo reintenta 3 veces, durante unos 30 segundos | Revisa la conexión a internet (y el DNS) y vuelve a correr el arranque. No es un hallazgo de seguridad |
 | Semgrep falla con `Name does not resolve` | El DNS de la red (típicamente, compartir Internet desde Windows) no le resuelve `semgrep.dev` a los contenedores Alpine | `pipeline-local.sh` lo detecta y usa DNS públicos solo para Semgrep. Si falla igual, no hay salida a Internet: Semgrep descarga sus reglas en cada corrida |
 | `npm test` falla con "Las pruebas necesitan Docker para levantar su base desechable" | Docker no está corriendo | Arranca Docker (o Docker Desktop). Las pruebas no usan la base del stack: levantan la suya |
+| El votante escribe el código de la app y recibe "Código incorrecto o vencido" | Escribió un código anterior (cada uno sirve una sola vez y cambia cada 30 s), o la hora de su celular no está bien | Que escriba el código que la app muestra en ese momento. Si sigue fallando, que ponga la hora del celular en automático: los códigos dependen de ella |
+| "Esta cédula ya tiene un autenticador registrado" en el primer ingreso | Alguien registró una app con esa cédula y su PIN antes que el votante (o el mismo votante, en otro celular) | Si no fue él, regenera su PIN y, en **Padrón**, **Restablecer autenticador**; queda en la auditoría (`VOTER_TOTP_ENROLLED`) desde qué IP y cuándo se registró |
+| El votante cambió o perdió el celular | El código está en la app del celular anterior | En **Padrón**, **Restablecer autenticador**: en su próximo ingreso lo registra de nuevo. Para un jurado, lo mismo en **Usuarios** |
+| En el voto asistido: "Ese jurado no es de la mesa de este votante" | El jurado está asignado a otra mesa (o el votante, a otra mesa del padrón) | Que autorice el jurado de la mesa del votante. La mesa de cada jurado se ve en **Usuarios** |
+| La votante asistida no aparece en el panel del jurado | No está marcada como asistida, o el puesto y la mesa del jurado no coinciden exactamente con los del padrón | Marca **Voto asistido** en **Padrón** y revisa que el puesto y la mesa del jurado estén escritos igual |
 | Un votante recibe "Cédula o PIN incorrectos" con los datos correctos | Su cédula no tiene PIN (en **Padrón** figura "Sin asignar"), o el PIN se regeneró | Genera el PIN desde **Padrón** y entrégaselo. El mensaje es el mismo en todos los casos a propósito |
 | "Demasiados intentos. Intenta de nuevo más tarde." al ingresar como votante | Desde ese equipo (esa IP) hubo 8 intentos fallidos en 15 minutos: el sistema lo toma como alguien adivinando PINs y bloquea la IP, también para los PIN correctos. Los ingresos correctos no cuentan, así que un puesto con un solo equipo puede atender a todos sus votantes | Esperar a que pasen los 15 minutos. Si fue un error de digitación repetido, revisar con el votante su cédula y su PIN (o regenerarlo en **Padrón**); si no, revisar el reporte de **Accesos sospechosos** |
 | No hay ningún administrador, o se perdió la contraseña del único | La base es nueva, o no hay recuperación de contraseña | `docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay` si no hay ninguno; `crearAdmin.js <usuario-nuevo>` para crear otro. Desde ese, se administra el resto en **Usuarios** |

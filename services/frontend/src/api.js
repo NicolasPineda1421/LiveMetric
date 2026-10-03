@@ -48,14 +48,34 @@ export const api = {
     request('auth', '/login/admin', { method: 'POST', body: { username, password } }),
   loginVoter: (cedula, pin) =>
     request('auth', '/login/voter', { method: 'POST', body: { cedula, pin } }),
-  createAdminUser: (token, username, password, role = 'admin') =>
-    request('auth', '/admin/users', { method: 'POST', token, body: { username, password, role } }),
+  // Segundo paso del ingreso: "challenge" es el desafío que devolvió el primero.
+  verifyVoterCode: (challenge, code) =>
+    request('auth', '/login/voter/codigo', { method: 'POST', body: { challenge, code } }),
+  enrollVoter: (challenge, code) =>
+    request('auth', '/login/voter/registro', { method: 'POST', body: { challenge, code } }),
+  authorizeAssistedVoter: (challenge, juradoUsername, juradoCode) =>
+    request('auth', '/login/voter/asistido', { method: 'POST', body: { challenge, juradoUsername, juradoCode } }),
+  verifyAdminCode: (challenge, code) =>
+    request('auth', '/login/admin/codigo', { method: 'POST', body: { challenge, code } }),
+  enrollAdmin: (challenge, code) =>
+    request('auth', '/login/admin/registro', { method: 'POST', body: { challenge, code } }),
+  // mesa: { pollingPlace, votingTable }, solo para un jurado.
+  createAdminUser: (token, username, password, role = 'admin', mesa = {}) =>
+    request('auth', '/admin/users', { method: 'POST', token, body: { username, password, role, ...mesa } }),
+  listUsers: (token) => request('auth', '/admin/users', { token }),
+  resetUserTotp: (token, userId) =>
+    request('auth', `/admin/users/${userId}/reset-totp`, { method: 'POST', token }),
   uploadVoters: (token, voters) =>
     request('auth', '/admin/voters/bulk', { method: 'POST', token, body: { voters } }),
   listVoters: (token, limit = 100, offset = 0) =>
     request('auth', `/admin/voters?limit=${limit}&offset=${offset}`, { token }),
   resetVoterPin: (token, voterId) =>
     request('auth', `/admin/voters/${voterId}/reset-pin`, { method: 'POST', token }),
+  resetVoterTotp: (token, voterId) =>
+    request('auth', `/admin/voters/${voterId}/reset-totp`, { method: 'POST', token }),
+  setVoterAssisted: (token, voterId, assisted) =>
+    request('auth', `/admin/voters/${voterId}/assisted`, { method: 'PUT', token, body: { assisted } }),
+  getJuradoMesa: (token) => request('auth', '/jurado/mesa', { token }),
   listAuditLog: (token, limit = 50, offset = 0) =>
     request('auth', `/admin/audit-log?limit=${limit}&offset=${offset}`, { token }),
 

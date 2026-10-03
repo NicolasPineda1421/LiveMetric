@@ -1,12 +1,23 @@
 -- LiveMetric - Esquema de base de datos
 -- Se ejecuta automáticamente al primer arranque del contenedor de PostgreSQL
 
+-- Usuarios del panel: administradores, auditores (solo lectura) y jurados de
+-- mesa. El jurado autoriza el ingreso de los votantes de su mesa que votan
+-- asistidos (ver migración 006): por eso tiene una mesa asignada (cifrada
+-- igual que la del padrón, para poder compararla) y un autenticador TOTP
+-- propio, obligatorio, que registra en su primer ingreso.
 CREATE TABLE IF NOT EXISTS admins (
-    id            SERIAL PRIMARY KEY,
-    username      VARCHAR(50)  UNIQUE NOT NULL,
-    password_hash TEXT         NOT NULL,          -- bcrypt hash, nunca texto plano
-    role          VARCHAR(20)  NOT NULL DEFAULT 'admin' CHECK (role IN ('admin', 'auditor')),
-    created_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
+    id             SERIAL PRIMARY KEY,
+    username       VARCHAR(50)  UNIQUE NOT NULL,
+    password_hash  TEXT         NOT NULL,          -- bcrypt hash, nunca texto plano
+    role           VARCHAR(20)  NOT NULL DEFAULT 'admin',
+    polling_place  TEXT,                           -- solo jurados: puesto (cifrado)
+    voting_table   TEXT,                           -- solo jurados: mesa (cifrada)
+    totp_secret    TEXT,                           -- secreto TOTP cifrado; NULL hasta registrarlo
+    totp_last_step BIGINT,                         -- último paso de 30 s aceptado (un código no se reusa)
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT admins_role_check CHECK (role IN ('admin', 'auditor', 'jurado')),
+    CONSTRAINT admins_jurado_mesa_check CHECK (role <> 'jurado' OR (polling_place IS NOT NULL AND voting_table IS NOT NULL))
 );
 
 -- ---------------------------------------------------------------------------
@@ -40,6 +51,12 @@ CREATE TABLE IF NOT EXISTS voters (
     voting_table      TEXT NOT NULL,
     is_active         BOOLEAN NOT NULL DEFAULT true,
     access_code_hash  TEXT,                          -- bcrypt del PIN; NULL hasta que un admin lo genere
+    -- Segundo factor (migración 006): el autenticador TOTP que el votante
+    -- registra en su primer ingreso, o el voto asistido, en el que lo
+    -- reemplaza la autorización del jurado de su mesa.
+    totp_secret       TEXT,                          -- secreto TOTP cifrado; NULL hasta registrarlo
+    totp_last_step    BIGINT,                        -- último paso de 30 s aceptado (un código no se reusa)
+    assisted          BOOLEAN NOT NULL DEFAULT false,
     created_by        INTEGER REFERENCES admins(id),
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );

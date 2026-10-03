@@ -228,7 +228,7 @@
             "data": {
               "type": "tm.Flow",
               "name": "Login (cédula+PIN) y voto",
-              "description": "El votante se autentica y emite su voto.",
+              "description": "El votante se autentica (cédula y PIN, y después el código de su autenticador o la autorización del jurado de su mesa) y emite su voto.",
               "outOfScope": false,
               "threats": [
                 {
@@ -238,7 +238,7 @@
                   "severity": "High",
                   "type": "Spoofing",
                   "description": "La cédula es información semipública; antes del PIN, usuario y contraseña eran ambos la cédula.",
-                  "mitigation": "Login exige cédula + PIN de 6 dígitos generado por el admin, no derivable de la cédula (migración 003_voter_access_codes.sql).",
+                  "mitigation": "Login exige cédula + PIN de 6 dígitos generado por el admin, no derivable de la cédula (migración 003_voter_access_codes.sql), y además un segundo factor: el código de la app autenticadora del votante o, en el voto asistido, la autorización del jurado de su mesa (migración 006_segundo_factor.sql).",
                   "modelType": "STRIDE",
                   "new": false,
                   "number": 1,
@@ -255,6 +255,45 @@
                   "modelType": "STRIDE",
                   "new": false,
                   "number": 2,
+                  "score": ""
+                },
+                {
+                  "id": "56009eaf-f544-5278-b70c-76bdde06c9b8",
+                  "title": "Suplantación con el PIN de otro votante (filtrado, perdido o visto al escribirlo)",
+                  "status": "Mitigated",
+                  "severity": "High",
+                  "type": "Spoofing",
+                  "description": "El PIN lo genera y lo entrega el administrador: puede filtrarse, perderse o verse al escribirlo en la mesa.",
+                  "mitigation": "Segundo factor: el código TOTP (RFC 6238) de la app autenticadora del votante, de un solo uso y válido ±30 s; el secreto se guarda cifrado con AES-256-GCM. Sin el celular, el PIN solo no abre la sesión. Tres códigos fallidos con el PIN correcto generan una alerta de acceso sospechoso, y el PIN se oculta al escribirlo.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 16,
+                  "score": ""
+                },
+                {
+                  "id": "d0179d4c-ada1-5ee1-9396-6b53564af34e",
+                  "title": "Registrar el autenticador antes que el votante",
+                  "status": "Mitigated",
+                  "severity": "Medium",
+                  "type": "Spoofing",
+                  "description": "En el primer ingreso, quien tenga la cédula y el PIN registra su app (confianza en el primer uso). El administrador conoce el PIN porque lo genera.",
+                  "mitigation": "Mitigado parcial. Solo se registra un autenticador por cédula: el votante que llega después ve que ya hay uno y avisa; el registro queda en la auditoría (VOTER_TOTP_ENROLLED, con IP y hora) y el administrador lo restablece. Residual: el primer registro depende de que el PIN llegue solo al votante.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 17,
+                  "score": ""
+                },
+                {
+                  "id": "d72ce783-d003-5dee-beea-5f707f31b908",
+                  "title": "Un jurado cómplice autoriza un voto asistido indebido",
+                  "status": "Mitigated",
+                  "severity": "Medium",
+                  "type": "Spoofing",
+                  "description": "En el voto asistido, el segundo factor es el código del autenticador del jurado de la mesa: un jurado de acuerdo con quien tenga el PIN de un votante asistido podría abrirle la sesión.",
+                  "mitigation": "Mitigado parcial. El jurado solo autoriza a votantes de su propia mesa, marcados como asistidos por el administrador; coteja la cédula física en persona; su código es de un solo uso; cada autorización queda en la auditoría con su nombre (ASSISTED_LOGIN_AUTHORIZED). Residual: la complicidad, igual que en una elección física.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 18,
                   "score": ""
                 }
               ],

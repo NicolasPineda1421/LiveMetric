@@ -10,7 +10,7 @@ Antes de grabar:
 
 1. **Instalación de demostración** levantada con `./scripts/start.sh`, con su administrador creado. Sin datos que importen: el bloque 5 altera un acta para siempre.
 2. **Monitoreo con Falco:** `docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml --profile falco up -d`. (Con el contenedor global el monitoreo ya viene incluido, pero los comandos de los bloques 5 y 7 hay que correrlos adentro, con `./scripts/contenedor.sh shell`: por eso, para grabar, conviene `start.sh`.)
-3. **Datos de la historia de usuario:** padrón con tres votantes (anotar los PIN) y una plantilla genérica con tres opciones (ver [la historia de usuario](historia-de-usuario.md), "Preparación").
+3. **Datos de la historia de usuario:** padrón con tres votantes (anotar los PIN), sus autenticadores ya registrados en un celular, y una plantilla genérica con tres opciones (ver [la historia de usuario](historia-de-usuario.md), "Preparación").
 4. **Hook de Gitleaks** instalado: `./scripts/install-hooks.sh`.
 5. **Pestañas abiertas en el navegador:**
    - la aplicación como administrador, y una ventana de incógnito para el votante;
@@ -47,7 +47,7 @@ docker compose ps
 **Pantalla:** Threat Dragon con el DFD de nivel 1 abierto; clic en el flujo rojo y en el almacén del acta para mostrar sus amenazas.
 
 - STRIDE por elemento: cada proceso, almacén y flujo revisado contra las seis categorías.
-- 15 amenazas, cada una anclada a un elemento real del código y con su control.
+- 18 amenazas, cada una anclada a un elemento real del código y con su control.
 - El flujo rojo es el repudio del voto: una amenaza **aceptada** a propósito, para preservar el secreto del voto.
 - La amenaza 15 (alguien con acceso a la base rehace la cadena de hashes de un acta) es la que se va a atacar en vivo en el bloque 5.
 
@@ -81,7 +81,7 @@ git reset prueba.js && rm prueba.js
 **Pantalla:** la aplicación, siguiendo los pasos 1 a 6 de [la historia de usuario](historia-de-usuario.md#pasos), en versión corta:
 
 1. **Administrador:** programa la elección. El worker la abre en el siguiente minuto.
-2. **Votante:** ingresa con cédula y PIN y vota. Al volver, la papeleta ya no está, y su historial no dice por quién votó.
+2. **Votante:** ingresa con cédula, PIN y el código de su app autenticadora (el segundo factor: con el PIN solo no entra), y vota. Al volver, la papeleta ya no está, y su historial no dice por quién votó.
 3. **Administrador:** detiene la elección. Aparece **✓ Acta verificada**; muestra el PDF.
 4. **Atacante,** en la terminal:
 

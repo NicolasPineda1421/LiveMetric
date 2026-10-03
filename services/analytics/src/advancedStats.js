@@ -437,7 +437,12 @@ const ACCESS_THRESHOLDS = {
   failuresSameIp: 8, // fallos de cualquier tipo desde una IP (el tope del rate limit de login de votantes)
   adminFailuresSameUser: 3, // contraseña incorrecta para un mismo usuario admin
   pinFailuresBeforeSuccess: 3, // PIN incorrectos justo antes de un ingreso exitoso de esa cédula
+  secondFactorFailuresSameVoter: 3, // PIN correcto, pero el código del autenticador o del jurado no
 };
+
+// Motivos de falla del segundo factor que delatan a alguien con el PIN de
+// otra persona: el PIN pasó, el código no.
+const SECOND_FACTOR_REASONS = new Set(['codigo_incorrecto', 'jurado_no_valido']);
 
 const REASON_LABELS = {
   pin_incorrecto: 'PIN incorrecto',
@@ -445,6 +450,11 @@ const REASON_LABELS = {
   sin_pin_asignado: 'Cédula sin PIN asignado',
   usuario_no_encontrado: 'Usuario admin inexistente',
   password_incorrecto: 'Contraseña admin incorrecta',
+  codigo_incorrecto: 'Código del autenticador incorrecto',
+  codigo_registro_incorrecto: 'Código incorrecto al registrar el autenticador',
+  autenticador_ya_registrado: 'Cédula con el autenticador ya registrado',
+  jurado_no_valido: 'Usuario o código del jurado incorrectos',
+  jurado_de_otra_mesa: 'Jurado de otra mesa',
 };
 
 // El hash de la cédula es seudónimo, pero igual se muestra recortado: el
@@ -515,6 +525,26 @@ function detectSuspiciousAccess(events) {
           subject: `Cédula ${shortHash(voter)}`,
           attempts: peak.count,
           detail: 'Alguien probó varios PIN para la misma cédula: puede ser un intento de adivinarlo.',
+        },
+        peak,
+      );
+    }
+  }
+
+  const secondFactorFailures = voterFailures.filter((e) => SECOND_FACTOR_REASONS.has(e.reason));
+  for (const [voter, group] of groupBy(secondFactorFailures, (e) => e.actorRef)) {
+    const peak = peakInWindow(group, windowMs);
+    if (peak.count >= ACCESS_THRESHOLDS.secondFactorFailuresSameVoter) {
+      addAlert(
+        {
+          type: 'pin_sin_segundo_factor',
+          severity: 'alta',
+          title: 'PIN correcto, pero el código no',
+          subject: `Cédula ${shortHash(voter)}`,
+          attempts: peak.count,
+          detail:
+            'Alguien pasó el PIN de esta cédula, pero falló varias veces el código del autenticador o del jurado: ' +
+            'puede tener el PIN de otra persona sin su celular. Conviene regenerar el PIN.',
         },
         peak,
       );

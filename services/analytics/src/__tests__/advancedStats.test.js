@@ -322,6 +322,19 @@ describe('detectSuspiciousAccess', () => {
     expect(detectSuspiciousAccess(events).alerts).toEqual([]);
   });
 
+  it('3 códigos incorrectos con el PIN correcto (autenticador o jurado) → alguien tiene el PIN sin el celular', () => {
+    const events = [
+      voterFailure(0, 'hashA', 'codigo_incorrecto'),
+      voterFailure(3, 'hashA', 'codigo_incorrecto', '10.0.0.2'),
+      voterFailure(6, 'hashA', 'jurado_no_valido'),
+    ];
+    const resultado = detectSuspiciousAccess(events);
+    expect(types(resultado)).toEqual(['pin_sin_segundo_factor']);
+    expect(resultado.failuresByReason).toContainEqual({ reason: 'Código del autenticador incorrecto', count: 2 });
+    // Dos errores (alguien que se equivoca al copiar el código) no alertan.
+    expect(detectSuspiciousAccess(events.slice(0, 2)).alerts).toEqual([]);
+  });
+
   it('5 cédulas inexistentes desde una IP en 15 minutos → barrido; espaciadas en una hora, no', () => {
     const quick = ['h1', 'h2', 'h3', 'h4', 'h5'].map((h, i) => voterFailure(i, h, 'no_encontrado_o_inactivo'));
     expect(types(detectSuspiciousAccess(quick))).toContain('barrido_cedulas');

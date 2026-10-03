@@ -164,7 +164,7 @@ Cada instalación genera su propio `.env` con secretos aleatorios (`scripts/lib/
 | `POSTGRES_PASSWORD` | `ALTER USER livemetric PASSWORD '…'` en la consola SQL, después el `.env` y `docker compose up -d` | Nada, si se hace en ese orden. Solo con el `.env`, la base rechaza la contraseña nueva |
 | `GRAFANA_ADMIN_PASSWORD` | `docker exec -it livemetric-grafana grafana cli admin reset-admin-password '<nueva>'` y el mismo valor en el `.env` | Grafana solo toma la variable de entorno al crearse: después, cambiarla en el `.env` no cambia la contraseña |
 | `VOTER_ID_SALT` | **Solo entre elecciones** | Cambia el código con que se identifica a cada votante: durante una elección abierta, alguien que ya votó podría volver a hacerlo |
-| `VOTERS_ENCRYPTION_KEY` | Requiere descifrar el padrón con la clave vieja y cifrarlo con la nueva; ese script todavía no existe | Cambiarla sin ese paso deja el padrón ilegible |
+| `VOTERS_ENCRYPTION_KEY` | Requiere descifrar el padrón con la clave vieja y cifrarlo con la nueva, incluidos los secretos de los autenticadores (`voters.totp_secret`, `admins.totp_secret`) y la mesa de los jurados; ese script todavía no existe | Cambiarla sin ese paso deja el padrón ilegible y obliga a todos a registrar de nuevo su autenticador |
 | `ACTA_SIGNING_KEY` / `ACTA_PUBLIC_KEY` | Par nuevo con `generar-env.js` (borrando las dos del `.env`) | Las actas nuevas se firman con la clave nueva, pero las anteriores pasan a verse como firmadas "con otra clave" (alteradas), porque el sistema no guarda claves anteriores |
 
 Si el secreto llegó a un commit, rotarlo es obligatorio aunque después se borre: el repositorio es público y el historial se conserva.

@@ -38,7 +38,8 @@ flujo en rojo es el que tiene una amenaza abierta (la 3, aceptada por diseño).
 Los mismos flujos, en texto:
 
 ```
-Votante ──login(cédula+PIN)──▶ auth-service ──JWT votante (10 min)──▶ Votante
+Votante ──login(cédula+PIN)──▶ auth-service ──desafío (5 min, sin rol)──▶ Votante
+Votante ──código del autenticador (o, si es asistido, usuario y código del jurado)──▶ auth-service ──JWT votante (10 min)──▶ Votante
 Votante ──emitir voto (JWT)───▶ voting-service ──INSERT voto──▶ [Elecciones y votos]
 Votante ──/my-votes───────────▶ voting-service ──SELECT (sin election/option)──▶ Votante
 
@@ -65,7 +66,8 @@ separados aquí por responsabilidad):
 
 - **Padrón (voters)**: `cedula`, `polling_place`, `voting_table` cifrados
   (AES-256-GCM); `full_name` en texto plano; `access_code_hash` (bcrypt del
-  PIN).
+  PIN); `totp_secret` (el secreto del autenticador, cifrado) y `assisted`
+  (si vota asistido).
 - **Elecciones y votos**: `elections`, `election_options`, `votes`
   (`voter_id_hash`, nunca la cédula).
 - **Acta de escrutinio**: `scrutiny_ledger`, append-only, hash SHA-256
@@ -76,7 +78,7 @@ separados aquí por responsabilidad):
 
 | # | Elemento | Categoría STRIDE | Amenaza | Estado | Mitigación / justificación |
 |---|---|---|---|---|---|
-| 1 | Flujo Votante → auth-service (login) | Spoofing | Alguien que conozca la cédula de un votante intenta suplantarlo | Mitigado | Login exige cédula **+ PIN** de 6 dígitos generado por el admin (no derivable de la cédula) — ver migración `003_voter_access_codes.sql`. Antes del cambio, usuario y contraseña eran ambos la cédula. |
+| 1 | Flujo Votante → auth-service (login) | Spoofing | Alguien que conozca la cédula de un votante intenta suplantarlo | Mitigado | Login exige cédula **+ PIN** de 6 dígitos generado por el admin (no derivable de la cédula) — ver migración `003_voter_access_codes.sql` — **y un segundo factor**: el código de la app autenticadora del votante o, si vota asistido, la autorización del jurado de su mesa (migración `006_segundo_factor.sql`, amenazas 16 a 18). Antes del PIN, usuario y contraseña eran ambos la cédula. |
 | 2 | Flujo Votante → auth-service (login) | Denial of Service | Fuerza bruta del PIN de votante | Mitigado | Rate limiting: 8 intentos **fallidos** cada 15 min por IP (`voterLoginLimiter`, `services/auth/src/app.js`); los ingresos correctos no cuentan, para que un puesto con un solo equipo atienda a todos sus votantes. Además, el reporte de accesos sospechosos detecta PIN fallidos repetidos para una misma cédula. |
 | 3 | Flujo Votante → voting-service (emitir voto) | Repudiation | El votante niega haber votado, o alguien niega que fue él quien votó | Aceptado (por diseño) | El sistema registra que "un voto ocurrió" (`voter_id_hash`) pero deliberadamente NO liga el voto a la identidad real más allá de ese hash — es el trade-off de anonimato del voto, no un descuido. |
 | 4 | Proceso auth-service ↔ Padrón (voters) | Tampering | Alguien con acceso directo a Postgres altera cédula/puesto/mesa de un votante | Mitigado (parcial) | Cifrado AES-256-GCM en reposo (`services/auth/src/voterCrypto.js`). Residual: nonce determinístico (necesario para poder buscar `WHERE cedula = ...`) permite notar si dos filas cifran igual, aunque no leer el valor. |
@@ -91,6 +93,9 @@ separados aquí por responsabilidad):
 | 13 | Credenciales de despliegue (`.env`) | Information Disclosure | El archivo con todos los secretos se filtra al compartir el proyecto con un tercero | Mitigado | No hay un `.env` compartido que distribuir: cada instalación genera el suyo con secretos aleatorios (`scripts/lib/generar-env.js`, permisos 600) y tiene su propia base, así que filtrar uno compromete solo esa instalación. Nunca se commitea (`.gitignore`) ni entra a ninguna imagen. Quien controle la máquina donde corre puede leerlo: es un límite de confianza, no de este control. |
 | 14 | Flujo frontend → Postgres | Elevation of Privilege | Un atacante que comprometa el frontend (lo único expuesto a la red local) intenta conectarse directo a la base | Mitigado | Postgres solo está en la red interna `db-net` (`internal: true`), sin puerto en la PC; a esa red solo están conectados los 5 servicios de backend, no el frontend. La contraseña de la base es aleatoria y propia de cada instalación. |
 | 15 | Almacén Acta de escrutinio (`scrutiny_ledger`) | Tampering / Spoofing | Alguien con acceso total a la base se salta el trigger, cambia un acta y **recalcula todos los hashes** (la cadena no usa secretos), o inserta un acta que Scrutiny nunca emitió | Mitigado | Firma digital Ed25519 de cada acta (`services/scrutiny/src/actaSignature.js`): la clave privada (`ACTA_SIGNING_KEY`) la tiene solo `scrutiny-service`, y `analytics-service` verifica con la pública, por su cuenta. Sin la privada no se puede firmar el acta alterada: el indicador de veracidad (Resultados, Reportes, Escrutinio, PDF) la muestra como **alterada**. Residual: quien tenga el `.env` de la instalación tiene la clave privada. |
+| 16 | Flujo Votante → auth-service (login) | Spoofing | Alguien con el PIN de otro votante (filtrado, perdido o visto al escribirlo en la mesa) entra en su nombre | Mitigado | Segundo factor: el código TOTP (RFC 6238, `services/auth/src/totp.js`) de la app autenticadora del votante —Microsoft o Google Authenticator—, de un solo uso (`totp_last_step`) y válido ±30 s. El secreto se guarda cifrado (AES-256-GCM). Con el PIN solo, auth-service entrega un desafío de 5 minutos sin rol, que ningún servicio acepta como sesión. Tres códigos fallidos con el PIN correcto generan la alerta `pin_sin_segundo_factor` en accesos sospechosos, y el PIN se oculta al escribirlo. |
+| 17 | Flujo Votante → auth-service (registro del autenticador) | Spoofing | Alguien con la cédula y el PIN registra su propia app antes que el votante (confianza en el primer uso); el administrador conoce el PIN porque lo genera | Mitigado (parcial) | Un solo autenticador por cédula (`UPDATE … WHERE totp_secret IS NULL`): el votante que llega después ve que ya hay uno registrado y avisa. El registro queda en la auditoría (`VOTER_TOTP_ENROLLED`, con IP y hora) y el administrador lo restablece (`VOTER_TOTP_RESET`). Residual: el primer registro depende de que el PIN llegue solo al votante. |
+| 18 | Flujo Votante → auth-service (voto asistido) | Spoofing | Un jurado cómplice de quien tenga el PIN de un votante asistido le abre la sesión con su propio código | Mitigado (parcial) | El jurado solo autoriza a votantes **de su mesa** (puesto y mesa comparados en la base) y marcados como asistidos por el administrador (`VOTER_ASSISTED_CHANGED`); coteja la cédula física en persona; su código es de un solo uso y su ingreso también exige segundo factor. Cada autorización queda en la auditoría con su nombre (`ASSISTED_LOGIN_AUTHORIZED`). Residual: la complicidad, igual que en una elección física. |
 
 ## Alcance y limitaciones de este modelo
 
@@ -105,6 +110,10 @@ separados aquí por responsabilidad):
   operativo y su motor de Docker): la base, su volumen y el `.env` viven
   ahí, así que quien controle esa máquina controla la instalación (#13).
   Sí cubre qué pasa si se filtran los datos o las credenciales (#5, #13).
+- El jurado de mesa no aparece como entidad aparte en los diagramas: actúa
+  dentro del flujo de login del votante, escribiendo su usuario y su código en
+  el mismo equipo y en el mismo pedido (amenaza 18). Su propio ingreso al
+  panel sigue el flujo de los administradores, también con segundo factor.
 - Las categorías STRIDE no cubiertas explícitamente arriba (p. ej. Spoofing
   del rol admin) heredan las mismas mitigaciones ya documentadas en
   `docs/decisiones-y-riesgos.md`

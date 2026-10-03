@@ -9,8 +9,9 @@ const rateLimit = require('express-rate-limit');
 const { body, param, validationResult } = require('express-validator');
 const pool = require('./db');
 const { recordAuditEvent } = require('./audit');
-const { requireAdmin } = require('./middleware/auth');
+const { requireAdmin, requireRole } = require('./middleware/auth');
 const { encryptField, decryptField } = require('./voterCrypto');
+const totp = require('./totp');
 
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -33,8 +34,10 @@ app.use(helmet());
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000' }));
 app.use(express.json({ limit: '10kb' }));
 
-// Login de votantes (cédula + PIN de 6 dígitos): el límite frena a quien
-// intenta adivinar PINs o cédulas. Solo cuentan los intentos FALLIDOS: en un
+// Login de votantes (cédula + PIN de 6 dígitos, y después el código del
+// autenticador o la autorización del jurado): el límite frena a quien
+// intenta adivinar PINs, cédulas o códigos, y es el mismo para todos esos
+// pasos. Solo cuentan los intentos FALLIDOS: en un
 // puesto de votación todos los votantes entran desde el mismo equipo (la
 // misma IP), y si contaran también los correctos, el noveno votante en 15
 // minutos quedaría bloqueado. Después de 8 fallos, la IP queda bloqueada
@@ -80,6 +83,79 @@ function generateAccessCode() {
 app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', service: 'auth' }));
 
 /* ============================================================
+ * SEGUNDO FACTOR — TOTP (Microsoft Authenticator, Google Authenticator)
+ * ============================================================
+ *
+ * El ingreso del votante y el del jurado tienen dos pasos. El primero
+ * comprueba lo que la persona sabe (PIN o contraseña) y, si es correcto,
+ * todavía NO abre la sesión: devuelve un desafío, un token de 5 minutos que
+ * solo sirve para el segundo paso, y qué falta:
+ *   - next: 'codigo'   -> ya tiene autenticador: el código de 6 dígitos.
+ *   - next: 'registro' -> primer ingreso: escanear el QR y confirmar con un código.
+ *   - next: 'jurado'   -> votante asistido: lo autoriza el jurado de su mesa.
+ * El desafío no lleva rol, así que ningún servicio lo acepta como sesión.
+ */
+const CHALLENGE_EXPIRES_IN = '5m';
+const CHALLENGE_AUDIENCE = 'livemetric-segundo-factor';
+const CHALLENGE_EXPIRED = { error: 'La verificación venció: vuelve a ingresar desde el principio.' };
+const WRONG_CODE = { error: 'Código incorrecto o vencido: escribe el que muestra ahora la app.' };
+
+function signChallenge(purpose, claims) {
+  return jwt.sign({ purpose, ...claims }, JWT_SECRET, {
+    expiresIn: CHALLENGE_EXPIRES_IN,
+    algorithm: 'HS256',
+    audience: CHALLENGE_AUDIENCE,
+  });
+}
+
+// El desafío del primer paso, o null si venció, fue alterado o es de otro paso.
+function readChallenge(token, purpose) {
+  try {
+    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'], audience: CHALLENGE_AUDIENCE });
+    return payload.purpose === purpose ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+// Primer ingreso: el secreto va al navegador (es lo que lleva el QR) y,
+// cifrado, dentro del desafío. Se guarda recién cuando la persona demuestra
+// que lo cargó en su app, escribiendo un código válido.
+function enrollmentChallenge(purpose, claims, account) {
+  const secret = totp.generateSecret();
+  return {
+    next: 'registro',
+    challenge: signChallenge(purpose, { ...claims, s: encryptField(secret) }),
+    secret,
+    otpauthUri: totp.otpauthUri({ secret, account }),
+  };
+}
+
+// Consumen el paso del código: el UPDATE solo pasa si es posterior al último
+// usado, así que un código no sirve dos veces, ni con dos pedidos a la vez.
+async function consumeVoterStep(voterId, step) {
+  const result = await pool.query(
+    `UPDATE voters SET totp_last_step = $1
+      WHERE id = $2 AND (totp_last_step IS NULL OR totp_last_step < $1) RETURNING id`,
+    [step, voterId]
+  );
+  return result.rows.length === 1;
+}
+
+async function consumeJuradoStep(juradoId, step) {
+  const result = await pool.query(
+    `UPDATE admins SET totp_last_step = $1
+      WHERE id = $2 AND (totp_last_step IS NULL OR totp_last_step < $1) RETURNING id`,
+    [step, juradoId]
+  );
+  return result.rows.length === 1;
+}
+
+const challengeRule = body('challenge').isString().isLength({ max: 2048 }).isJWT();
+const codeRules = [challengeRule, body('code').trim().matches(/^\d{6}$/)];
+const CODE_FORMAT = { error: 'Escribe los 6 dígitos que muestra la app.' };
+
+/* ============================================================
  * LOGIN — ADMINISTRADOR (usuario + contraseña)
  * ============================================================ */
 
@@ -101,7 +177,7 @@ app.post(
 
     try {
       const result = await pool.query(
-        'SELECT id, username, password_hash, role FROM admins WHERE username = $1',
+        'SELECT id, username, password_hash, role, totp_secret FROM admins WHERE username = $1',
         [username]
       );
 
@@ -130,6 +206,16 @@ app.post(
         return res.status(401).json(genericError);
       }
 
+      // El jurado autoriza votos asistidos con su autenticador, así que su
+      // ingreso también tiene segundo factor (ver SEGUNDO FACTOR).
+      if (admin.role === 'jurado') {
+        const claims = { sub: admin.id };
+        if (!admin.totp_secret) {
+          return res.status(200).json(enrollmentChallenge('jurado-registro', claims, `Jurado ${admin.username}`));
+        }
+        return res.status(200).json({ next: 'codigo', challenge: signChallenge('jurado-codigo', claims) });
+      }
+
       const token = jwt.sign(
         { sub: admin.id, username: admin.username, role: admin.role },
         JWT_SECRET,
@@ -151,8 +237,89 @@ app.post(
   }
 );
 
+async function juradoFromChallenge(payload) {
+  const result = await pool.query(
+    `SELECT id, username, totp_secret, totp_last_step FROM admins WHERE id = $1 AND role = 'jurado'`,
+    [payload.sub]
+  );
+  return result.rows[0] || null;
+}
+
+async function rejectJurado(req, res, jurado, reason, status, payload) {
+  await recordAuditEvent({
+    eventType: 'LOGIN_FAILURE_ADMIN',
+    actorType: 'jurado',
+    actorRef: jurado.username,
+    req,
+    metadata: { reason },
+  });
+  return res.status(status).json(payload);
+}
+
+async function openJuradoSession(req, res, jurado, metadata = {}) {
+  const token = jwt.sign(
+    { sub: jurado.id, username: jurado.username, role: 'jurado' },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES_IN, algorithm: 'HS256' }
+  );
+  await recordAuditEvent({ eventType: 'LOGIN_SUCCESS_ADMIN', actorType: 'jurado', actorRef: jurado.username, req, metadata });
+  return res.status(200).json({ token, expiresIn: JWT_EXPIRES_IN, role: 'jurado' });
+}
+
+// Segundo paso del jurado: el código de su autenticador.
+app.post('/login/admin/codigo', adminLoginLimiter, codeRules, async (req, res) => {
+  if (!validationResult(req).isEmpty()) return res.status(400).json(CODE_FORMAT);
+  const payload = readChallenge(req.body.challenge, 'jurado-codigo');
+  if (!payload) return res.status(401).json(CHALLENGE_EXPIRED);
+
+  try {
+    const jurado = await juradoFromChallenge(payload);
+    if (!jurado || !jurado.totp_secret) return res.status(401).json(CHALLENGE_EXPIRED);
+    const step = totp.verify(decryptField(jurado.totp_secret), req.body.code, { lastStep: jurado.totp_last_step });
+    if (step === null || !(await consumeJuradoStep(jurado.id, step))) {
+      return rejectJurado(req, res, jurado, 'codigo_incorrecto', 401, WRONG_CODE);
+    }
+    return openJuradoSession(req, res, jurado);
+  } catch (err) {
+    console.error('Error en /login/admin/codigo:', err.message);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// Primer ingreso del jurado: registra su autenticador.
+app.post('/login/admin/registro', adminLoginLimiter, codeRules, async (req, res) => {
+  if (!validationResult(req).isEmpty()) return res.status(400).json(CODE_FORMAT);
+  const payload = readChallenge(req.body.challenge, 'jurado-registro');
+  if (!payload) return res.status(401).json(CHALLENGE_EXPIRED);
+
+  try {
+    const jurado = await juradoFromChallenge(payload);
+    if (!jurado) return res.status(401).json(CHALLENGE_EXPIRED);
+    const secret = decryptField(payload.s);
+    const step = totp.verify(secret, req.body.code);
+    if (step === null) return rejectJurado(req, res, jurado, 'codigo_registro_incorrecto', 401, WRONG_CODE);
+
+    const saved = await pool.query(
+      `UPDATE admins SET totp_secret = $1, totp_last_step = $2
+        WHERE id = $3 AND role = 'jurado' AND totp_secret IS NULL RETURNING id`,
+      [encryptField(secret), step, jurado.id]
+    );
+    if (saved.rows.length === 0) {
+      return rejectJurado(req, res, jurado, 'autenticador_ya_registrado', 409, {
+        error: 'Este usuario ya tiene un autenticador registrado. Si no fuiste tú, avisa al administrador.',
+      });
+    }
+    await recordAuditEvent({ eventType: 'USER_TOTP_ENROLLED', actorType: 'jurado', actorRef: jurado.username, req });
+    return openJuradoSession(req, res, jurado, { primerRegistro: true });
+  } catch (err) {
+    console.error('Error en /login/admin/registro:', err.message);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
 /* ============================================================
- * LOGIN — VOTANTE (cédula + PIN de acceso asignado por el admin)
+ * LOGIN — VOTANTE (cédula + PIN de acceso asignado por el admin, y el
+ * segundo factor: su autenticador, o el jurado de su mesa si vota asistido)
  * ============================================================ */
 
 app.post(
@@ -174,7 +341,8 @@ app.post(
 
     try {
       const result = await pool.query(
-        'SELECT id, cedula, is_active, polling_place, voting_table, access_code_hash FROM voters WHERE cedula = $1',
+        `SELECT id, is_active, assisted, totp_secret, access_code_hash
+           FROM voters WHERE cedula = $1`,
         [encryptField(cedula)]
       );
 
@@ -217,45 +385,180 @@ app.post(
         return res.status(401).json(genericError);
       }
 
-      // El JWT lleva el puesto y mesa asignados (no son secretos: identifican
-      // un lugar físico, no a la persona) para que Voting los copie a cada
-      // voto emitido y el escrutinio pueda consolidar por mesa sin volver a
-      // tocar la tabla "voters" ni la cédula.
-      //
-      // Token de vida MUY corta (por defecto 10 minutos): alcanza para
-      // completar un voto, pero limita la ventana de uso indebido si el
-      // token fuera interceptado o reutilizado.
-      const pollingPlace = decryptField(voter.polling_place);
-      const votingTable = decryptField(voter.voting_table);
-
-      const token = jwt.sign(
-        {
-          sub: voter.id,
-          role: 'voter',
-          voterIdHash,
-          pollingPlace,
-          votingTable,
-        },
-        JWT_SECRET,
-        { expiresIn: VOTER_JWT_EXPIRES_IN, algorithm: 'HS256' }
-      );
-
-      await recordAuditEvent({
-        eventType: 'LOGIN_SUCCESS_VOTER',
-        actorType: 'voter',
-        actorRef: voterIdHash,
-        req,
-      });
-
-      return res.status(200).json({
-        token,
-        expiresIn: VOTER_JWT_EXPIRES_IN,
-        role: 'voter',
-        pollingPlace,
-        votingTable,
-      });
+      // El PIN es correcto, pero la sesión se abre recién con el segundo
+      // factor (ver SEGUNDO FACTOR más arriba).
+      const claims = { sub: voter.id, vh: voterIdHash };
+      if (voter.assisted) {
+        return res.status(200).json({ next: 'jurado', challenge: signChallenge('votante-asistido', claims) });
+      }
+      if (!voter.totp_secret) {
+        // En su app la cuenta se ve como "Votante ···1234": la reconoce, sin
+        // mostrar la cédula completa a quien mire el celular.
+        return res.status(200).json(enrollmentChallenge('votante-registro', claims, `Votante ···${cedula.slice(-4)}`));
+      }
+      return res.status(200).json({ next: 'codigo', challenge: signChallenge('votante-codigo', claims) });
     } catch (err) {
       console.error('Error en /login/voter:', err.message);
+      return res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  }
+);
+
+// El votante del desafío, si sigue habilitado.
+async function voterFromChallenge(payload) {
+  const result = await pool.query(
+    `SELECT id, is_active, assisted, polling_place, voting_table, totp_secret, totp_last_step
+       FROM voters WHERE id = $1`,
+    [payload.sub]
+  );
+  const voter = result.rows[0];
+  return voter && voter.is_active ? voter : null;
+}
+
+async function rejectVoter(req, res, voterIdHash, reason, status, payload) {
+  await recordAuditEvent({
+    eventType: 'LOGIN_FAILURE_VOTER',
+    actorType: 'voter',
+    actorRef: voterIdHash,
+    req,
+    metadata: { reason },
+  });
+  return res.status(status).json(payload);
+}
+
+// La sesión del votante, ya con los dos factores.
+//
+// El JWT lleva el puesto y mesa asignados (no son secretos: identifican un
+// lugar físico, no a la persona) para que Voting los copie a cada voto
+// emitido y el escrutinio pueda consolidar por mesa sin volver a tocar la
+// tabla "voters" ni la cédula.
+//
+// Token de vida MUY corta (por defecto 10 minutos): alcanza para completar
+// un voto, pero limita la ventana de uso indebido si el token fuera
+// interceptado o reutilizado.
+async function openVoterSession(req, res, voter, voterIdHash, metadata) {
+  const pollingPlace = decryptField(voter.polling_place);
+  const votingTable = decryptField(voter.voting_table);
+  const token = jwt.sign(
+    { sub: voter.id, role: 'voter', voterIdHash, pollingPlace, votingTable },
+    JWT_SECRET,
+    { expiresIn: VOTER_JWT_EXPIRES_IN, algorithm: 'HS256' }
+  );
+  await recordAuditEvent({ eventType: 'LOGIN_SUCCESS_VOTER', actorType: 'voter', actorRef: voterIdHash, req, metadata });
+  return res.status(200).json({ token, expiresIn: VOTER_JWT_EXPIRES_IN, role: 'voter', pollingPlace, votingTable });
+}
+
+// Segundo paso: el código de 6 dígitos de su autenticador.
+app.post('/login/voter/codigo', voterLoginLimiter, codeRules, async (req, res) => {
+  if (!validationResult(req).isEmpty()) return res.status(400).json(CODE_FORMAT);
+  const payload = readChallenge(req.body.challenge, 'votante-codigo');
+  if (!payload) return res.status(401).json(CHALLENGE_EXPIRED);
+
+  try {
+    const voter = await voterFromChallenge(payload);
+    if (!voter || voter.assisted || !voter.totp_secret) return res.status(401).json(CHALLENGE_EXPIRED);
+    const step = totp.verify(decryptField(voter.totp_secret), req.body.code, { lastStep: voter.totp_last_step });
+    if (step === null || !(await consumeVoterStep(voter.id, step))) {
+      return rejectVoter(req, res, payload.vh, 'codigo_incorrecto', 401, WRONG_CODE);
+    }
+    return openVoterSession(req, res, voter, payload.vh, { segundoFactor: 'autenticador' });
+  } catch (err) {
+    console.error('Error en /login/voter/codigo:', err.message);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// Primer ingreso: registra su autenticador y, con eso, entra. Si dos
+// personas intentan registrar la misma cédula, gana la primera; la otra ve
+// que ya hay uno registrado (si no fue ella, avisa y el admin lo restablece).
+app.post('/login/voter/registro', voterLoginLimiter, codeRules, async (req, res) => {
+  if (!validationResult(req).isEmpty()) return res.status(400).json(CODE_FORMAT);
+  const payload = readChallenge(req.body.challenge, 'votante-registro');
+  if (!payload) return res.status(401).json(CHALLENGE_EXPIRED);
+
+  try {
+    const voter = await voterFromChallenge(payload);
+    if (!voter || voter.assisted) return res.status(401).json(CHALLENGE_EXPIRED);
+    const secret = decryptField(payload.s);
+    const step = totp.verify(secret, req.body.code);
+    if (step === null) return rejectVoter(req, res, payload.vh, 'codigo_registro_incorrecto', 401, WRONG_CODE);
+
+    const saved = await pool.query(
+      `UPDATE voters SET totp_secret = $1, totp_last_step = $2
+        WHERE id = $3 AND totp_secret IS NULL AND NOT assisted RETURNING id`,
+      [encryptField(secret), step, voter.id]
+    );
+    if (saved.rows.length === 0) {
+      return rejectVoter(req, res, payload.vh, 'autenticador_ya_registrado', 409, {
+        error: 'Esta cédula ya tiene un autenticador registrado. Si no fuiste tú, avisa al encargado del puesto.',
+      });
+    }
+    await recordAuditEvent({ eventType: 'VOTER_TOTP_ENROLLED', actorType: 'voter', actorRef: payload.vh, req });
+    return openVoterSession(req, res, voter, payload.vh, { segundoFactor: 'autenticador', primerRegistro: true });
+  } catch (err) {
+    console.error('Error en /login/voter/registro:', err.message);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// Voto asistido: el jurado de la mesa del votante verificó su cédula en
+// persona y autoriza el ingreso con el código de SU autenticador. Es el
+// segundo factor de quien no puede usar una app: sigue haciendo falta el
+// PIN del votante y, además, alguien autorizado y presente en la mesa.
+app.post(
+  '/login/voter/asistido',
+  voterLoginLimiter,
+  [
+    challengeRule,
+    body('juradoUsername').trim().isLength({ min: 3, max: 50 }).escape(),
+    body('juradoCode').trim().matches(/^\d{6}$/),
+  ],
+  async (req, res) => {
+    if (!validationResult(req).isEmpty()) {
+      return res.status(400).json({ error: 'Faltan el usuario del jurado o los 6 dígitos de su código.' });
+    }
+    const payload = readChallenge(req.body.challenge, 'votante-asistido');
+    if (!payload) return res.status(401).json(CHALLENGE_EXPIRED);
+
+    try {
+      const voter = await voterFromChallenge(payload);
+      if (!voter || !voter.assisted) return res.status(401).json(CHALLENGE_EXPIRED);
+
+      const result = await pool.query(
+        `SELECT id, username, polling_place, voting_table, totp_secret, totp_last_step
+           FROM admins WHERE username = $1 AND role = 'jurado'`,
+        [req.body.juradoUsername]
+      );
+      const jurado = result.rows[0];
+      const step = jurado && jurado.totp_secret
+        ? totp.verify(decryptField(jurado.totp_secret), req.body.juradoCode, { lastStep: jurado.totp_last_step })
+        : null;
+      const juradoInvalid = { error: 'Usuario o código del jurado incorrectos.' };
+      if (step === null) return rejectVoter(req, res, payload.vh, 'jurado_no_valido', 401, juradoInvalid);
+
+      // Solo el jurado de la mesa del votante. Puesto y mesa están cifrados
+      // con el mismo cifrado determinístico, así que se comparan sin descifrar.
+      if (jurado.polling_place !== voter.polling_place || jurado.voting_table !== voter.voting_table) {
+        return rejectVoter(req, res, payload.vh, 'jurado_de_otra_mesa', 403, {
+          error: 'Ese jurado no es de la mesa de este votante.',
+        });
+      }
+      if (!(await consumeJuradoStep(jurado.id, step))) {
+        return rejectVoter(req, res, payload.vh, 'jurado_no_valido', 401, juradoInvalid);
+      }
+
+      const pollingPlace = decryptField(voter.polling_place);
+      const votingTable = decryptField(voter.voting_table);
+      await recordAuditEvent({
+        eventType: 'ASSISTED_LOGIN_AUTHORIZED',
+        actorType: 'jurado',
+        actorRef: jurado.username,
+        req,
+        metadata: { voterIdHash: payload.vh, pollingPlace, votingTable },
+      });
+      return openVoterSession(req, res, voter, payload.vh, { segundoFactor: 'jurado', jurado: jurado.username });
+    } catch (err) {
+      console.error('Error en /login/voter/asistido:', err.message);
       return res.status(500).json({ error: 'Error interno del servidor' });
     }
   }
@@ -265,7 +568,9 @@ app.post(
  * ADMINISTRACIÓN DE IDENTIDAD — requiere JWT de administrador
  * ============================================================ */
 
-// Crear un nuevo usuario administrador.
+// Crear un usuario: administrador, auditor (solo lectura) o jurado de mesa.
+// El jurado necesita su puesto y su mesa: solo puede autorizar a los
+// votantes asistidos de esa mesa. Se guardan cifrados igual que en el padrón.
 app.post(
   '/admin/users',
   requireAdmin,
@@ -273,22 +578,34 @@ app.post(
   [
     body('username').trim().isLength({ min: 3, max: 50 }).escape(),
     body('password').isLength({ min: 10, max: 128 }),
-    body('role').optional().isIn(['admin', 'auditor']),
+    body('role').optional().isIn(['admin', 'auditor', 'jurado']),
+    body('pollingPlace').if(body('role').equals('jurado')).trim().isLength({ min: 2, max: 150 }),
+    body('votingTable').if(body('role').equals('jurado')).trim().isLength({ min: 1, max: 50 }),
   ],
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ error: 'Datos inválidos (la contraseña debe tener al menos 10 caracteres)' });
+      return res.status(400).json({
+        error: 'Datos inválidos: la contraseña necesita al menos 10 caracteres, y un jurado, su puesto y su mesa',
+      });
     }
 
     const { username, password } = req.body;
     const role = req.body.role || 'admin';
+    const jurado = role === 'jurado';
 
     try {
       const passwordHash = await bcrypt.hash(password, 12);
       const created = await pool.query(
-        'INSERT INTO admins (username, password_hash, role) VALUES ($1, $2, $3) RETURNING id, username, role, created_at',
-        [username, passwordHash, role]
+        `INSERT INTO admins (username, password_hash, role, polling_place, voting_table)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id, username, role, created_at`,
+        [
+          username,
+          passwordHash,
+          role,
+          jurado ? encryptField(req.body.pollingPlace) : null,
+          jurado ? encryptField(req.body.votingTable) : null,
+        ]
       );
 
       await recordAuditEvent({
@@ -296,7 +613,11 @@ app.post(
         actorType: 'admin',
         actorRef: req.user.username,
         req,
-        metadata: { newAdminUsername: username, role },
+        metadata: {
+          newAdminUsername: username,
+          role,
+          ...(jurado ? { pollingPlace: req.body.pollingPlace, votingTable: req.body.votingTable } : {}),
+        },
       });
 
       return res.status(201).json(created.rows[0]);
@@ -305,6 +626,57 @@ app.post(
         return res.status(409).json({ error: 'Ese nombre de usuario ya existe' });
       }
       console.error('Error en /admin/users:', err.message);
+      return res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  }
+);
+
+// Usuarios del panel, con la mesa de cada jurado y si ya registró su
+// autenticador (nunca el secreto).
+app.get('/admin/users', requireAdmin, adminOpsLimiter, async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, username, role, polling_place, voting_table, (totp_secret IS NOT NULL) AS has_totp, created_at
+         FROM admins ORDER BY id ASC`
+    );
+    const users = result.rows.map((u) => ({
+      ...u,
+      polling_place: u.polling_place ? decryptField(u.polling_place) : null,
+      voting_table: u.voting_table ? decryptField(u.voting_table) : null,
+    }));
+    return res.status(200).json({ users });
+  } catch (err) {
+    console.error('Error en GET /admin/users:', err.message);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// Un jurado perdió o cambió el celular: se borra su autenticador y lo vuelve
+// a registrar en su próximo ingreso.
+app.post(
+  '/admin/users/:id/reset-totp',
+  requireAdmin,
+  adminOpsLimiter,
+  [param('id').isInt({ min: 1 }).toInt()],
+  async (req, res) => {
+    if (!validationResult(req).isEmpty()) return res.status(400).json({ error: 'id de usuario inválido' });
+    try {
+      const updated = await pool.query(
+        `UPDATE admins SET totp_secret = NULL, totp_last_step = NULL
+          WHERE id = $1 AND role = 'jurado' RETURNING username`,
+        [req.params.id]
+      );
+      if (updated.rows.length === 0) return res.status(404).json({ error: 'Jurado no encontrado' });
+      await recordAuditEvent({
+        eventType: 'USER_TOTP_RESET',
+        actorType: 'admin',
+        actorRef: req.user.username,
+        req,
+        metadata: { targetUsername: updated.rows[0].username },
+      });
+      return res.status(200).json({ id: req.params.id, hasTotp: false });
+    } catch (err) {
+      console.error('Error en POST /admin/users/:id/reset-totp:', err.message);
       return res.status(500).json({ error: 'Error interno del servidor' });
     }
   }
@@ -460,7 +832,8 @@ app.get('/admin/voters', requireAdmin, adminOpsLimiter, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT id, cedula, full_name, polling_place, voting_table, is_active,
-              (access_code_hash IS NOT NULL) AS has_pin, created_at
+              (access_code_hash IS NOT NULL) AS has_pin, (totp_secret IS NOT NULL) AS has_totp,
+              assisted, created_at
          FROM voters
         ORDER BY id ASC
         LIMIT $1 OFFSET $2`,
@@ -475,6 +848,97 @@ app.get('/admin/voters', requireAdmin, adminOpsLimiter, async (req, res) => {
     return res.status(200).json({ limit, offset, voters });
   } catch (err) {
     console.error('Error en GET /admin/voters:', err.message);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// El votante perdió o cambió el celular: se borra su autenticador y lo
+// vuelve a registrar en su próximo ingreso (con su cédula y su PIN).
+app.post(
+  '/admin/voters/:id/reset-totp',
+  requireAdmin,
+  adminOpsLimiter,
+  [param('id').isInt({ min: 1 }).toInt()],
+  async (req, res) => {
+    if (!validationResult(req).isEmpty()) return res.status(400).json({ error: 'id de votante inválido' });
+    try {
+      const updated = await pool.query(
+        'UPDATE voters SET totp_secret = NULL, totp_last_step = NULL WHERE id = $1 RETURNING id',
+        [req.params.id]
+      );
+      if (updated.rows.length === 0) return res.status(404).json({ error: 'Votante no encontrado' });
+      await recordAuditEvent({
+        eventType: 'VOTER_TOTP_RESET',
+        actorType: 'admin',
+        actorRef: req.user.username,
+        req,
+        metadata: { voterId: req.params.id },
+      });
+      return res.status(200).json({ id: req.params.id, hasTotp: false });
+    } catch (err) {
+      console.error('Error en POST /admin/voters/:id/reset-totp:', err.message);
+      return res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  }
+);
+
+// Marca (o desmarca) a un votante para el voto asistido: en vez de su
+// autenticador, lo autoriza el jurado de su mesa. Queda en la auditoría.
+app.put(
+  '/admin/voters/:id/assisted',
+  requireAdmin,
+  adminOpsLimiter,
+  [param('id').isInt({ min: 1 }).toInt(), body('assisted').isBoolean({ strict: true })],
+  async (req, res) => {
+    if (!validationResult(req).isEmpty()) return res.status(400).json({ error: 'Indica assisted: true o false' });
+    try {
+      const updated = await pool.query('UPDATE voters SET assisted = $1 WHERE id = $2 RETURNING id, assisted', [
+        req.body.assisted,
+        req.params.id,
+      ]);
+      if (updated.rows.length === 0) return res.status(404).json({ error: 'Votante no encontrado' });
+      await recordAuditEvent({
+        eventType: 'VOTER_ASSISTED_CHANGED',
+        actorType: 'admin',
+        actorRef: req.user.username,
+        req,
+        metadata: { voterId: req.params.id, assisted: req.body.assisted },
+      });
+      return res.status(200).json(updated.rows[0]);
+    } catch (err) {
+      console.error('Error en PUT /admin/voters/:id/assisted:', err.message);
+      return res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  }
+);
+
+/* ============================================================
+ * JURADO DE MESA
+ * ============================================================ */
+
+// Su mesa y los votantes asistidos que puede autorizar: el nombre y los
+// últimos 4 dígitos de la cédula, para reconocerlos al cotejar el documento.
+app.get('/jurado/mesa', requireRole('jurado'), adminOpsLimiter, async (req, res) => {
+  try {
+    const jurado = await pool.query(
+      `SELECT polling_place, voting_table FROM admins WHERE id = $1 AND role = 'jurado'`,
+      [req.user.sub]
+    );
+    if (jurado.rows.length === 0) return res.status(404).json({ error: 'Jurado no encontrado' });
+    const { polling_place: pollingPlace, voting_table: votingTable } = jurado.rows[0];
+    const voters = await pool.query(
+      `SELECT full_name, cedula FROM voters
+        WHERE polling_place = $1 AND voting_table = $2 AND assisted AND is_active
+        ORDER BY full_name`,
+      [pollingPlace, votingTable]
+    );
+    return res.status(200).json({
+      pollingPlace: decryptField(pollingPlace),
+      votingTable: decryptField(votingTable),
+      assistedVoters: voters.rows.map((v) => ({ fullName: v.full_name, cedulaEnd: decryptField(v.cedula).slice(-4) })),
+    });
+  } catch (err) {
+    console.error('Error en GET /jurado/mesa:', err.message);
     return res.status(500).json({ error: 'Error interno del servidor' });
   }
 });

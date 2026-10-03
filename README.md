@@ -14,11 +14,12 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 
 - **Elecciones programadas**: plantillas genéricas o presidenciales (con candidatos, número y foto) que se abren y cierran solas según su horario, o se detienen a mano.
 - **Voto único por identidad**: el doble voto se impide por la identidad del votante, no por su navegador; el padrón se guarda cifrado.
+- **Doble factor para votar**: además de su PIN, el votante entra con el código de su app autenticadora (Microsoft o Google Authenticator), que registra en su primer ingreso escaneando un QR. Quien no puede usar una app vota asistido: lo autoriza el jurado de su mesa, que coteja su cédula en persona y escribe el código de su propio autenticador.
 - **Escrutinio independiente**: al cerrar, un servicio aparte recuenta los votos, consolida por mesa, determina el ganador, encadena el acta con hashes SHA-256 y la **firma digitalmente** (Ed25519); también en PDF.
 - **Sin resultados parciales**: mientras la elección está abierta, en vivo solo se ve cuántas personas votaron. Los votos por candidato u opción se publican cuando el escrutinio certifica el acta; antes no los entrega el sistema, a nadie.
 - **Indicador de veracidad del acta**: cada vez que se consulta un resultado certificado, se comprueba su firma, su hash y los votos guardados, y se muestra si el acta está **verificada**, **alterada** o **sin firma**, en el panel y en el PDF.
 - **Reportes con estadística avanzada**: tableros configurables con proyección de participación, momento de definición del resultado, verificación de integridad del acta y detección de accesos sospechosos.
-- **Auditoría**: cada intento de ingreso, exitoso o fallido, queda en un registro que no se puede modificar. Roles de administrador, auditor (solo lectura) y votante.
+- **Auditoría**: cada intento de ingreso, exitoso o fallido, queda en un registro que no se puede modificar. Roles de administrador, auditor (solo lectura), jurado de mesa y votante.
 
 **Propósito**: es un proyecto universitario que demuestra la seguridad integrada en todo el ciclo de vida del software: modelado de amenazas, controles automáticos en cada commit y push (secretos, código, dependencias, imágenes, infraestructura y ataque dinámico), contenedores endurecidos y despliegue con infraestructura como código.
 
@@ -29,7 +30,7 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 | Frontend | React 18, Vite, Recharts, react-grid-layout, jsPDF; servido por nginx |
 | Backend | Node.js 20, Express, node-cron (4 microservicios y un worker) |
 | Base de datos | PostgreSQL 16 en su propio contenedor, en una red interna sin puerto a la PC |
-| Seguridad en la aplicación | JWT, bcrypt, AES-256-GCM (padrón cifrado), cadena de hashes SHA-256, firma digital Ed25519 de las actas, helmet, rate limiting |
+| Seguridad en la aplicación | JWT, bcrypt, segundo factor TOTP (RFC 6238; Microsoft o Google Authenticator), AES-256-GCM (padrón cifrado), cadena de hashes SHA-256, firma digital Ed25519 de las actas, helmet, rate limiting |
 | Contenedores e infraestructura | Docker, Docker Compose, Docker Hub, Terraform (provider `kreuzwerker/docker`), Docker-in-Docker |
 | Orquestación y observabilidad | Docker Swarm, Prometheus, Grafana, Loki + Promtail, Falco |
 | CI/CD y seguridad | GitHub Actions, Gitleaks, Semgrep, ESLint (`eslint-plugin-security`), npm audit, Trivy, Checkov, OWASP ZAP |
@@ -118,7 +119,7 @@ El árbol completo, archivo por archivo, está en [Arquitectura](docs/arquitectu
 | [Guía de validación](docs/guia-de-validacion.md) | Pruebas manuales de cada funcionalidad |
 | [Decisiones y riesgos](docs/decisiones-y-riesgos.md) | Decisiones de diseño y riesgos aceptados |
 | [Modelo de amenazas](docs/threat-model/STRIDE-analysis.md) | Análisis STRIDE y diagramas de flujo de datos |
-| [Manual de Usuario](docs/manual-usuario.md) | Guía de las tres interfaces con capturas de pantalla |
+| [Manual de Usuario](docs/manual-usuario.md) | Guía de cada rol (administrador, votante, auditor y jurado), con capturas de pantalla |
 | [Orquestación](orquestacion/README.md) | Despliegue en Docker Swarm con réplicas, rolling updates y red cifrada |
 | [Observabilidad](monitoring/README.md) | Prometheus, Grafana, Loki y Falco: métricas, logs y detección en runtime |
 

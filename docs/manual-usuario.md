@@ -12,13 +12,14 @@ desarrolla. Si necesita levantar el sistema, vea
 ## Tabla de contenido
 
 1. [Antes de empezar](#1-antes-de-empezar)
-2. [Los tres tipos de usuario](#2-los-tres-tipos-de-usuario)
+2. [Los cuatro tipos de usuario](#2-los-cuatro-tipos-de-usuario)
 3. [Ingreso al sistema](#3-ingreso-al-sistema)
 4. [Guía del Administrador](#4-guía-del-administrador)
 5. [Guía del Votante](#5-guía-del-votante)
 6. [Guía del Auditor](#6-guía-del-auditor)
-7. [Ciclo completo de una elección](#7-ciclo-completo-de-una-elección)
-8. [Preguntas frecuentes](#8-preguntas-frecuentes)
+7. [Guía del Jurado de mesa](#7-guía-del-jurado-de-mesa)
+8. [Ciclo completo de una elección](#8-ciclo-completo-de-una-elección)
+9. [Preguntas frecuentes](#9-preguntas-frecuentes)
 
 ---
 
@@ -35,18 +36,19 @@ Desde otro equipo de la misma red, se reemplaza `localhost` por la IP del servid
 No requiere instalar nada en el equipo del usuario. Funciona en Chrome, Firefox y Edge
 en sus versiones recientes.
 
-![Captura 01: La pantalla de ingreso, con sus dos pestañas: Administrador / Auditor y Votante](img/01-pantalla-inicio.png)
-*Captura 01. La pantalla de ingreso, con sus dos pestañas: Administrador / Auditor y Votante.*
+![Captura 01: La pantalla de ingreso, con sus dos pestañas: Administrador / Auditor / Jurado y Votante](img/01-pantalla-inicio.png)
+*Captura 01. La pantalla de ingreso, con sus dos pestañas: Administrador / Auditor / Jurado y Votante.*
 
 ---
 
-## 2. Los tres tipos de usuario
+## 2. Los cuatro tipos de usuario
 
 | Rol | Cómo entra | Qué puede hacer |
 |---|---|---|
 | **Administrador** | usuario + contraseña | Todo: crear plantillas y elecciones, cargar el padrón, generar PINes, crear usuarios, consultar resultados, escrutinio y auditoría |
 | **Auditor** | usuario + contraseña | **Solo lectura**: consultar resultados y reportes. No puede modificar nada |
-| **Votante** | cédula + PIN de acceso | Ver las elecciones abiertas, emitir su voto y consultar su historial |
+| **Jurado de mesa** | usuario + contraseña + código de su autenticador | Autorizar el ingreso de los votantes asistidos de **su** mesa. No ve votos ni puede gestionar nada |
+| **Votante** | cédula + PIN de acceso + código de su autenticador (o, si vota asistido, la autorización del jurado) | Ver las elecciones abiertas, emitir su voto y consultar su historial |
 
 El rol de **Auditor** existe para que alguien pueda supervisar el proceso sin tener
 capacidad de alterarlo. Es la aplicación del principio de mínimo privilegio: quien
@@ -58,14 +60,15 @@ verifica no necesita poder modificar.
 
 La pantalla de inicio tiene dos pestañas. Elija la que corresponda a su rol.
 
-### 3.1 Administrador o Auditor
+### 3.1 Administrador, Auditor o Jurado
 
-1. Pestaña **Administrador**.
+1. Pestaña **Administrador / Auditor / Jurado**.
 2. Escriba su **Usuario** y **Contraseña**.
 3. Botón **Ingresar como administrador**.
 
 El sistema lo lleva al panel que corresponde a su rol: los administradores ven nueve
-pestañas; los auditores, solo dos.
+pestañas; los auditores, solo dos. El **jurado** tiene un paso más: el código de su
+autenticador, igual que el votante (ver [3.2](#32-votante)); la primera vez, lo registra.
 
 ![Captura 02: Ingreso de administrador: el usuario escrito y la contraseña oculta](img/02-login-admin.png)
 *Captura 02. Ingreso de administrador: el usuario escrito y la contraseña oculta.*
@@ -76,9 +79,62 @@ pestañas; los auditores, solo dos.
 2. Escriba su número de **Cédula**.
 3. Escriba su **PIN de acceso**, que le entrega el encargado de su puesto de votación.
 4. Botón **Ingresar a votar**.
+5. El segundo paso depende de su caso: la primera vez registra su autenticador; después,
+   escribe su código; si vota asistido, lo autoriza el jurado de su mesa. Se explica abajo.
 
-![Captura 03: Ingreso de votante: cédula, PIN de acceso y el texto de ayuda sobre el PIN](img/03-login-votante.png)
-*Captura 03. Ingreso de votante: cédula, PIN de acceso y el texto de ayuda sobre el PIN.*
+![Captura 03: Ingreso de votante: la cédula, el PIN oculto mientras se escribe y el texto de ayuda](img/03-login-votante.png)
+*Captura 03. Ingreso de votante: la cédula, el PIN oculto mientras se escribe y el texto de ayuda.*
+
+**¿Por qué un segundo paso?** El PIN lo entrega una persona y se puede perder, filtrar o
+ver por encima del hombro. Con el código de su celular, quien tenga solo el PIN no puede
+votar en su nombre.
+
+#### Primer ingreso: registrar el autenticador
+
+Se hace **una sola vez**, con la ayuda del encargado del puesto si hace falta:
+
+1. Instale **Microsoft Authenticator** o **Google Authenticator** en su celular (son
+   gratis, en la tienda de aplicaciones).
+2. En la app, toque **+** (agregar cuenta), elija **Otra cuenta** y **escanee el código
+   QR** que muestra la pantalla. Si no puede escanearlo, toque *«¿No puedes escanear?»* y
+   escriba la clave en la app.
+3. La app muestra un código de 6 dígitos para **LiveMetric**. Escríbalo y toque
+   **Confirmar y entrar**.
+
+![Captura 28: Primer ingreso del votante: los tres pasos para registrar su autenticador, con el QR](img/28-registro-autenticador.png)
+*Captura 28. Primer ingreso del votante: los tres pasos para registrar su autenticador, con el QR.*
+
+> 💡 **Huella o rostro:** en Microsoft Authenticator puede activar *Configuración → Bloqueo
+> de aplicación*, para que la app pida su huella o su rostro antes de mostrar los códigos.
+> Así, aunque alguien tome su celular desbloqueado, no ve el código.
+
+Si al confirmar aparece *«Esta cédula ya tiene un autenticador registrado»* y usted no lo
+registró, avise al encargado del puesto: alguien usó su PIN antes que usted. El
+administrador puede restablecer el autenticador.
+
+#### Ingresos siguientes: el código
+
+Después de la cédula y el PIN, abra la app y escriba los **6 dígitos de LiveMetric**.
+Cambian cada 30 segundos; si el código cambia mientras lo escribe, el anterior sirve
+unos segundos más. Cada código sirve **una sola vez**.
+
+![Captura 29: Ingresos siguientes: el código de 6 dígitos de la app](img/29-codigo-autenticador.png)
+*Captura 29. Ingresos siguientes: el código de 6 dígitos de la app.*
+
+#### Voto asistido
+
+Si usted no tiene un celular con apps o no puede usarlo, el administrador lo marca para el
+**voto asistido**. Después de su cédula y su PIN, la pantalla dice **«Voto asistido»**:
+
+1. Llame al **jurado de su mesa**. Él revisa su cédula física.
+2. El jurado escribe **su** usuario y **el código de su propio autenticador**.
+3. El jurado se aparta y usted vota en privado: **el jurado no ve su voto**.
+
+![Captura 30: Voto asistido: el jurado de la mesa escribe su usuario y el código de su autenticador](img/30-voto-asistido.png)
+*Captura 30. Voto asistido: el jurado de la mesa escribe su usuario y el código de su autenticador.*
+
+Solo puede autorizarlo el jurado **de su mesa**, y cada autorización queda registrada con
+el nombre del jurado.
 
 **Si el ingreso falla**, el sistema siempre responde lo mismo: *"Cédula o PIN
 incorrectos"*. No distingue entre una cédula que no existe y un PIN equivocado. Esto es
@@ -181,26 +237,42 @@ misma pestaña, en la sección **PIN de acceso generados**.
 
 Si un votante pierde su PIN, el administrador se lo regenera desde el listado del padrón.
 
+**Autenticador y voto asistido.** El listado muestra, para cada votante:
+
+- **Autenticador**: *Registrado* (ya lo configuró), *Pendiente* (lo registra en su primer
+  ingreso) o *No lo usa* (vota asistido).
+- **Voto asistido**: la casilla marca a quien no puede usar una app. Entrará con su PIN y
+  la autorización del jurado de su mesa. El sistema pide confirmación y lo registra en la
+  auditoría.
+- **Restablecer autenticador**: para quien cambió o perdió el celular. En su próximo
+  ingreso, con su cédula y su PIN, lo registra de nuevo.
+
 ![Captura 11: Carga del padrón: una fila por votante (cédula, nombre, puesto y mesa)](img/11-padron-carga.png)
 *Captura 11. Carga del padrón: una fila por votante (cédula, nombre, puesto y mesa).*
 
 ![Captura 12: Los PIN generados, que se muestran una sola vez. En esta captura están difuminados: no deben quedar credenciales en la documentación](img/12-padron-pines.png)
 *Captura 12. Los PIN generados, que se muestran una sola vez. En esta captura están difuminados: no deben quedar credenciales en la documentación.*
 
-![Captura 13: El padrón actual, con el estado del PIN de cada votante](img/13-padron-lista.png)
-*Captura 13. El padrón actual, con el estado del PIN de cada votante.*
+![Captura 13: El padrón actual: el PIN, el autenticador y el voto asistido de cada votante](img/13-padron-lista.png)
+*Captura 13. El padrón actual: el PIN, el autenticador y el voto asistido de cada votante.*
 
 ### 4.5 Usuarios
 
-Para crear otros administradores o auditores.
+Para crear otros administradores, auditores o jurados de mesa.
 
 1. Pestaña **Usuarios**.
 2. **Usuario** y **Contraseña** (mínimo 10 caracteres).
-3. Elija el rol: **Administrador** o **Auditor (solo lectura)**.
-4. Botón **Crear usuario**.
+3. Elija el rol: **Administrador**, **Auditor (solo lectura)** o **Jurado de mesa**.
+4. Para un jurado, escriba su **Puesto de votación** y su **Mesa**: solo podrá autorizar a
+   los votantes asistidos de esa mesa.
+5. Botón **Crear usuario**.
 
-![Captura 14: Creación de un usuario con rol de auditor (solo lectura)](img/14-usuarios.png)
-*Captura 14. Creación de un usuario con rol de auditor (solo lectura).*
+El listado de abajo muestra la mesa de cada jurado y si ya registró su autenticador. Si un
+jurado cambia o pierde el celular, **Restablecer autenticador** hace que lo registre de
+nuevo en su próximo ingreso.
+
+![Captura 14: Creación de un jurado de mesa, con su puesto y su mesa, y el listado de usuarios](img/14-usuarios.png)
+*Captura 14. Creación de un jurado de mesa, con su puesto y su mesa, y el listado de usuarios.*
 
 ### 4.6 Resultados
 
@@ -350,7 +422,37 @@ servidor rechaza cualquier intento de usar esas funciones con una sesión de aud
 
 ---
 
-## 7. Ciclo completo de una elección
+## 7. Guía del Jurado de mesa
+
+El jurado autoriza el ingreso de los votantes **asistidos** de su mesa: quienes no pueden
+usar una app autenticadora. Su autorización reemplaza el código del celular del votante,
+así que su propio ingreso también lleva segundo factor.
+
+**Primer ingreso:** entra por la pestaña **Administrador / Auditor / Jurado** con el
+usuario y la contraseña que le dio el administrador, y registra su autenticador igual
+que un votante (ver [3.2](#32-votante)). Conviene activar el bloqueo con huella o rostro de
+la app.
+
+**Su panel** muestra su mesa, los pasos para autorizar y la lista de votantes asistidos
+que puede autorizar (nombre y los últimos 4 dígitos de la cédula).
+
+![Captura 31: El panel del jurado: su mesa, cómo autorizar y los votantes asistidos de su mesa](img/31-panel-jurado.png)
+*Captura 31. El panel del jurado: su mesa, cómo autorizar y los votantes asistidos de su mesa.*
+
+**Cómo autorizar un voto asistido:**
+
+1. Pida la **cédula física** y compruebe que la foto y el nombre sean de la persona, y
+   que esté en su lista.
+2. La persona escribe su cédula y su PIN en el equipo de votación. **No mire el PIN.**
+3. Cuando la pantalla diga **«Voto asistido»**, escriba su usuario y el código de 6
+   dígitos de su autenticador (Captura 30).
+4. **Apártese**: el voto es secreto. Su autorización queda registrada en la auditoría.
+
+El sistema rechaza la autorización si el votante es de otra mesa o si el código ya se usó.
+
+---
+
+## 8. Ciclo completo de una elección
 
 Resumen del recorrido de punta a punta:
 
@@ -358,10 +460,11 @@ Resumen del recorrido de punta a punta:
 |---|---|---|---|
 | 1 | Crear la plantilla con los candidatos | Administrador | Plantillas |
 | 2 | Cargar el padrón de votantes | Administrador | Padrón |
-| 3 | Generar y entregar los PINes | Administrador | Padrón |
+| 3 | Generar y entregar los PINes; marcar el voto asistido de quien lo necesite | Administrador | Padrón |
+| 3b | Crear los jurados de las mesas con votantes asistidos | Administrador | Usuarios |
 | 4 | Programar la elección con su ventana horaria | Administrador | Elecciones |
 | 5 | **Apertura automática** al llegar la hora | Sistema | — |
-| 6 | Ingresar y votar | Votantes | Vista de votante |
+| 6 | Ingresar (PIN y código de su autenticador, o autorización del jurado) y votar | Votantes / Jurados | Vista de votante |
 | 7 | Seguir en vivo cuántas personas votaron | Administrador / Auditor | Resultados |
 | 8 | **Cierre automático** al vencer la hora | Sistema | — |
 | 9 | **Recuento y certificación automáticos** | Sistema | — |
@@ -374,13 +477,30 @@ alguien decida cuándo generarlo.
 
 ---
 
-## 8. Preguntas frecuentes
+## 9. Preguntas frecuentes
 
 **¿Puedo cambiar mi voto después de emitirlo?**
 No. Una vez confirmado, el voto es definitivo.
 
 **Perdí mi PIN, ¿qué hago?**
 Pídale al administrador que le genere uno nuevo desde la pestaña Padrón.
+
+**Cambié o perdí el celular con el autenticador.**
+Avise al encargado del puesto: el administrador restablece su autenticador y usted lo
+registra de nuevo en su próximo ingreso, con su cédula y su PIN.
+
+**No tengo celular, o no sé usar estas aplicaciones.**
+Pida que lo marquen para el **voto asistido**: el jurado de su mesa verifica su cédula y
+autoriza su ingreso. Usted sigue necesitando su PIN, y vota en privado.
+
+**El código de la app no funciona.**
+Escriba el que la app muestra en ese momento (cambia cada 30 segundos) y no uno anterior:
+cada código sirve una sola vez. Si sigue sin funcionar, revise que la hora del celular
+esté en automático: los códigos dependen de la hora.
+
+**¿El jurado puede ver por quién voté?**
+No. El jurado solo autoriza el ingreso y se aparta; el voto queda asociado a la mesa, no a
+usted, igual que el de cualquier votante.
 
 **¿El sistema sabe por quién voté?**
 El voto queda asociado a su mesa de votación, no a usted. El sistema registra que usted
@@ -409,7 +529,9 @@ Escrutinio, que revisa todas las actas y señala exactamente cuál y qué falló
 
 Las capturas están en `docs/img/`. Se tomaron con los datos de demostración (padrón,
 candidatos y votos ficticios) sobre una instalación limpia, con el navegador a 1280 px de
-ancho. Ninguna muestra credenciales: la contraseña aparece oculta y los PIN, difuminados.
+ancho. Ninguna muestra credenciales vigentes: la contraseña y el PIN aparecen ocultos, los
+PIN generados, difuminados, y el QR y los códigos de las capturas 28 a 30 son de una
+instalación de prueba ya borrada (además, cada código vence a los 30 segundos).
 
 | # | Archivo | Contenido |
 |---|---|---|
@@ -425,8 +547,8 @@ ancho. Ninguna muestra credenciales: la contraseña aparece oculta y los PIN, di
 | 10 | `10-elecciones-lista.png` | Listado de elecciones |
 | 11 | `11-padron-carga.png` | Carga del padrón |
 | 12 | `12-padron-pines.png` | PINes generados (difuminados) |
-| 13 | `13-padron-lista.png` | Listado del padrón |
-| 14 | `14-usuarios.png` | Creación de usuarios y roles |
+| 13 | `13-padron-lista.png` | Listado del padrón (PIN, autenticador, voto asistido) |
+| 14 | `14-usuarios.png` | Creación de usuarios y jurados |
 | 15 | `15-resultados-vivo.png` | Total en vivo (sin votos por opción) |
 | 16 | `16-resultados-certificados.png` | Resultados certificados |
 | 17 | `17-reportes.png` | Tablero de reportes |
@@ -439,6 +561,10 @@ ancho. Ninguna muestra credenciales: la contraseña aparece oculta y los PIN, di
 | 24 | `24-voto-registrado.png` | Confirmación de voto |
 | 25 | `25-votante-historial.png` | Historial y bloqueo de doble voto |
 | 26 | `26-panel-auditor.png` | Panel de auditor (2 pestañas) |
+| 28 | `28-registro-autenticador.png` | Registro del autenticador (primer ingreso) |
+| 29 | `29-codigo-autenticador.png` | Código del autenticador |
+| 30 | `30-voto-asistido.png` | Voto asistido: autorización del jurado |
+| 31 | `31-panel-jurado.png` | Panel del jurado de mesa |
 
 Las capturas 05 y 26 juntas muestran el control de acceso por rol: conviene usarlas también
 en el informe y en el video.

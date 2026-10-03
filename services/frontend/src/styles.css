@@ -221,6 +221,24 @@ input, select, textarea {
 
 .field-hint { font-size: 0.76rem; color: #8a806a; margin-top: 0.3rem; }
 
+/* Segundo factor del ingreso: un paso por vez y con letra grande, también
+   para quien usa poco el celular. */
+.segundo-factor-titulo { font-family: var(--font-serif); font-size: 1.35rem; margin: 0 0 0.5rem; color: #1d1a12; }
+.segundo-factor-texto { font-size: 0.98rem; line-height: 1.5; color: #3d3727; margin: 0 0 1rem; }
+.pasos-registro { padding-left: 1.2rem; margin: 0 0 0.8rem; font-size: 0.98rem; line-height: 1.5; color: #3d3727; }
+.pasos-registro li { margin-bottom: 0.45rem; }
+.qr-registro { display: flex; justify-content: center; margin: 0.4rem 0 0.8rem; }
+.qr-registro svg { background: #fff; border-radius: var(--radius); }
+.clave-manual { font-size: 0.88rem; color: #6b6350; margin-bottom: 1rem; }
+.clave-manual summary { cursor: pointer; }
+.clave-manual .mono { margin-top: 0.4rem; font-size: 1.05rem; letter-spacing: 0.08em; color: #1d1a12; word-break: break-all; }
+.field input.input-codigo { font-family: var(--font-mono); font-size: 1.7rem; letter-spacing: 0.35em; text-align: center; padding: 0.5rem; }
+.link-button.volver { display: block; margin: 1rem auto 0; color: #6b6350; }
+.jurado-pasos { padding-left: 1.2rem; margin: 0; line-height: 1.6; color: var(--color-text-muted); }
+.jurado-pasos li { margin-bottom: 0.35rem; }
+.acciones-padron { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.table td.sin-corte { white-space: nowrap; }
+
 .btn {
   display: inline-flex;
   align-items: center;

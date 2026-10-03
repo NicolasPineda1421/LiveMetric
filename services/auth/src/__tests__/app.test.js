@@ -10,6 +10,7 @@ const request = require('supertest');
 const app = require('../app');
 const pool = require('../db');
 const { encryptField } = require('../voterCrypto');
+const totp = require('../totp');
 
 const RUN_ID = `CITEST_${Date.now()}`;
 const TEST_ADMIN_USER = `${RUN_ID}_admin`;
@@ -30,6 +31,14 @@ const BASE_ADMIN_USER = `${RUN_ID}_base`;
 const BASE_ADMIN_PASS = `Ci-${crypto.randomBytes(12).toString('base64url')}`;
 
 let adminToken;
+
+// Segundo paso del ingreso de un votante con autenticador, con el código que
+// mostraría su app: en el primer ingreso, con el secreto del QR.
+function registrarAutenticador(paso1) {
+  return request(app)
+    .post('/login/voter/registro')
+    .send({ challenge: paso1.body.challenge, code: totp.codeAt(paso1.body.secret, totp.currentStep()) });
+}
 
 async function createBaseAdmin() {
   await pool.query('INSERT INTO admins (username, password_hash, role) VALUES ($1, $2, $3)', [
@@ -194,13 +203,18 @@ describe('POST /admin/voters/bulk + login de votante con PIN', () => {
     expect(res.body.accessCodes).toHaveLength(0); // no genera PIN nuevo en un update
   });
 
-  it('el votante puede loguearse con el PIN generado', async () => {
+  it('con el PIN generado pasa al segundo factor: en el primer ingreso, registrar su autenticador', async () => {
     const res = await request(app)
       .post('/login/voter')
       .send({ cedula: TEST_VOTER_CEDULA, pin: generatedPin });
     expect(res.status).toBe(200);
-    expect(res.body.role).toBe('voter');
-    expect(res.body.pollingPlace).toBe('Puesto CI');
+    expect(res.body.next).toBe('registro');
+    expect(res.body.token).toBeUndefined();
+
+    const sesion = await registrarAutenticador(res);
+    expect(sesion.status).toBe(200);
+    expect(sesion.body.role).toBe('voter');
+    expect(sesion.body.pollingPlace).toBe('Puesto CI');
   });
 
   it('rechaza un PIN incorrecto con un mensaje genérico', async () => {
@@ -220,6 +234,8 @@ describe('POST /admin/voters/bulk + login de votante con PIN', () => {
     expect(found).toBeDefined();
     expect(found.polling_place).toBe('Puesto CI');
     expect(found.has_pin).toBe(true);
+    expect(found.has_totp).toBe(true);
+    expect(found.assisted).toBe(false);
     voterId = found.id;
   });
 
@@ -240,6 +256,8 @@ describe('POST /admin/voters/bulk + login de votante con PIN', () => {
       .post('/login/voter')
       .send({ cedula: TEST_VOTER_CEDULA, pin: newPin });
     expect(newPinLogin.status).toBe(200);
+    // El autenticador no cambia con el PIN: ya registrado, pide el código.
+    expect(newPinLogin.body.next).toBe('codigo');
   });
 });
 
@@ -260,7 +278,8 @@ describe('Datos del padrón con caracteres especiales', () => {
     });
 
     // El puesto y la mesa viajan en el JWT y de ahí a cada voto y al acta.
-    const login = await request(app).post('/login/voter').send({ cedula, pin: carga.body.accessCodes[0].pin });
+    const paso1 = await request(app).post('/login/voter').send({ cedula, pin: carga.body.accessCodes[0].pin });
+    const login = await registrarAutenticador(paso1);
     expect(login.body).toMatchObject({ pollingPlace: 'Colegio San José / Sede A&B', votingTable: 'Mesa 1/2' });
 
     // Se borra acá: apunta al admin de prueba, que el afterAll borra después.

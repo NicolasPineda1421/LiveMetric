@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { HIDDEN_RESULTS_NOTE } from '../components/widgets/dataAdapters.js';
+import { ownValue } from '../utils/ownValue.js';
 import ReportsTab from './ReportsTab.jsx';
 
 const TABS = [
@@ -745,20 +746,43 @@ function ScrutinyTab({ session }) {
 
 /* ============================================================ Usuarios */
 
+const ROLE_LABEL = { admin: 'administrador', auditor: 'auditor', jurado: 'jurado de mesa' };
+
 function UsersTab({ session }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('admin');
+  const [pollingPlace, setPollingPlace] = useState('');
+  const [votingTable, setVotingTable] = useState('');
+  const [users, setUsers] = useState([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  function load() {
+    api.listUsers(session.token).then((d) => setUsers(d.users)).catch((e) => setError(e.message));
+  }
+  useEffect(load, [session.token]);
 
   async function submit(e) {
     e.preventDefault();
     setError(''); setSuccess('');
     try {
-      await api.createAdminUser(session.token, username, password, role);
-      setSuccess(`Usuario "${username}" (${role === 'auditor' ? 'auditor' : 'administrador'}) creado correctamente.`);
+      await api.createAdminUser(session.token, username, password, role, role === 'jurado' ? { pollingPlace, votingTable } : {});
+      setSuccess(`Usuario "${username}" (${ownValue(ROLE_LABEL, role)}) creado correctamente.`);
       setUsername(''); setPassword('');
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function resetTotp(user) {
+    if (!window.confirm(`¿Restablecer el autenticador de "${user.username}"? Tendrá que registrarlo de nuevo en su próximo ingreso.`)) return;
+    setError(''); setSuccess('');
+    try {
+      await api.resetUserTotp(session.token, user.id);
+      setSuccess(`Autenticador de "${user.username}" restablecido: lo registra de nuevo en su próximo ingreso.`);
+      load();
     } catch (err) {
       setError(err.message);
     }
@@ -766,11 +790,12 @@ function UsersTab({ session }) {
 
   return (
     <div>
-      <h2 className="section-title">Usuarios administradores</h2>
+      <h2 className="section-title">Usuarios</h2>
       <p className="section-desc">
-        Crea otras cuentas de administrador o de auditor (solo lectura: puede ver
-        resultados y reportes, nunca gestionar el sistema). Úsalo para reemplazar la
-        credencial de arranque apenas configures el sistema.
+        Crea cuentas de administrador, de auditor (solo lectura: puede ver resultados y reportes, nunca gestionar el
+        sistema) o de jurado de mesa. El jurado autoriza el ingreso de los votantes asistidos de su mesa con el código
+        de su propio autenticador, que registra en su primer ingreso. Úsalo también para reemplazar la credencial de
+        arranque apenas configures el sistema.
       </p>
 
       <div className="panel">
@@ -790,10 +815,45 @@ function UsersTab({ session }) {
             <select value={role} onChange={(e) => setRole(e.target.value)}>
               <option value="admin">Administrador</option>
               <option value="auditor">Auditor (solo lectura)</option>
+              <option value="jurado">Jurado de mesa (autoriza votos asistidos)</option>
             </select>
           </div>
+          {role === 'jurado' && (
+            <div className="grid-2">
+              <div className="field-dark">
+                <label>Puesto de votación</label>
+                <input value={pollingPlace} onChange={(e) => setPollingPlace(e.target.value)} required minLength={2} />
+              </div>
+              <div className="field-dark">
+                <label>Mesa</label>
+                <input value={votingTable} onChange={(e) => setVotingTable(e.target.value)} required />
+              </div>
+            </div>
+          )}
           <button className="btn btn-gold">Crear usuario</button>
         </form>
+      </div>
+
+      <div className="panel">
+        <h3>Usuarios ({users.length})</h3>
+        <table className="table">
+          <thead><tr><th>Usuario</th><th>Rol</th><th>Mesa</th><th>Autenticador</th><th></th></tr></thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id}>
+                <td>{u.username}</td>
+                <td>{ownValue(ROLE_LABEL, u.role) || u.role}</td>
+                <td>{u.role === 'jurado' ? `${u.polling_place} — ${u.voting_table}` : '—'}</td>
+                <td>{u.role !== 'jurado' ? '—' : u.has_totp ? 'Registrado' : 'Pendiente (primer ingreso)'}</td>
+                <td>
+                  {u.role === 'jurado' && u.has_totp && (
+                    <button className="btn btn-outline" onClick={() => resetTotp(u)}>Restablecer autenticador</button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -810,6 +870,7 @@ function VotersTab({ session }) {
   const [success, setSuccess] = useState('');
   const [newAccessCodes, setNewAccessCodes] = useState([]);
   const [resettingId, setResettingId] = useState(null);
+  const [savingId, setSavingId] = useState(null);
 
   function load() {
     api.listVoters(session.token, 100, 0).then((d) => setVoters(d.voters)).catch((e) => setError(e.message));
@@ -859,6 +920,39 @@ function VotersTab({ session }) {
     }
   }
 
+  async function resetTotp(voter) {
+    if (!window.confirm(`¿Restablecer el autenticador de ${voter.full_name}? En su próximo ingreso, con su cédula y su PIN, lo registra de nuevo.`)) return;
+    setError(''); setSuccess(''); setNewAccessCodes([]);
+    setSavingId(voter.id);
+    try {
+      await api.resetVoterTotp(session.token, voter.id);
+      setSuccess(`Autenticador de ${voter.full_name} restablecido.`);
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function setAssisted(voter, assisted) {
+    const aviso = assisted
+      ? `¿Marcar a ${voter.full_name} para el voto asistido? Entrará con su PIN y la autorización del jurado de su mesa, en lugar de su autenticador.`
+      : `¿Quitar el voto asistido de ${voter.full_name}? Entrará con su PIN y su autenticador.`;
+    if (!window.confirm(aviso)) return;
+    setError(''); setSuccess(''); setNewAccessCodes([]);
+    setSavingId(voter.id);
+    try {
+      await api.setVoterAssisted(session.token, voter.id, assisted);
+      setSuccess(assisted ? `${voter.full_name} votará asistido.` : `${voter.full_name} ya no vota asistido.`);
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   return (
     <div>
       <h2 className="section-title">Padrón electoral</h2>
@@ -866,7 +960,10 @@ function VotersTab({ session }) {
         Carga masiva de votantes. Una fila por votante, formato <code>cedula, nombre completo, puesto de votación, mesa</code>.
         El puesto y la mesa identifican dónde está habilitado cada votante y quedan asociados a cada voto que emita, para
         poder consolidar el escrutinio por mesa. A cada votante nuevo se le genera un PIN de acceso: es lo que usa para
-        entrar a votar (junto a su cédula), no una contraseña que él mismo elige.
+        entrar a votar (junto a su cédula), no una contraseña que él mismo elige. Además, en su primer ingreso registra
+        un autenticador (Microsoft o Google Authenticator) y desde ahí entra también con su código. Quien no pueda usar
+        una app se marca para el <strong>voto asistido</strong>: lo autoriza el jurado de su mesa, que verifica su
+        cédula en persona.
       </p>
 
       <div className="panel">
@@ -908,20 +1005,37 @@ function VotersTab({ session }) {
           <div className="empty-state">Sin votantes cargados todavía.</div>
         ) : (
           <table className="table">
-            <thead><tr><th>Cédula</th><th>Nombre</th><th>Puesto</th><th>Mesa</th><th>Activo</th><th>PIN</th><th></th></tr></thead>
+            <thead><tr><th>Cédula</th><th>Nombre</th><th>Puesto</th><th>Mesa</th><th>Activo</th><th>PIN</th><th>Autenticador</th><th>Voto asistido</th><th></th></tr></thead>
             <tbody>
               {voters.map((v) => (
                 <tr key={v.id}>
-                  <td className="mono">{v.cedula}</td>
+                  <td className="mono sin-corte">{v.cedula}</td>
                   <td>{v.full_name}</td>
                   <td>{v.polling_place}</td>
                   <td>{v.voting_table}</td>
                   <td>{v.is_active ? 'Sí' : 'No'}</td>
                   <td>{v.has_pin ? 'Asignado' : 'Sin asignar'}</td>
+                  <td>{v.assisted ? 'No lo usa' : v.has_totp ? 'Registrado' : 'Pendiente'}</td>
                   <td>
-                    <button className="btn btn-outline" disabled={resettingId === v.id} onClick={() => resetPin(v.id)}>
-                      {resettingId === v.id ? 'Generando…' : v.has_pin ? 'Regenerar PIN' : 'Generar PIN'}
-                    </button>
+                    <input
+                      type="checkbox"
+                      aria-label={`Voto asistido de ${v.full_name}`}
+                      checked={v.assisted}
+                      disabled={savingId === v.id}
+                      onChange={(e) => setAssisted(v, e.target.checked)}
+                    />
+                  </td>
+                  <td>
+                    <div className="acciones-padron">
+                      <button className="btn btn-outline" disabled={resettingId === v.id} onClick={() => resetPin(v.id)}>
+                        {resettingId === v.id ? 'Generando…' : v.has_pin ? 'Regenerar PIN' : 'Generar PIN'}
+                      </button>
+                      {v.has_totp && !v.assisted && (
+                        <button className="btn btn-outline" disabled={savingId === v.id} onClick={() => resetTotp(v)}>
+                          Restablecer autenticador
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

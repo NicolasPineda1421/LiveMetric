@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { api } from '../api.js';
+import SegundoFactor from '../components/SegundoFactor.jsx';
 
 export default function LoginScreen({ onLogin }) {
   const [tab, setTab] = useState('admin'); // 'admin' | 'voter'
@@ -12,12 +13,21 @@ export default function LoginScreen({ onLogin }) {
   const [cedulaUser, setCedulaUser] = useState('');
   const [pin, setPin] = useState('');
 
+  // Respuesta del primer paso cuando falta el segundo factor (votante, o
+  // jurado): { next, challenge, secret?, otpauthUri?, quien }.
+  const [paso, setPaso] = useState(null);
+
   async function submitAdmin(e) {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
       const data = await api.loginAdmin(adminUser, adminPass);
+      if (data.next) {
+        setAdminPass('');
+        setPaso({ ...data, quien: 'jurado' });
+        return;
+      }
       onLogin({ role: data.role, token: data.token, username: adminUser });
     } catch (err) {
       setError(err.message);
@@ -32,18 +42,50 @@ export default function LoginScreen({ onLogin }) {
     setLoading(true);
     try {
       const data = await api.loginVoter(cedulaUser, pin);
-      onLogin({
-        role: 'voter',
-        token: data.token,
-        cedula: cedulaUser,
-        pollingPlace: data.pollingPlace,
-        votingTable: data.votingTable,
-      });
+      setPin('');
+      setPaso({ ...data, quien: 'votante' });
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
+  }
+
+  // Segundo paso: "enviar" hace el pedido que corresponde y devuelve la sesión.
+  async function completar(enviar) {
+    setError('');
+    setLoading(true);
+    try {
+      const data = await enviar();
+      if (paso.quien === 'jurado') {
+        onLogin({ role: 'jurado', token: data.token, username: adminUser });
+      } else {
+        onLogin({
+          role: 'voter',
+          token: data.token,
+          cedula: cedulaUser,
+          pollingPlace: data.pollingPlace,
+          votingTable: data.votingTable,
+        });
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function enviarCodigo(codigo) {
+    const registro = paso.next === 'registro';
+    if (paso.quien === 'jurado') {
+      return completar(() => (registro ? api.enrollAdmin : api.verifyAdminCode)(paso.challenge, codigo));
+    }
+    return completar(() => (registro ? api.enrollVoter : api.verifyVoterCode)(paso.challenge, codigo));
+  }
+
+  function volver() {
+    setPaso(null);
+    setError('');
   }
 
   return (
@@ -65,18 +107,28 @@ export default function LoginScreen({ onLogin }) {
 
       <div className="login-panel">
         <div className="login-card">
-          <div className="login-tabs">
-            <button className={`login-tab ${tab === 'admin' ? 'active' : ''}`} onClick={() => { setTab('admin'); setError(''); }}>
-              Administrador / Auditor
-            </button>
-            <button className={`login-tab ${tab === 'voter' ? 'active' : ''}`} onClick={() => { setTab('voter'); setError(''); }}>
-              Votante
-            </button>
-          </div>
+          {!paso && (
+            <div className="login-tabs">
+              <button className={`login-tab ${tab === 'admin' ? 'active' : ''}`} onClick={() => { setTab('admin'); setError(''); }}>
+                Administrador / Auditor / Jurado
+              </button>
+              <button className={`login-tab ${tab === 'voter' ? 'active' : ''}`} onClick={() => { setTab('voter'); setError(''); }}>
+                Votante
+              </button>
+            </div>
+          )}
 
           {error && <div className="error-banner on-paper">{error}</div>}
 
-          {tab === 'admin' ? (
+          {paso ? (
+            <SegundoFactor
+              paso={paso}
+              loading={loading}
+              onCodigo={enviarCodigo}
+              onJurado={(usuario, codigo) => completar(() => api.authorizeAssistedVoter(paso.challenge, usuario, codigo))}
+              onVolver={volver}
+            />
+          ) : tab === 'admin' ? (
             <form onSubmit={submitAdmin}>
               <div className="field">
                 <label htmlFor="admin-user">Usuario</label>
@@ -96,8 +148,11 @@ export default function LoginScreen({ onLogin }) {
               </div>
               <div className="field">
                 <label htmlFor="voter-pin">PIN de acceso</label>
-                <input id="voter-pin" value={pin} onChange={(e) => setPin(e.target.value)} required inputMode="numeric" maxLength={10} />
-                <div className="field-hint">El PIN te lo entrega el encargado de tu puesto de votación.</div>
+                <input id="voter-pin" type="password" value={pin} onChange={(e) => setPin(e.target.value)} required inputMode="numeric" autoComplete="off" maxLength={10} />
+                <div className="field-hint">
+                  El PIN te lo entrega el encargado de tu puesto de votación. Después te pediremos el código de tu
+                  autenticador o, si votas asistido, la autorización del jurado de tu mesa.
+                </div>
               </div>
               <button className="btn btn-primary" disabled={loading}>{loading ? 'Verificando…' : 'Ingresar a votar'}</button>
             </form>

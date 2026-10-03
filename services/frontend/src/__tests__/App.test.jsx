@@ -58,8 +58,9 @@ it('la sesión no se guarda en el navegador, y "Salir" la cierra', async () => {
   expect(screen.getByRole('button', { name: 'Ingresar como administrador' })).toBeInTheDocument();
 });
 
-it('un votante entra a su papeleta', async () => {
-  api.loginVoter.mockResolvedValue({ token: 'jwt-votante', pollingPlace: 'Puesto Central', votingTable: 'Mesa 1' });
+it('un votante entra a su papeleta, con su PIN y el código de su autenticador', async () => {
+  api.loginVoter.mockResolvedValue({ next: 'codigo', challenge: 'desafio' });
+  api.verifyVoterCode.mockResolvedValue({ token: 'jwt-votante', pollingPlace: 'Puesto Central', votingTable: 'Mesa 1' });
   api.listActiveElections.mockResolvedValue([]);
   api.listMyVotes.mockResolvedValue({ votes: [] });
   const usuario = userEvent.setup();
@@ -68,6 +69,31 @@ it('un votante entra a su papeleta', async () => {
   await usuario.type(screen.getByLabelText('Cédula'), '1000000001');
   await usuario.type(screen.getByLabelText('PIN de acceso'), '482913');
   await usuario.click(screen.getByRole('button', { name: 'Ingresar a votar' }));
+  await usuario.type(screen.getByLabelText('Código de la app'), '123456');
+  await usuario.click(screen.getByRole('button', { name: 'Entrar' }));
   expect(await screen.findByText('No hay elecciones activas en este momento. Vuelve más tarde.')).toBeInTheDocument();
   expect(localStorage.length).toBe(0);
+});
+
+it('un jurado entra a su panel: su mesa y los votantes asistidos, sin pestañas de gestión', async () => {
+  api.loginAdmin.mockResolvedValue({ next: 'codigo', challenge: 'desafio-j' });
+  api.verifyAdminCode.mockResolvedValue({ token: 'jwt-jurado', role: 'jurado' });
+  api.getJuradoMesa.mockResolvedValue({
+    pollingPlace: 'Puesto Central',
+    votingTable: 'Mesa 1',
+    assistedVoters: [{ fullName: 'Rosa Pérez', cedulaEnd: '0042' }],
+  });
+  const usuario = userEvent.setup();
+  render(<App />);
+  await usuario.type(screen.getByLabelText('Usuario'), 'jurado.mesa1');
+  await usuario.type(screen.getByLabelText('Contraseña'), 'clave');
+  await usuario.click(screen.getByRole('button', { name: 'Ingresar como administrador' }));
+  await usuario.type(screen.getByLabelText('Código de la app'), '123456');
+  await usuario.click(screen.getByRole('button', { name: 'Entrar' }));
+
+  expect(await screen.findByText('Jurado: jurado.mesa1')).toBeInTheDocument();
+  expect(await screen.findByText('Puesto Central — Mesa 1')).toBeInTheDocument();
+  expect(screen.getByText('Rosa Pérez')).toBeInTheDocument();
+  expect(screen.getByText('···0042')).toBeInTheDocument();
+  expect(pestanas()).toEqual([]);
 });

@@ -168,6 +168,21 @@ describe('POST /vote', () => {
     expect(res.body.error).toBe('Este token no es válido para votar');
   });
 
+  it('rechaza el desafío del primer paso del ingreso (PIN correcto, sin el segundo factor) (403)', async () => {
+    // Mismo formato que emite auth-service tras el PIN: sin rol, solo sirve
+    // para presentar el código del autenticador o la autorización del jurado.
+    const desafio = jwt.sign(
+      { purpose: 'votante-codigo', sub: 1, vh: `${RUN_ID}-HASH-desafio` },
+      JWT_SECRET,
+      { algorithm: 'HS256', expiresIn: '5m', audience: 'livemetric-segundo-factor' }
+    );
+    const res = await request(app)
+      .post('/vote')
+      .set('Authorization', `Bearer ${desafio}`)
+      .send({ electionId: activeElection1Id, optionId: optionAId });
+    expect(res.status).toBe(403);
+  });
+
   it('registra un voto exitoso con un JWT de votante válido (201)', async () => {
     const res = await request(app)
       .post('/vote')

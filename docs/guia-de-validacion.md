@@ -21,6 +21,18 @@ Pruebas manuales para comprobar que cada funcionalidad hace lo que promete, adem
 5. **Append-only del log de auditoría** — Igual que con `scrutiny_ledger`: `UPDATE audit_log SET actor_ref = 'x' WHERE id = 1;` directo en PostgreSQL debe ser rechazado por el trigger `trg_audit_no_update`.
 6. **Nada de PII en el log** — Revisar cualquier fila de `audit_log` para eventos de tipo `*_VOTER`: la columna `actor_ref` debe contener siempre un hash SHA-256 (64 caracteres hexadecimales), nunca un número de cédula reconocible.
 
+## Segundo factor y voto asistido
+
+Las pruebas automáticas están en `services/auth/src/__tests__/segundoFactor.test.js` y `totp.test.js` (vectores del RFC 6238). Para comprobarlo a mano hace falta un celular con Microsoft Authenticator o Google Authenticator.
+
+1. **El PIN solo no abre la sesión** — `POST /login/voter` con cédula y PIN correctos debe responder `200` con `next` y un `challenge`, **sin** `token`. Usar ese `challenge` como token en cualquier ruta (por ejemplo `GET /admin/voters`, o `POST /vote` en Voting) debe responder `403`: no tiene rol.
+2. **Registro en el primer ingreso** — Con un votante sin autenticador, la pantalla muestra el QR y la clave. Escanearlo y escribir el código: entra. En **Padrón**, su autenticador figura *Registrado*, y en la base, `voters.totp_secret` está cifrado (no es la clave que mostró la pantalla).
+3. **Un código no sirve dos veces** — Entrar con un código y, enseguida, volver a ingresar la cédula y el PIN y escribir **el mismo** código: `401` "Código incorrecto o vencido". Un código de hace más de un minuto también se rechaza.
+4. **Un solo autenticador por cédula** — Pedir dos veces el primer paso de un votante nuevo (dos QR distintos) y confirmar los dos: el primero entra, el segundo recibe `409` "ya tiene un autenticador registrado".
+5. **Restablecer** — En **Padrón**, **Restablecer autenticador**: el próximo ingreso vuelve a mostrar el QR. Queda `VOTER_TOTP_RESET` en **Auditoría**.
+6. **Voto asistido** — Marcar a un votante como asistido y crear un jurado de su mesa. Con el PIN del votante, la pantalla pide la autorización del jurado: con el usuario y el código del jurado entra, y en **Auditoría** queda `ASSISTED_LOGIN_AUTHORIZED` con el nombre del jurado. Un jurado **de otra mesa**, con un código válido, recibe `403`; el mismo código del jurado, usado dos veces, `401`.
+7. **Alerta de PIN filtrado** — Con el PIN correcto, fallar tres veces el código en 15 minutos: el widget **Accesos sospechosos** de Reportes muestra *"PIN correcto, pero el código no"* para esa cédula.
+
 ## Detener una elección, plantilla presidencial, mesas y acta
 
 1. **Detener una elección antes de tiempo** — En "Elecciones", crea una con ventana larga (ej. 1 hora) y pulsa "Detener" mientras está `scheduled` o `active`. Debe quedar `closed` de inmediato, con `stopped_manually: true`. En menos de un minuto (`SCHEDULER_CRON`), `scheduler-worker` la certifica igual que a una cerrada por tiempo — revisa `docker compose logs -f scheduler-worker` para confirmarlo, y luego "Resultados" debe mostrar `certified: true`.

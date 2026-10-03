@@ -69,8 +69,13 @@ Tampoco hay credenciales de la aplicación en el repositorio: `db/init.sql` no c
      de arranque (src/scripts/crearAdmin.js); los PINs, desde "Padrón"
 
 1) Admin hace login       → POST /login/admin (Auth)         → JWT rol "admin", ~1h
-   Votante hace login     → POST /login/voter (Auth)         → JWT rol "voter", ~10min
-   (cédula + PIN; todo intento, exitoso o fallido, queda en audit_log sin PII cruda)
+   Votante hace login     → POST /login/voter (Auth)         → desafío (5 min, sin rol)
+                          → POST /login/voter/codigo         → JWT rol "voter", ~10min
+   (cédula + PIN, y después el código de su app autenticadora; la primera vez,
+    /login/voter/registro registra la app con un QR; si vota asistido,
+    /login/voter/asistido con el usuario y el código del jurado de su mesa.
+    Todo intento, exitoso o fallido, queda en audit_log sin PII cruda)
+   Jurado hace login      → POST /login/admin + /login/admin/codigo → JWT rol "jurado"
 
 2) Admin crea una PLANTILLA en Voting     → POST /admin/templates   (JWT admin)
 3) Admin instancia una ELECCIÓN           → POST /admin/elections   (JWT admin)

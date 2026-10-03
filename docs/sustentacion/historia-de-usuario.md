@@ -41,6 +41,8 @@ Todas corren en el job `unit-tests` del pipeline en cada push. Durante la operac
 
 1. **Instalación de demostración.** Levantar una instalación nueva con `./scripts/start.sh` (o `scripts\start.bat`) y crear su administrador cuando el script lo pida. El paso 5 cambia el acta de forma **permanente**: no usar una instalación con datos que importen. Para volver a empezar: `docker compose down -v`.
 2. **Padrón.** En **Padrón**, cargar tres votantes y anotar los PIN que muestra (solo se ven esa vez).
+   - **Autenticadores.** Ingresar una vez con cada votante para registrar su autenticador: escanear el QR con Microsoft Authenticator o Google Authenticator en un celular (pueden quedar las tres cuentas en el mismo) y salir. Así, en la demostración, cada ingreso es cédula, PIN y código.
+   - **Opcional, voto asistido:** marcar a uno de los tres como **Voto asistido**, crear en **Usuarios** el jurado de su mesa y registrar el autenticador del jurado.
 3. **Plantilla.** En **Plantillas**, crear una genérica con tres opciones.
 4. **Ventanas abiertas.**
    - El navegador con el administrador.
@@ -53,8 +55,8 @@ Todas corren en el job `unit-tests` del pipeline en cada push. Durante la operac
 | # | Quién | Qué se hace | Qué se ve y qué decir |
 |---|---|---|---|
 | 1 | Administrador | **Elecciones** → programar "Elección de la sustentación", con apertura en un minuto y cierre en una hora | El worker la abre solo, sin intervención manual, en el siguiente minuto |
-| 2 | Votante | Ingresar con cédula y PIN, elegir una opción, **Emitir voto** | "Voto registrado". Al volver, la papeleta ya no aparece: *Ya emitiste tu voto en esta elección*. El historial dice que votó, pero no en qué elección ni por quién (criterio 1) |
-| 3 | Votante | Repetir con uno o dos votantes más | Hacen falta varios votos para poder dar vuelta el resultado en el paso 5 |
+| 2 | Votante | Ingresar con cédula, PIN y el código de su app autenticadora; elegir una opción, **Emitir voto** | Sin el código del celular, el PIN solo no alcanza. "Voto registrado". Al volver, la papeleta ya no aparece: *Ya emitiste tu voto en esta elección*. El historial dice que votó, pero no en qué elección ni por quién (criterio 1) |
+| 3 | Votante | Repetir con uno o dos votantes más (si se preparó, uno asistido: autoriza el jurado de su mesa con su código) | Hacen falta varios votos para poder dar vuelta el resultado en el paso 5. En el asistido, la auditoría registra qué jurado autorizó |
 | 4 | Administrador | **Elecciones** → **Detener** → confirmar | En menos de un minuto el worker pide la certificación a Scrutiny. En **Resultados**: **✓ Acta verificada**, con la clave. **Descargar Acta** (PDF) y **Escrutinio → Verificar actas** (criterios 3 y 4) |
 | 5 | Atacante | En la terminal: `docker compose exec -T analytics-service node - <id> < scripts/demo/alterar-acta.js`, donde `<id>` es el número de la elección (columna ID de **Elecciones**) | El script cuenta lo que hace, en cinco pasos. **1.** El `UPDATE` directo lo rechaza la base (*append-only*). **2.** Con permisos de dueño de la tabla, apaga el trigger. **3.** Mueve votos para dar vuelta el ganador. **4.** Recalcula todos los hashes: la cadena vuelve a cuadrar. **5.** Reactiva el trigger. Corre en el contenedor de Analytics a propósito: tiene la base y el código, pero no la clave privada |
 | 6 | Administrador | Volver a consultar **Resultados** y **Escrutinio → Verificar actas** | **✘ Acta alterada**: *La firma digital no corresponde al acta* y *N opción(es) no coinciden con el acta* (Figura 1). La cadena de hashes sola no lo habría detectado; la firma y el reconteo sí (criterio 5) |

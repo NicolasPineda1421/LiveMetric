@@ -159,9 +159,48 @@ describe('Usuarios', () => {
     await usuario.type(clave, 'una-clave-larga');
     await usuario.selectOptions(campo('Rol'), 'auditor');
     await usuario.click(screen.getByRole('button', { name: 'Crear usuario' }));
-    expect(api.createAdminUser).toHaveBeenCalledWith('jwt-admin', 'auditora', 'una-clave-larga', 'auditor');
+    expect(api.createAdminUser).toHaveBeenCalledWith('jwt-admin', 'auditora', 'una-clave-larga', 'auditor', {});
     expect(await screen.findByText('Usuario "auditora" (auditor) creado correctamente.')).toBeInTheDocument();
     expect(clave).toHaveValue('');
+  });
+
+  it('un jurado se crea con su puesto y su mesa', async () => {
+    api.createAdminUser.mockResolvedValue({});
+    api.listUsers.mockResolvedValue({ users: [] });
+    const usuario = await abrir('Usuarios');
+    expect(screen.queryByText('Mesa', { selector: 'label' })).not.toBeInTheDocument();
+    await usuario.type(campo('Usuario'), 'jurado.mesa1');
+    await usuario.type(campo('Contraseña (mínimo 10 caracteres)'), 'una-clave-larga');
+    await usuario.selectOptions(campo('Rol'), 'jurado');
+    await usuario.type(campo('Puesto de votación'), 'Puesto Central');
+    await usuario.type(campo('Mesa'), 'Mesa 1');
+    await usuario.click(screen.getByRole('button', { name: 'Crear usuario' }));
+    expect(api.createAdminUser).toHaveBeenCalledWith('jwt-admin', 'jurado.mesa1', 'una-clave-larga', 'jurado', {
+      pollingPlace: 'Puesto Central',
+      votingTable: 'Mesa 1',
+    });
+    expect(await screen.findByText('Usuario "jurado.mesa1" (jurado de mesa) creado correctamente.')).toBeInTheDocument();
+  });
+
+  it('lista los usuarios; a un jurado con autenticador se le puede restablecer, con confirmación', async () => {
+    api.listUsers.mockResolvedValue({
+      users: [
+        { id: 1, username: 'admin', role: 'admin', polling_place: null, voting_table: null, has_totp: false },
+        { id: 5, username: 'jurado.mesa1', role: 'jurado', polling_place: 'Puesto Central', voting_table: 'Mesa 1', has_totp: true },
+        { id: 6, username: 'jurado.mesa2', role: 'jurado', polling_place: 'Puesto Central', voting_table: 'Mesa 2', has_totp: false },
+      ],
+    });
+    api.resetUserTotp.mockResolvedValue({});
+    const usuario = await abrir('Usuarios');
+    const fila = (await screen.findByText('jurado.mesa1')).closest('tr');
+    expect(fila).toHaveTextContent('Puesto Central — Mesa 1');
+    expect(fila).toHaveTextContent('Registrado');
+    expect(screen.getByText('jurado.mesa2').closest('tr')).toHaveTextContent('Pendiente (primer ingreso)');
+    expect(screen.getAllByRole('button', { name: 'Restablecer autenticador' })).toHaveLength(1);
+
+    await usuario.click(within(fila).getByRole('button', { name: 'Restablecer autenticador' }));
+    expect(window.confirm).toHaveBeenCalled();
+    expect(api.resetUserTotp).toHaveBeenCalledWith('jwt-admin', 5);
   });
 });
 
@@ -225,6 +264,47 @@ describe('Padrón', () => {
     await usuario.click(screen.getByRole('button', { name: 'Regenerar PIN' }));
     expect(api.resetVoterPin).toHaveBeenCalledWith('jwt-admin', 7);
     expect(await screen.findByText('771204')).toBeInTheDocument();
+  });
+});
+
+describe('Padrón: segundo factor y voto asistido', () => {
+  const votante = (cambios) => ({ id: 7, cedula: '1000000010', full_name: 'Ana Gómez', polling_place: 'P', voting_table: 'M', is_active: true, has_pin: true, has_totp: false, assisted: false, ...cambios });
+
+  it('muestra si registró el autenticador, y se lo restablece con confirmación', async () => {
+    api.listVoters.mockResolvedValue({ voters: [votante({ has_totp: true })] });
+    api.resetVoterTotp.mockResolvedValue({});
+    const usuario = await abrir('Padrón');
+    const fila = (await screen.findByText('Ana Gómez')).closest('tr');
+    expect(fila).toHaveTextContent('Registrado');
+    await usuario.click(within(fila).getByRole('button', { name: 'Restablecer autenticador' }));
+    expect(window.confirm).toHaveBeenCalled();
+    expect(api.resetVoterTotp).toHaveBeenCalledWith('jwt-admin', 7);
+    expect(await screen.findByText('Autenticador de Ana Gómez restablecido.')).toBeInTheDocument();
+  });
+
+  it('marcar el voto asistido pide confirmación y avisa que lo autoriza el jurado', async () => {
+    api.listVoters.mockResolvedValue({ voters: [votante()] });
+    api.setVoterAssisted.mockResolvedValue({ id: 7, assisted: true });
+    window.confirm.mockReturnValue(false);
+    const usuario = await abrir('Padrón');
+    const casilla = await screen.findByRole('checkbox', { name: 'Voto asistido de Ana Gómez' });
+    await usuario.click(casilla);
+    expect(api.setVoterAssisted).not.toHaveBeenCalled();
+    expect(window.confirm.mock.calls[0][0]).toMatch(/autorización del jurado de su mesa/);
+
+    window.confirm.mockReturnValue(true);
+    await usuario.click(casilla);
+    expect(api.setVoterAssisted).toHaveBeenCalledWith('jwt-admin', 7, true);
+    expect(await screen.findByText('Ana Gómez votará asistido.')).toBeInTheDocument();
+  });
+
+  it('un votante asistido no usa autenticador: no se ofrece restablecerlo', async () => {
+    api.listVoters.mockResolvedValue({ voters: [votante({ has_totp: true, assisted: true })] });
+    await abrir('Padrón');
+    const fila = (await screen.findByText('Ana Gómez')).closest('tr');
+    expect(fila).toHaveTextContent('No lo usa');
+    expect(within(fila).getByRole('checkbox')).toBeChecked();
+    expect(within(fila).queryByRole('button', { name: 'Restablecer autenticador' })).not.toBeInTheDocument();
   });
 });
 

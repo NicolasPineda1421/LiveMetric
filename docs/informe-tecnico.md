@@ -39,11 +39,12 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 
 - **Elecciones programadas.** Plantillas genéricas o presidenciales (con número, nombre y foto de cada candidato), que se abren y cierran solas según su horario o se detienen a mano.
 - **Voto único por identidad.** El doble voto se impide por la identidad del votante, no por su navegador. El padrón se guarda cifrado con AES-256-GCM.
+- **Doble factor para votar.** El votante entra con su PIN y con el código de su app autenticadora (Microsoft o Google Authenticator), que registra en su primer ingreso. Quien no puede usar una app vota asistido: lo autoriza el jurado de su mesa con su propio autenticador, después de cotejar su cédula en persona.
 - **Escrutinio independiente.** Al cerrar, un servicio aparte recuenta los votos desde cero, consolida por mesa, determina el ganador, encadena el acta con hashes SHA-256 y la **firma digitalmente** con Ed25519. El acta también se descarga en PDF.
 - **Sin resultados parciales.** Mientras la elección está abierta, en vivo solo se ve cuántas personas votaron. Los votos por candidato u opción se publican cuando el escrutinio certifica el acta: antes, el sistema no los entrega a nadie, tampoco al administrador ni pidiéndolos directamente a la API.
 - **Indicador de veracidad.** Cada vez que se consulta un resultado certificado, otro servicio comprueba por su cuenta la firma, el hash y los votos guardados, y muestra si el acta está **verificada**, **alterada** o **sin firma** (Figura 1).
 - **Reportes.** Tableros configurables con proyección de participación, momento de definición del resultado y detección de accesos sospechosos.
-- **Auditoría y roles.** Cada ingreso, exitoso o fallido, queda en un registro que no se puede modificar. Hay tres roles: administrador, auditor (solo lectura) y votante.
+- **Auditoría y roles.** Cada ingreso, exitoso o fallido, queda en un registro que no se puede modificar. Hay cuatro roles: administrador, auditor (solo lectura), jurado de mesa (autoriza los votos asistidos de su mesa) y votante.
 
 ![Pestaña Resultados con el sello de acta verificada](img/16-resultados-certificados.png)
 
@@ -192,19 +193,29 @@ sequenceDiagram
     FE->>AUTH: POST /auth/login/voter
     AUTH->>AUTH: Límite: 8 intentos fallidos cada 15 min por IP
     AUTH->>DB: SELECT … FROM voters WHERE cedula = cifrado(cedula)
-    DB-->>AUTH: votante (activo, puesto y mesa cifrados, bcrypt del PIN)
+    DB-->>AUTH: votante (activo, bcrypt del PIN, autenticador, asistido)
     alt Activo, con PIN, y el PIN coincide
-        AUTH->>AUTH: voterIdHash = SHA256(cedula + salt privado)
-        AUTH->>AUTH: JWT HS256 {role: voter, voterIdHash, puesto, mesa}, 10 min
-        AUTH->>DB: audit_log: LOGIN_SUCCESS_VOTER
-        AUTH-->>FE: 200 {token}
+        AUTH-->>FE: 200 {next, desafío de 5 min sin rol}
     else Cualquier otro caso
         AUTH->>DB: audit_log: LOGIN_FAILURE_VOTER (motivo)
         AUTH-->>FE: 401 "Cédula o PIN incorrectos"
     end
+    alt Con autenticador
+        Votante->>FE: Código de 6 dígitos de su app
+        FE->>AUTH: POST /auth/login/voter/codigo
+        AUTH->>AUTH: TOTP válido (±30 s) y posterior al último usado
+    else Voto asistido
+        Votante->>FE: El jurado de su mesa escribe su usuario y su código
+        FE->>AUTH: POST /auth/login/voter/asistido
+        AUTH->>AUTH: Código del jurado válido y jurado de la misma mesa
+    end
+    AUTH->>AUTH: voterIdHash = SHA256(cedula + salt privado)
+    AUTH->>AUTH: JWT HS256 {role: voter, voterIdHash, puesto, mesa}, 10 min
+    AUTH->>DB: audit_log: LOGIN_SUCCESS_VOTER (y ASSISTED_LOGIN_AUTHORIZED)
+    AUTH-->>FE: 200 {token}
 ```
 
-*Figura 4. Autenticación del votante. El mensaje de error es el mismo en todos los casos, para no revelar qué cédulas existen.*
+*Figura 4. Autenticación del votante, en dos pasos: el PIN y después el código de su autenticador o, si vota asistido, la autorización del jurado de su mesa. En el primer ingreso, el segundo paso registra el autenticador (QR). El mensaje de error del PIN es el mismo en todos los casos, para no revelar qué cédulas existen.*
 
 El segundo flujo es el que da sentido al sistema: el cierre de una elección y la emisión de su acta.
 
@@ -286,13 +297,16 @@ erDiagram
     ADMINS { int id PK
         string username
         string password_hash
-        string role }
+        string role "admin, auditor o jurado"
+        string totp_secret "cifrado" }
     VOTERS { int id PK
         string cedula "cifrada"
         string full_name
         string polling_place "cifrado"
         string voting_table "cifrada"
-        string access_code_hash "bcrypt del PIN" }
+        string access_code_hash "bcrypt del PIN"
+        string totp_secret "cifrado"
+        bool assisted }
     ELECTIONS { int id PK
         string title
         string status
@@ -428,7 +442,10 @@ Las líneas punteadas de los diagramas son **fronteras de confianza**: la red do
 | # | Elemento | Amenaza | Estado | Contramedida |
 |---|---|---|---|---|
 | **S** | **Suplantación** | | | |
-| 1 | Votante → Auth (login) | Alguien que conoce la cédula de un votante intenta suplantarlo | Mitigado | Cédula **y** PIN de 6 dígitos generado por el administrador, guardado con bcrypt |
+| 1 | Votante → Auth (login) | Alguien que conoce la cédula de un votante intenta suplantarlo | Mitigado | Cédula **y** PIN de 6 dígitos generado por el administrador, guardado con bcrypt, **y** un segundo factor (16 a 18) |
+| 16 | Votante → Auth (login) | Alguien con el PIN de otro votante entra en su nombre | Mitigado | Código TOTP de la app autenticadora del votante (Microsoft o Google Authenticator): de un solo uso, válido ±30 s, con el secreto cifrado. Sin el celular, el PIN solo no abre la sesión |
+| 17 | Votante → Auth (registro) | Alguien con la cédula y el PIN registra su app antes que el votante | Mitigado (parcial) | Un solo autenticador por cédula: el votante que llega después lo nota y avisa; queda en la auditoría y el administrador lo restablece |
+| 18 | Votante → Auth (voto asistido) | Un jurado cómplice abre la sesión de un votante asistido | Mitigado (parcial) | Solo el jurado de la mesa del votante, que coteja la cédula en persona; su código es de un solo uso y cada autorización queda en la auditoría con su nombre |
 | 8 | Scheduler → Scrutiny | Un servicio no autorizado ordena certificar una elección | Mitigado | Token interno, comparado en tiempo constante (`timingSafeEqual`), que nunca llega al navegador |
 | 15 | Acta (`scrutiny_ledger`) | Insertar un acta que Scrutiny nunca emitió | Mitigado | Firma Ed25519: sin la clave privada no se puede fabricar un acta válida |
 | **T** | **Manipulación** | | | |
@@ -450,14 +467,14 @@ Las líneas punteadas de los diagramas son **fronteras de confianza**: la red do
 | 11 | Admin/Auditor → Analytics | Un auditor crea, edita o borra un tablero | Mitigado | `requireRole('admin')` en cada endpoint de escritura |
 | 14 | Frontend → PostgreSQL | Desde el frontend comprometido, conectarse a la base | Mitigado | La base está en `db-net` (interna), donde el frontend no está conectado |
 
-*Tabla 5. Las 15 amenazas del modelo, agrupadas por categoría STRIDE (la 15 aparece en dos categorías).*
+*Tabla 5. Las 18 amenazas del modelo, agrupadas por categoría STRIDE (la 15 aparece en dos categorías).*
 
 ### 3.4 Contramedidas implementadas
 
 Las contramedidas se refuerzan entre sí: ninguna amenaza grave depende de un solo control.
 
 - **Integridad del acta, en cuatro capas.** El trigger *append-only* impide cambiarla; la cadena de hashes delata un cambio suelto; la firma Ed25519 delata a quien rehace toda la cadena. Además, Analytics recuenta los votos guardados y los compara con el acta. La Figura 12 muestra el resultado de esa verificación en la interfaz.
-- **Identidad del votante.** La cédula viaja al servidor una vez, en el login. Desde ahí, el sistema usa solo su hash con un salt privado de Auth, y en la base queda cifrada.
+- **Identidad del votante, con dos factores.** El votante entra con su PIN y con el código de su app autenticadora (TOTP, compatible con Microsoft y Google Authenticator), que registra en su primer ingreso. Quien no puede usar una app vota asistido: el jurado de su mesa coteja su cédula en persona y autoriza con el código de su propio autenticador, así que el segundo factor nunca desaparece. La cédula viaja al servidor una vez, en el login; desde ahí, el sistema usa solo su hash con un salt privado de Auth, y en la base queda cifrada, igual que el secreto del autenticador.
 - **Aislamiento de red.** Hay un solo puerto abierto a la red (3000), la base está en una red interna y el frontend no llega a ella.
 - **Mínimo privilegio en los contenedores.** Corren sin root, con el sistema de archivos de solo lectura y sin poder ganar privilegios; Falco vigila que siga así en ejecución (sección 6).
 - **Secretos por instalación.** Cada instalación genera sus propios secretos: no hay credenciales compartidas en el repositorio, en las imágenes ni en el pipeline, que genera las suyas en cada corrida.
@@ -948,6 +965,7 @@ Además, Falco corre con `rule_matching=all`, porque por defecto sus reglas gen�
 ### 7.4 Trabajo futuro
 
 - **Transporte y secretos.** TLS en nginx y `docker secret` en Swarm.
+- **Autenticación.** Con TLS, passkeys con biometría (WebAuthn) como segundo factor del votante, la opción más fuerte y la más fácil de usar; un canal por SMS o WhatsApp (por ejemplo, Infobip) para quien tenga celular sin apps; segundo factor también para administradores y auditores, y dos jurados por cada voto asistido.
 - **Pruebas de seguridad más profundas.** Un escaneo activo de ZAP con autenticación, y convertirlo en un control bloqueante para las alertas altas y medias.
 - **Mínimo privilegio en la base.** Un usuario de PostgreSQL por servicio, con permisos solo sobre sus tablas.
 - **Rotación de claves.** Un script para rotar la clave del padrón y un registro de claves públicas anteriores, para que la rotación de la clave de firma no invalide las actas viejas.

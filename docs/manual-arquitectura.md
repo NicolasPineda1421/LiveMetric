@@ -57,7 +57,7 @@ Estilo arquitectónico resumido:
 
 ### 3.1 Frontend (React + Vite + nginx)
 
-**Responsabilidad:** interfaz para administradores (gestión de plantillas, elecciones, padrón, usuarios, auditoría, reportes y escrutinio), para auditores (resultados y reportes, solo lectura) y para votantes (login con cédula y PIN, boleta, confirmación de voto). Su nginx es además el **único punto de entrada** del sistema: reenvía `/auth`, `/voting`, `/analytics` y `/scrutiny` a cada microservicio.
+**Responsabilidad:** interfaz para administradores (gestión de plantillas, elecciones, padrón, usuarios, auditoría, reportes y escrutinio), para auditores (resultados y reportes, solo lectura), para jurados de mesa (su mesa y los votantes asistidos que pueden autorizar) y para votantes (login con cédula, PIN y segundo factor; boleta, confirmación de voto). Su nginx es además el **único punto de entrada** del sistema: reenvía `/auth`, `/voting`, `/analytics` y `/scrutiny` a cada microservicio.
 
 **Por qué así:** una SPA evita recargas de página completas durante el flujo de votación (importante en un puesto físico con muchos votantes en fila). Se sirve con nginx en producción (no con el servidor de desarrollo de Vite) porque nginx es el estándar de facto para servir estáticos de forma eficiente y porque permite inyectar configuración en tiempo de arranque del contenedor (ver `docker-entrypoint.sh`) sin reconstruir la imagen.
 
@@ -65,7 +65,7 @@ Estilo arquitectónico resumido:
 
 ### 3.2 Microservicio A — Auth
 
-**Responsabilidad:** dos flujos de login completamente distintos (administrador o auditor con usuario y contraseña; votante con cédula y un PIN de 6 dígitos que genera el administrador), gestión de identidad (crear administradores y auditores, cargar el padrón electoral cifrado, generar y regenerar PIN) y el módulo de auditoría.
+**Responsabilidad:** dos flujos de login completamente distintos (administrador, auditor o jurado con usuario y contraseña; votante con cédula y un PIN de 6 dígitos que genera el administrador), el **segundo factor** de votantes y jurados (TOTP, RFC 6238: registro del autenticador con QR, verificación del código y la autorización del jurado en el voto asistido), gestión de identidad (crear administradores, auditores y jurados; cargar el padrón electoral cifrado; generar y regenerar PIN; restablecer autenticadores; marcar el voto asistido) y el módulo de auditoría.
 
 **Por qué es un servicio separado:** la autenticación es el único lugar del sistema que debe conocer el salt privado usado para pseudonimizar la cédula (`VOTER_ID_SALT`). Aislarlo minimiza la superficie de código que maneja ese secreto.
 
@@ -199,7 +199,7 @@ graph TB
 
 ## 6. Diagrama de Secuencia — Autenticación de votante
 
-Se eligió el login de votante como flujo crítico (en vez del de administrador) porque concentra las decisiones de seguridad propias de este dominio: el votante se identifica con un dato que otros pueden conocer (su cédula), así que necesita un segundo factor que solo él tenga (el PIN), y de ahí en adelante todo el sistema opera sobre una identidad pseudonimizada.
+Se eligió el login de votante como flujo crítico (en vez del de administrador) porque concentra las decisiones de seguridad propias de este dominio: el votante se identifica con un dato que otros pueden conocer (su cédula), así que necesita un secreto que solo él conozca (el PIN) y algo que solo él tenga (su app autenticadora, o en el voto asistido, el jurado de su mesa); de ahí en adelante todo el sistema opera sobre una identidad pseudonimizada.
 
 ```mermaid
 sequenceDiagram
@@ -216,16 +216,32 @@ sequenceDiagram
     DB-->>AUTH: votante {activo, puesto y mesa cifrados, bcrypt del PIN}
 
     alt Votante activo, con PIN, y el PIN coincide (bcrypt)
-        AUTH->>AUTH: voterIdHash = SHA256(cedula + salt privado)
-        AUTH->>AUTH: Firma JWT HS256 {role: "voter", voterIdHash,<br/>puesto, mesa} que vence en 10 min
-        AUTH->>DB: INSERT INTO audit_log (LOGIN_SUCCESS_VOTER)
-        AUTH-->>FE: 200 {token, puesto, mesa}
-        FE-->>Votante: Boleta de las elecciones abiertas
+        AUTH-->>FE: 200 {next: codigo | registro | jurado, desafío de 5 min sin rol}
     else No existe, inactivo, sin PIN o PIN incorrecto
         AUTH->>DB: INSERT INTO audit_log (LOGIN_FAILURE_VOTER, motivo)
         AUTH-->>FE: 401 "Cédula o PIN incorrectos" (el mismo mensaje en todos los casos)
         FE-->>Votante: Error de acceso
     end
+
+    alt Primer ingreso (registro)
+        FE-->>Votante: QR y clave para su app autenticadora
+        Votante->>FE: Código de 6 dígitos de la app
+        FE->>AUTH: POST /auth/login/voter/registro {desafío, código}
+        AUTH->>DB: Guarda el secreto cifrado, solo si no tenía uno
+    else Con autenticador
+        Votante->>FE: Código de 6 dígitos de la app
+        FE->>AUTH: POST /auth/login/voter/codigo {desafío, código}
+    else Voto asistido
+        Votante->>FE: El jurado de su mesa escribe su usuario y su código
+        FE->>AUTH: POST /auth/login/voter/asistido {desafío, jurado, código}
+        AUTH->>AUTH: Jurado de la misma mesa que el votante
+    end
+    AUTH->>AUTH: TOTP válido (±30 s) y posterior al último usado (un solo uso)
+    AUTH->>AUTH: voterIdHash = SHA256(cedula + salt privado)
+    AUTH->>AUTH: Firma JWT HS256 {role: "voter", voterIdHash,<br/>puesto, mesa} que vence en 10 min
+    AUTH->>DB: INSERT INTO audit_log (LOGIN_SUCCESS_VOTER, y en el asistido ASSISTED_LOGIN_AUTHORIZED)
+    AUTH-->>FE: 200 {token, puesto, mesa}
+    FE-->>Votante: Boleta de las elecciones abiertas
 
     Note over Votante,DB: Ningún servicio distinto de Auth conoce la cédula en texto plano<br/>ni el salt del hash. El JWT solo vive en la memoria de la página.
 ```
@@ -240,6 +256,7 @@ sequenceDiagram
 graph LR
     Admin(("👤 Administrador"))
     Auditor(("👤 Auditor"))
+    Jurado(("👤 Jurado de mesa"))
     Votante(("👤 Votante"))
     Reloj(("⏱️ Worker Scheduler"))
 
@@ -251,14 +268,16 @@ graph LR
         UC5(["Consultar el total en vivo<br/>y los resultados certificados<br/>con el sello de veracidad"])
         UC6(["Descargar Acta<br/>de Escrutinio (PDF)"])
         UC7(["Verificar las actas<br/>(hash, cadena y firma)"])
-        UC8(["Crear administradores<br/>y auditores"])
-        UC9(["Cargar padrón<br/>y generar PIN"])
+        UC8(["Crear administradores,<br/>auditores y jurados"])
+        UC9(["Cargar padrón, generar PIN<br/>y marcar el voto asistido"])
         UC10(["Consultar log<br/>de auditoría"])
         UC15(["Armar tableros<br/>de reportes"])
         UC16(["Ver tableros<br/>de reportes"])
         UC11(["Consultar elecciones activas"])
         UC12(["Emitir voto"])
         UC17(["Consultar su historial<br/>(sin elección ni opción)"])
+        UC18(["Registrar el autenticador<br/>(primer ingreso)"])
+        UC19(["Autorizar un voto asistido<br/>de su mesa"])
         UC13(["Activar / cerrar<br/>elecciones por horario"])
         UC14(["Certificar y firmar el acta"])
     end
@@ -280,7 +299,12 @@ graph LR
     Auditor --> UC5
     Auditor --> UC16
 
+    Jurado --> UC1
+    Jurado --> UC18
+    Jurado --> UC19
+
     Votante --> UC1
+    Votante --> UC18
     Votante --> UC11
     Votante --> UC12
     Votante --> UC17
@@ -296,7 +320,7 @@ graph LR
 Los dos DFD son el modelo de amenazas de OWASP Threat Dragon
 ([`threat-model/livemetric.threatdragon.json`](threat-model/livemetric.threatdragon.json)),
 exportados desde la propia herramienta: los mismos diagramas sobre los que se
-analizaron las 15 amenazas STRIDE de
+analizaron las 18 amenazas STRIDE de
 [`threat-model/STRIDE-analysis.md`](threat-model/STRIDE-analysis.md). Las líneas
 punteadas son fronteras de confianza, y el flujo en rojo, el que tiene una amenaza
 abierta (el repudio del voto, aceptado por diseño para preservar el anonimato).
@@ -355,7 +379,10 @@ erDiagram
         int id PK
         string username
         string password_hash
-        string role
+        string role "admin, auditor o jurado"
+        string polling_place "solo jurado, cifrado"
+        string voting_table "solo jurado, cifrada"
+        string totp_secret "cifrado"
     }
     VOTERS {
         int id PK
@@ -365,6 +392,8 @@ erDiagram
         string voting_table "cifrada"
         bool is_active
         string access_code_hash "bcrypt del PIN"
+        string totp_secret "cifrado"
+        bool assisted
     }
     ELECTION_TEMPLATES {
         int id PK
