@@ -39,7 +39,7 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 
 - **Elecciones programadas.** Plantillas genéricas o presidenciales (con número, nombre y foto de cada candidato), que se abren y cierran solas según su horario o se detienen a mano.
 - **Voto único por identidad.** El doble voto se impide por la identidad del votante, no por su navegador. El padrón se guarda cifrado con AES-256-GCM.
-- **Doble factor para votar.** El votante entra con su PIN y con el código de su app autenticadora (Microsoft o Google Authenticator), que registra en su primer ingreso. Quien no puede usar una app vota asistido: lo autoriza el jurado de su mesa con su propio autenticador, después de cotejar su cédula en persona.
+- **Doble factor para votar.** El votante entra con su PIN y con el código de su app autenticadora (Microsoft o Google Authenticator), que registra en su primer ingreso. Quien no puede usar una app vota asistido: lo autoriza el jurado de su mesa con su propio autenticador, después de cotejar su cédula en persona. El PIN vence y solo sirve durante la votación, desde una hora antes de que abra.
 - **Escrutinio independiente.** Al cerrar, un servicio aparte recuenta los votos desde cero, consolida por mesa, determina el ganador, encadena el acta con hashes SHA-256 y la **firma digitalmente** con Ed25519. El acta también se descarga en PDF.
 - **Sin resultados parciales.** Mientras la elección está abierta, en vivo solo se ve cuántas personas votaron. Los votos por candidato u opción se publican cuando el escrutinio certifica el acta: antes, el sistema no los entrega a nadie, tampoco al administrador ni pidiéndolos directamente a la API.
 - **Indicador de veracidad.** Cada vez que se consulta un resultado certificado, otro servicio comprueba por su cuenta la firma, el hash y los votos guardados, y muestra si el acta está **verificada**, **alterada** o **sin firma** (Figura 1).
@@ -193,8 +193,8 @@ sequenceDiagram
     FE->>AUTH: POST /auth/login/voter
     AUTH->>AUTH: Límite: 8 intentos fallidos cada 15 min por IP
     AUTH->>DB: SELECT … FROM voters WHERE cedula = cifrado(cedula)
-    DB-->>AUTH: votante (activo, bcrypt del PIN, autenticador, asistido)
-    alt Activo, con PIN, y el PIN coincide
+    DB-->>AUTH: votante (activo, bcrypt del PIN, vencimiento, autenticador, asistido)
+    alt Votación abierta (o abre en 1 h), PIN vigente y correcto
         AUTH-->>FE: 200 {next, desafío de 5 min sin rol}
     else Cualquier otro caso
         AUTH->>DB: audit_log: LOGIN_FAILURE_VOTER (motivo)
@@ -215,7 +215,7 @@ sequenceDiagram
     AUTH-->>FE: 200 {token}
 ```
 
-*Figura 4. Autenticación del votante, en dos pasos: el PIN y después el código de su autenticador o, si vota asistido, la autorización del jurado de su mesa. En el primer ingreso, el segundo paso registra el autenticador (QR). El mensaje de error del PIN es el mismo en todos los casos, para no revelar qué cédulas existen.*
+*Figura 4. Autenticación del votante, en dos pasos: el PIN y después el código de su autenticador o, si vota asistido, la autorización del jurado de su mesa. En el primer ingreso, el segundo paso registra el autenticador (QR). El PIN solo sirve durante la votación (desde una hora antes) y hasta su vencimiento; fuera de eso, se rechaza con un aviso. El mensaje de error del PIN es el mismo en todos los casos, para no revelar qué cédulas existen.*
 
 El segundo flujo es el que da sentido al sistema: el cierre de una elección y la emisión de su acta.
 
@@ -305,6 +305,7 @@ erDiagram
         string polling_place "cifrado"
         string voting_table "cifrada"
         string access_code_hash "bcrypt del PIN"
+        timestamp access_code_expires_at "vencimiento del PIN"
         string totp_secret "cifrado"
         bool assisted }
     ELECTIONS { int id PK
@@ -443,8 +444,8 @@ Las líneas punteadas de los diagramas son **fronteras de confianza**: la red do
 |---|---|---|---|---|
 | **S** | **Suplantación** | | | |
 | 1 | Votante → Auth (login) | Alguien que conoce la cédula de un votante intenta suplantarlo | Mitigado | Cédula **y** PIN de 6 dígitos generado por el administrador, guardado con bcrypt, **y** un segundo factor (16 a 18) |
-| 16 | Votante → Auth (login) | Alguien con el PIN de otro votante entra en su nombre | Mitigado | Código TOTP de la app autenticadora del votante (Microsoft o Google Authenticator): de un solo uso, válido ±30 s, con el secreto cifrado. Sin el celular, el PIN solo no abre la sesión |
-| 17 | Votante → Auth (registro) | Alguien con la cédula y el PIN registra su app antes que el votante | Mitigado (parcial) | Un solo autenticador por cédula: el votante que llega después lo nota y avisa; queda en la auditoría y el administrador lo restablece |
+| 16 | Votante → Auth (login) | Alguien con el PIN de otro votante entra en su nombre | Mitigado | Código TOTP de la app autenticadora del votante (Microsoft o Google Authenticator): de un solo uso, válido ±30 s, con el secreto cifrado. Sin el celular, el PIN solo no abre la sesión. Además, el PIN vence y solo sirve durante la votación |
+| 17 | Votante → Auth (registro) | Alguien con la cédula y el PIN registra su app antes que el votante | Mitigado (parcial) | Solo es posible desde una hora antes de que abra la votación. Un solo autenticador por cédula: el votante que llega después lo nota y avisa; queda en la auditoría y el administrador lo restablece |
 | 18 | Votante → Auth (voto asistido) | Un jurado cómplice abre la sesión de un votante asistido | Mitigado (parcial) | Solo el jurado de la mesa del votante, que coteja la cédula en persona; su código es de un solo uso y cada autorización queda en la auditoría con su nombre |
 | 8 | Scheduler → Scrutiny | Un servicio no autorizado ordena certificar una elección | Mitigado | Token interno, comparado en tiempo constante (`timingSafeEqual`), que nunca llega al navegador |
 | 15 | Acta (`scrutiny_ledger`) | Insertar un acta que Scrutiny nunca emitió | Mitigado | Firma Ed25519: sin la clave privada no se puede fabricar un acta válida |
@@ -461,7 +462,7 @@ Las líneas punteadas de los diagramas son **fronteras de confianza**: la red do
 | 12 | Navegador → frontend | Exponer cuatro servicios en puertos sueltos | Mitigado | nginx como único punto de entrada; los servicios, solo en `127.0.0.1` |
 | 13 | Credenciales (`.env`) | El archivo con todos los secretos se filtra | Mitigado | Cada instalación genera el suyo, con permisos 600; nunca entra al repositorio ni a una imagen |
 | **D** | **Denegación de servicio** | | | |
-| 2 | Votante → Auth (login) | Fuerza bruta sobre el PIN | Mitigado | 8 intentos **fallidos** cada 15 minutos por IP (los correctos no cuentan, para no bloquear un puesto con un solo equipo) y reporte de accesos sospechosos |
+| 2 | Votante → Auth (login) | Fuerza bruta sobre el PIN | Mitigado | 8 intentos **fallidos** cada 15 minutos por IP (los correctos no cuentan, para no bloquear un puesto con un solo equipo) y reporte de accesos sospechosos. Fuera de la votación, el PIN no sirve |
 | **E** | **Elevación de privilegios** | | | |
 | 6 | Voting (`/vote`) | Votar más de una vez en la misma elección | Mitigado | `UNIQUE(election_id, voter_id_hash)` en la base, dentro de una transacción |
 | 11 | Admin/Auditor → Analytics | Un auditor crea, edita o borra un tablero | Mitigado | `requireRole('admin')` en cada endpoint de escritura |
@@ -474,7 +475,7 @@ Las líneas punteadas de los diagramas son **fronteras de confianza**: la red do
 Las contramedidas se refuerzan entre sí: ninguna amenaza grave depende de un solo control.
 
 - **Integridad del acta, en cuatro capas.** El trigger *append-only* impide cambiarla; la cadena de hashes delata un cambio suelto; la firma Ed25519 delata a quien rehace toda la cadena. Además, Analytics recuenta los votos guardados y los compara con el acta. La Figura 12 muestra el resultado de esa verificación en la interfaz.
-- **Identidad del votante, con dos factores.** El votante entra con su PIN y con el código de su app autenticadora (TOTP, compatible con Microsoft y Google Authenticator), que registra en su primer ingreso. Quien no puede usar una app vota asistido: el jurado de su mesa coteja su cédula en persona y autoriza con el código de su propio autenticador, así que el segundo factor nunca desaparece. La cédula viaja al servidor una vez, en el login; desde ahí, el sistema usa solo su hash con un salt privado de Auth, y en la base queda cifrada, igual que el secreto del autenticador.
+- **Identidad del votante, con dos factores.** El votante entra con su PIN y con el código de su app autenticadora (TOTP, compatible con Microsoft y Google Authenticator), que registra en su primer ingreso. Quien no puede usar una app vota asistido: el jurado de su mesa coteja su cédula en persona y autoriza con el código de su propio autenticador, así que el segundo factor nunca desaparece. El PIN vence (en la fecha que se elige al generarlo) y solo sirve durante la votación, desde una hora antes de que abra. La cédula viaja al servidor una vez, en el login; desde ahí, el sistema usa solo su hash con un salt privado de Auth, y en la base queda cifrada, igual que el secreto del autenticador.
 - **Aislamiento de red.** Hay un solo puerto abierto a la red (3000), la base está en una red interna y el frontend no llega a ella.
 - **Mínimo privilegio en los contenedores.** Corren sin root, con el sistema de archivos de solo lectura y sin poder ganar privilegios; Falco vigila que siga así en ejecución (sección 6).
 - **Secretos por instalación.** Cada instalación genera sus propios secretos: no hay credenciales compartidas en el repositorio, en las imágenes ni en el pipeline, que genera las suyas en cada corrida.
@@ -808,6 +809,7 @@ Un hallazgo no siempre sale de una herramienta automática: algunos aparecieron 
 | Cuatro CVE altas de OpenSSL (`libssl3` y `libcrypto3` 3.3.7-r1) en la imagen del frontend, publicadas el 30 de septiembre de 2026 | Trivy (imagen) | Alta | Resuelto | La base `nginx:1.27-alpine` quedó sobre Alpine 3.21, que todavía no trae la corrección, y esa línea de nginx ya no se mantiene. El frontend pasa a `nginx:1.30-alpine` (la línea estable, sobre Alpine 3.24) desde la v1.3.5: Trivy da 0 CVE, y la aplicación se recorrió con la CSP activa sin ninguna violación. El pipeline lo bloqueó antes de que llegara a ningún despliegue |
 | Una CVE alta nueva en `pcre2` (10.48-r0; CVE-2026-103111) en la imagen del frontend. Alpine ya publicaba la corrección (10.49-r0), pero el contenedor global la seguía marcando y no arrancaba: reutilizaba de la caché de Docker la capa de `apk upgrade` de un build anterior | Trivy (imagen), pipeline local | Alta | Resuelto | Argumento `ACTUALIZAR_PAQUETES` en los 6 Dockerfile: los scripts de arranque y el pipeline local pasan la fecha del día, y `release.yml`, el número de corrida, así que esa capa no sale de la caché de otro día. La imagen queda con `pcre2` 10.49-r0 y Trivy, sin CVE altas. En la misma corrida, npm audit y Trivy fallaron por la red (`EAI_AGAIN`, `network is unreachable`): ahora se reintentan hasta 3 veces, y la base de Trivy queda en un volumen en lugar de bajarse en cada uno de los 12 análisis |
 | En el contenedor global, Falco atribuía a los servicios escrituras que hacía la PC (AppArmor, systemd): 60 alertas falsas en dos minutos, todas "de" Scrutiny | Revisión del contenedor global | Media | Resuelto | Falco completa cada evento leyendo `/proc`, y el del contenedor global tiene otra numeración de procesos. Con Falco, ese contenedor corre con `--pid=host`: sin falsos positivos, y se comprobó que sigue detectando una escritura real |
+| El PIN del votante servía en cualquier momento y no vencía: uno filtrado podía usarse antes de la votación (por ejemplo, para registrar el autenticador antes que el votante) o en una elección futura | Revisión funcional del equipo | Media | Resuelto | El PIN vence en la fecha que se elige al generarlo (por defecto, el cierre de la última elección programada; máximo 90 días) y solo sirve con una votación abierta o que abre dentro de una hora. Las dos condiciones se comprueban en los dos pasos del ingreso, con pruebas para cada caso (migración `007_vencimiento_pin.sql`) |
 | Con la elección abierta, el administrador y el auditor veían los votos de cada opción y quién iba ganando (la API los entregaba), y un resultado parcial puede influir en quien todavía no votó | Revisión funcional del equipo | Media (integridad del proceso electoral) | Resuelto | Analytics solo publica el total de votos hasta que existe el acta certificada: los votos por opción, la concentración y el momento de definición no salen del servicio antes. Se aplica en la API, no solo en la pantalla, con pruebas que lo comprueban |
 | Los servicios se conectan a la base como dueños de las tablas, y por eso pueden desactivar el trigger *append-only* | Demostración del ataque a las actas | Media | Mitigado | La firma Ed25519 y el reconteo detectan cualquier alteración del acta (Figura 16). Pendiente: un usuario de base por servicio, sin permiso para cambiar las tablas |
 

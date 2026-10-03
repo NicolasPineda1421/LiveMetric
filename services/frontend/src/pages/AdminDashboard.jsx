@@ -861,6 +861,32 @@ function UsersTab({ session }) {
 
 /* ============================================================ Padrón */
 
+// <input type="datetime-local"> trabaja en hora local y sin segundos. Se
+// redondea hacia arriba al minuto: un PIN sugerido para el cierre de la
+// elección no vence unos segundos antes.
+function toLocalInput(fecha) {
+  const d = new Date(Math.ceil(new Date(fecha).getTime() / 60000) * 60000);
+  const dos = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}T${dos(d.getHours())}:${dos(d.getMinutes())}`;
+}
+
+// Corta, para que entre en la celda del listado: "4 de oct, 18:00" (con el
+// año solo si no es el actual).
+export function formatPinExpiry(fecha) {
+  const d = new Date(fecha);
+  const opciones = { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
+  if (d.getFullYear() !== new Date().getFullYear()) opciones.year = 'numeric';
+  return d.toLocaleString('es-CO', opciones);
+}
+
+// Estado del PIN en el listado: si tiene, hasta cuándo vale.
+function pinStatus(v, ahora) {
+  if (!v.has_pin) return 'Sin asignar';
+  if (!v.pin_expires_at) return 'Asignado (sin vencimiento)';
+  if (new Date(v.pin_expires_at).getTime() <= ahora) return 'Vencido';
+  return `Vence ${formatPinExpiry(v.pin_expires_at)}`;
+}
+
 function VotersTab({ session }) {
   const [rows, setRows] = useState(
     '1000000006, Nuevo Votante Uno, Puesto Central, Mesa 1\n1000000007, Nuevo Votante Dos, Puesto Central, Mesa 2'
@@ -871,11 +897,26 @@ function VotersTab({ session }) {
   const [newAccessCodes, setNewAccessCodes] = useState([]);
   const [resettingId, setResettingId] = useState(null);
   const [savingId, setSavingId] = useState(null);
+  // Vencimiento de los PIN que se generen: lo sugiere el servidor (el cierre
+  // de la última elección programada) y el administrador lo puede cambiar.
+  const [pinExpiry, setPinExpiry] = useState(null);
+  const [expiresAt, setExpiresAt] = useState('');
+  const [codesExpireAt, setCodesExpireAt] = useState(null);
 
   function load() {
-    api.listVoters(session.token, 100, 0).then((d) => setVoters(d.voters)).catch((e) => setError(e.message));
+    api.listVoters(session.token, 100, 0)
+      .then((d) => {
+        setVoters(d.voters);
+        if (d.pinExpiry) {
+          setPinExpiry(d.pinExpiry);
+          setExpiresAt((actual) => actual || toLocalInput(d.pinExpiry.suggested));
+        }
+      })
+      .catch((e) => setError(e.message));
   }
   useEffect(load, [session.token]);
+
+  const pinExpiresAt = () => (expiresAt ? new Date(expiresAt).toISOString() : undefined);
 
   async function submit(e) {
     e.preventDefault();
@@ -896,9 +937,10 @@ function VotersTab({ session }) {
     }
 
     try {
-      const result = await api.uploadVoters(session.token, parsed);
+      const result = await api.uploadVoters(session.token, parsed, pinExpiresAt());
       setSuccess(`Padrón actualizado: ${result.inserted} nuevos, ${result.updated} actualizados.`);
       setNewAccessCodes(result.accessCodes || []);
+      setCodesExpireAt(result.pinExpiresAt || null);
       load();
     } catch (err) {
       setError(err.message);
@@ -910,8 +952,9 @@ function VotersTab({ session }) {
     setResettingId(voterId);
     setError(''); setSuccess(''); setNewAccessCodes([]);
     try {
-      const result = await api.resetVoterPin(session.token, voterId);
+      const result = await api.resetVoterPin(session.token, voterId, pinExpiresAt());
       setNewAccessCodes([{ cedula: result.cedula, pin: result.pin }]);
+      setCodesExpireAt(result.pinExpiresAt || null);
       load();
     } catch (err) {
       setError(err.message);
@@ -965,6 +1008,10 @@ function VotersTab({ session }) {
         una app se marca para el <strong>voto asistido</strong>: lo autoriza el jurado de su mesa, que verifica su
         cédula en persona.
       </p>
+      <p className="section-desc">
+        <strong>Vigencia del PIN:</strong> cada PIN vence en la fecha que elijas al generarlo y, además, solo sirve
+        mientras hay una votación abierta o desde una hora antes de que abra. Fuera de eso, nadie entra con él.
+      </p>
 
       <div className="panel">
         {error && <div className="error-banner">{error}</div>}
@@ -973,6 +1020,24 @@ function VotersTab({ session }) {
           <div className="field-dark">
             <label>Votantes a cargar</label>
             <textarea rows={6} value={rows} onChange={(e) => setRows(e.target.value)} />
+          </div>
+          <div className="field-dark">
+            <label>Vencimiento de los PIN que se generen</label>
+            <input
+              type="datetime-local"
+              value={expiresAt}
+              onChange={(e) => setExpiresAt(e.target.value)}
+              min={toLocalInput(Date.now())}
+              max={pinExpiry ? toLocalInput(Date.now() + pinExpiry.maxDays * 24 * 3600 * 1000) : undefined}
+            />
+            {pinExpiry && (
+              <div className="field-hint-dark">
+                {pinExpiry.electionTitle
+                  ? `Sugerido: el cierre de «${pinExpiry.electionTitle}», la última elección programada.`
+                  : 'No hay elecciones programadas: se sugieren 24 horas. Conviene programar la elección antes de generar los PIN.'}{' '}
+                Vale también para «Generar PIN» y «Regenerar PIN». Vacío, se usa el sugerido. Máximo {pinExpiry.maxDays} días.
+              </div>
+            )}
           </div>
           <button className="btn btn-gold">Cargar al padrón</button>
         </form>
@@ -984,6 +1049,7 @@ function VotersTab({ session }) {
           <p className="section-desc" style={{ marginBottom: '0.8rem' }}>
             Se muestran solo esta vez: cópialos o impímelos ahora para entregarlos en el puesto de votación.
             LiveMetric no vuelve a mostrar un PIN ya generado (solo puede regenerarse, invalidando el anterior).
+            {codesExpireAt && <> Vencen el <strong>{formatPinExpiry(codesExpireAt)}</strong>.</>}
           </p>
           <table className="table">
             <thead><tr><th>Cédula</th><th>PIN</th></tr></thead>
@@ -1014,7 +1080,7 @@ function VotersTab({ session }) {
                   <td>{v.polling_place}</td>
                   <td>{v.voting_table}</td>
                   <td>{v.is_active ? 'Sí' : 'No'}</td>
-                  <td>{v.has_pin ? 'Asignado' : 'Sin asignar'}</td>
+                  <td>{pinStatus(v, Date.now())}</td>
                   <td>{v.assisted ? 'No lo usa' : v.has_totp ? 'Registrado' : 'Pendiente'}</td>
                   <td>
                     <input

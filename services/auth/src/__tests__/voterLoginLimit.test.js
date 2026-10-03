@@ -13,14 +13,17 @@ const request = require('supertest');
 const app = require('../app');
 const pool = require('../db');
 const { encryptField } = require('../voterCrypto');
+const { abrirVotacion, cerrarVotacion } = require('./votacion');
 
 const CEDULA = `CI-LIM-${Date.now().toString().slice(-8)}`;
 const PIN = String(crypto.randomInt(100000, 1000000));
 const PIN_EQUIVOCADO = PIN === '111111' ? '222222' : '111111';
 
 const login = (pin) => request(app).post('/login/voter').send({ cedula: CEDULA, pin });
+let votacionId;
 
 beforeAll(async () => {
+  votacionId = await abrirVotacion(`CITEST-LIM-${Date.now()}`);
   await pool.query(
     `INSERT INTO voters (cedula, full_name, polling_place, voting_table, access_code_hash)
      VALUES ($1, $2, $3, $4, $5)`,
@@ -30,6 +33,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool.query('DELETE FROM voters WHERE cedula = $1', [encryptField(CEDULA)]);
+  await cerrarVotacion(votacionId);
   await pool.end();
 });
 

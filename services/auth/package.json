@@ -35,6 +35,9 @@
     "globalSetup": "<rootDir>/../../scripts/lib/jest-db-setup.js",
     "globalTeardown": "<rootDir>/../../scripts/lib/jest-db-teardown.js",
     "testEnvironment": "node",
+    "testMatch": [
+      "<rootDir>/src/**/__tests__/**/*.test.js"
+    ],
     "collectCoverageFrom": [
       "src/**/*.js",
       "!src/**/__tests__/**"

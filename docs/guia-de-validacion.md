@@ -21,9 +21,9 @@ Pruebas manuales para comprobar que cada funcionalidad hace lo que promete, adem
 5. **Append-only del log de auditoría** — Igual que con `scrutiny_ledger`: `UPDATE audit_log SET actor_ref = 'x' WHERE id = 1;` directo en PostgreSQL debe ser rechazado por el trigger `trg_audit_no_update`.
 6. **Nada de PII en el log** — Revisar cualquier fila de `audit_log` para eventos de tipo `*_VOTER`: la columna `actor_ref` debe contener siempre un hash SHA-256 (64 caracteres hexadecimales), nunca un número de cédula reconocible.
 
-## Segundo factor y voto asistido
+## Segundo factor, voto asistido y vigencia del PIN
 
-Las pruebas automáticas están en `services/auth/src/__tests__/segundoFactor.test.js` y `totp.test.js` (vectores del RFC 6238). Para comprobarlo a mano hace falta un celular con Microsoft Authenticator o Google Authenticator.
+Las pruebas automáticas están en `services/auth/src/__tests__/segundoFactor.test.js`, `vigenciaPin.test.js` y `totp.test.js` (vectores del RFC 6238). Para comprobarlo a mano hace falta un celular con Microsoft Authenticator o Google Authenticator.
 
 1. **El PIN solo no abre la sesión** — `POST /login/voter` con cédula y PIN correctos debe responder `200` con `next` y un `challenge`, **sin** `token`. Usar ese `challenge` como token en cualquier ruta (por ejemplo `GET /admin/voters`, o `POST /vote` en Voting) debe responder `403`: no tiene rol.
 2. **Registro en el primer ingreso** — Con un votante sin autenticador, la pantalla muestra el QR y la clave. Escanearlo y escribir el código: entra. En **Padrón**, su autenticador figura *Registrado*, y en la base, `voters.totp_secret` está cifrado (no es la clave que mostró la pantalla).
@@ -32,6 +32,8 @@ Las pruebas automáticas están en `services/auth/src/__tests__/segundoFactor.te
 5. **Restablecer** — En **Padrón**, **Restablecer autenticador**: el próximo ingreso vuelve a mostrar el QR. Queda `VOTER_TOTP_RESET` en **Auditoría**.
 6. **Voto asistido** — Marcar a un votante como asistido y crear un jurado de su mesa. Con el PIN del votante, la pantalla pide la autorización del jurado: con el usuario y el código del jurado entra, y en **Auditoría** queda `ASSISTED_LOGIN_AUTHORIZED` con el nombre del jurado. Un jurado **de otra mesa**, con un código válido, recibe `403`; el mismo código del jurado, usado dos veces, `401`.
 7. **Alerta de PIN filtrado** — Con el PIN correcto, fallar tres veces el código en 15 minutos: el widget **Accesos sospechosos** de Reportes muestra *"PIN correcto, pero el código no"* para esa cédula.
+8. **El PIN solo sirve durante la votación** — Sin ninguna elección programada, `POST /login/voter` con cédula y PIN correctos responde `403` "No hay una votación abierta en este momento", igual que con una cédula inexistente. Programar una elección que abra en 30 minutos: el mismo PIN ya entra (el margen es de una hora). Una que abra en dos horas, no. Detenerla: deja de entrar, aunque su horario no haya terminado. En **Auditoría** queda `LOGIN_FAILURE_VOTER` con motivo `fuera_de_votacion`.
+9. **Vencimiento del PIN** — En **Padrón**, el campo de vencimiento propone el cierre de la última elección programada; generar un PIN con una fecha cercana y esperar a que pase (o, para no esperar, `UPDATE voters SET access_code_expires_at = now() - interval '1 minute' WHERE …` en PostgreSQL): con la votación abierta, el PIN correcto responde `403` "Tu PIN venció" (motivo `pin_vencido`), y uno equivocado, el `401` genérico de siempre. Una fecha pasada o de más de 90 días al generar se rechaza con `400`. Si vence entre el PIN y el código del autenticador, el segundo paso también se rechaza.
 
 ## Detener una elección, plantilla presidencial, mesas y acta
 

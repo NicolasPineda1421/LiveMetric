@@ -16,6 +16,7 @@ const app = require('../app');
 const pool = require('../db');
 const { encryptField, decryptField } = require('../voterCrypto');
 const totp = require('../totp');
+const { abrirVotacion, cerrarVotacion } = require('./votacion');
 
 const RUN_ID = `CITEST_2F_${Date.now()}`;
 const sufijo = Date.now().toString().slice(-7);
@@ -26,6 +27,7 @@ const JURADO_1 = { username: `${RUN_ID}_j1`, password: `Ci-${crypto.randomBytes(
 const JURADO_2 = { username: `${RUN_ID}_j2`, password: `Ci-${crypto.randomBytes(12).toString('base64url')}` };
 
 let adminToken;
+let votacionId;
 const pins = new Map();
 let ipLibre = 10;
 const otraIp = () => `198.51.100.${ipLibre++}`;
@@ -58,6 +60,7 @@ async function eventos(tipo, actorRef) {
 }
 
 beforeAll(async () => {
+  votacionId = await abrirVotacion(`${RUN_ID}-votacion`);
   await pool.query('INSERT INTO admins (username, password_hash, role) VALUES ($1, $2, $3)', [
     ADMIN.username,
     await bcrypt.hash(ADMIN.password, 4),
@@ -89,6 +92,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await pool.query('DELETE FROM voters WHERE cedula = ANY($1)', [Object.values(CEDULAS).map(encryptField)]);
   await pool.query('DELETE FROM admins WHERE username LIKE $1', [`${RUN_ID}%`]);
+  await cerrarVotacion(votacionId);
   await pool.end();
 });
 

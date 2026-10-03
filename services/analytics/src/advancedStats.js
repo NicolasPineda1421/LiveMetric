@@ -455,6 +455,8 @@ const REASON_LABELS = {
   autenticador_ya_registrado: 'Cédula con el autenticador ya registrado',
   jurado_no_valido: 'Usuario o código del jurado incorrectos',
   jurado_de_otra_mesa: 'Jurado de otra mesa',
+  pin_vencido: 'PIN vencido',
+  fuera_de_votacion: 'Intento fuera de la votación',
 };
 
 // El hash de la cédula es seudónimo, pero igual se muestra recortado: el

@@ -11,6 +11,7 @@ const app = require('../app');
 const pool = require('../db');
 const { encryptField } = require('../voterCrypto');
 const totp = require('../totp');
+const { abrirVotacion, cerrarVotacion } = require('./votacion');
 
 const RUN_ID = `CITEST_${Date.now()}`;
 const TEST_ADMIN_USER = `${RUN_ID}_admin`;
@@ -31,6 +32,7 @@ const BASE_ADMIN_USER = `${RUN_ID}_base`;
 const BASE_ADMIN_PASS = `Ci-${crypto.randomBytes(12).toString('base64url')}`;
 
 let adminToken;
+let votacionId;
 
 // Segundo paso del ingreso de un votante con autenticador, con el código que
 // mostraría su app: en el primer ingreso, con el secreto del QR.
@@ -54,6 +56,7 @@ async function createBaseAdmin() {
 
 beforeAll(async () => {
   adminToken = await createBaseAdmin();
+  votacionId = await abrirVotacion(`${RUN_ID}-votacion`);
 });
 
 afterAll(async () => {
@@ -64,6 +67,7 @@ afterAll(async () => {
   // El votante primero: su created_by apunta al admin base (FK).
   await pool.query('DELETE FROM voters WHERE cedula = $1', [encryptField(TEST_VOTER_CEDULA)]);
   await pool.query('DELETE FROM admins WHERE username LIKE $1', [`${RUN_ID}%`]);
+  await cerrarVotacion(votacionId);
   await pool.end();
 });
 

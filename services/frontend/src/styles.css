@@ -237,6 +237,7 @@ input, select, textarea {
 .jurado-pasos { padding-left: 1.2rem; margin: 0; line-height: 1.6; color: var(--color-text-muted); }
 .jurado-pasos li { margin-bottom: 0.35rem; }
 .acciones-padron { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.acciones-padron .btn { white-space: nowrap; }
 .table td.sin-corte { white-space: nowrap; }
 
 .btn {
@@ -346,6 +347,7 @@ input, select, textarea {
 @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
 
 .field-dark label { display: block; font-size: 0.78rem; color: var(--color-text-muted); margin-bottom: 0.3rem; }
+.field-hint-dark { font-size: 0.78rem; color: var(--color-text-muted); margin-top: 0.35rem; line-height: 1.45; }
 .field-dark input, .field-dark select, .field-dark textarea {
   width: 100%;
   padding: 0.55rem 0.65rem;

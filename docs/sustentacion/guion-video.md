@@ -10,7 +10,7 @@ Antes de grabar:
 
 1. **Instalación de demostración** levantada con `./scripts/start.sh`, con su administrador creado. Sin datos que importen: el bloque 5 altera un acta para siempre.
 2. **Monitoreo con Falco:** `docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml --profile falco up -d`. (Con el contenedor global el monitoreo ya viene incluido, pero los comandos de los bloques 5 y 7 hay que correrlos adentro, con `./scripts/contenedor.sh shell`: por eso, para grabar, conviene `start.sh`.)
-3. **Datos de la historia de usuario:** padrón con tres votantes (anotar los PIN), sus autenticadores ya registrados en un celular, y una plantilla genérica con tres opciones (ver [la historia de usuario](historia-de-usuario.md), "Preparación").
+3. **Datos de la historia de usuario:** padrón con tres votantes (anotar los PIN, con un vencimiento que llegue al día de la grabación), sus autenticadores ya registrados en un celular (con una elección de ensayo habilitada: el PIN solo sirve durante la votación), y una plantilla genérica con tres opciones (ver [la historia de usuario](historia-de-usuario.md), "Preparación").
 4. **Hook de Gitleaks** instalado: `./scripts/install-hooks.sh`.
 5. **Pestañas abiertas en el navegador:**
    - la aplicación como administrador, y una ventana de incógnito para el votante;

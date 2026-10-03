@@ -144,6 +144,13 @@ números de cédula.
 ![Captura 04: Un intento fallido: el mensaje es el mismo si la cédula no existe o si el PIN es incorrecto](img/04-login-fallido.png)
 *Captura 04. Un intento fallido: el mensaje es el mismo si la cédula no existe o si el PIN es incorrecto.*
 
+**El PIN solo sirve durante la votación.** Se puede usar desde **una hora antes** de que
+abra la elección (para registrar el autenticador con calma) y hasta que cierra. Fuera de
+ese horario, el sistema responde *"No hay una votación abierta en este momento"*, con
+cualquier PIN. Además, cada PIN tiene **fecha de vencimiento**: si ya venció, el sistema
+lo dice (*"Tu PIN venció"*) y hay que pedir uno nuevo al encargado del puesto. Ese aviso
+aparece solo con el PIN correcto, así que no le da pistas a quien prueba PIN al azar.
+
 **La sesión del votante dura 10 minutos.** Es tiempo suficiente para votar, y limita el
 riesgo si alguien deja la sesión abierta en un equipo compartido. Además, recargar la
 página cierra la sesión: en un puesto de votación el equipo pasa de mano en mano, y
@@ -230,12 +237,25 @@ persona no puede ingresar.
 Cada votante necesita un **PIN de acceso** para poder ingresar. Se generan desde esta
 misma pestaña, en la sección **PIN de acceso generados**.
 
+**Vencimiento de los PIN.** Antes de cargar, revise el campo **Vencimiento de los PIN que
+se generen**. El sistema propone el **cierre de la última elección programada**, para que
+el PIN sirva en ella y venza al terminar; si todavía no hay ninguna, propone 24 horas. Por
+eso conviene **programar la elección antes de generar los PIN**. Se puede elegir otra
+fecha, de hasta 90 días. La misma fecha se usa al generar o regenerar el PIN de un votante
+desde el listado.
+
+Aunque el PIN no haya vencido, solo sirve durante la votación: desde una hora antes de que
+abra la elección y hasta que cierra (o hasta que se detiene).
+
 > ⚠️ **Importante:** el PIN se muestra **una sola vez**, en el momento de generarlo.
 > Después el sistema solo guarda una versión cifrada que no se puede revertir. Guarde o
 > imprima los PINes en ese momento; si se pierde uno, hay que generarlo de nuevo para esa
 > persona.
 
-Si un votante pierde su PIN, el administrador se lo regenera desde el listado del padrón.
+Si un votante pierde su PIN, o se le venció, el administrador se lo regenera desde el
+listado del padrón. La columna **PIN** dice hasta cuándo vale cada uno, si ya está
+*Vencido* o si es *Sin vencimiento* (generado antes de que existiera el vencimiento: sirve
+solo durante la votación, y conviene regenerarlo).
 
 **Autenticador y voto asistido.** El listado muestra, para cada votante:
 
@@ -247,14 +267,14 @@ Si un votante pierde su PIN, el administrador se lo regenera desde el listado de
 - **Restablecer autenticador**: para quien cambió o perdió el celular. En su próximo
   ingreso, con su cédula y su PIN, lo registra de nuevo.
 
-![Captura 11: Carga del padrón: una fila por votante (cédula, nombre, puesto y mesa)](img/11-padron-carga.png)
-*Captura 11. Carga del padrón: una fila por votante (cédula, nombre, puesto y mesa).*
+![Captura 11: Carga del padrón: una fila por votante (cédula, nombre, puesto y mesa) y el vencimiento de los PIN, que propone el cierre de la elección programada](img/11-padron-carga.png)
+*Captura 11. Carga del padrón: una fila por votante (cédula, nombre, puesto y mesa) y el vencimiento de los PIN, que propone el cierre de la elección programada.*
 
 ![Captura 12: Los PIN generados, que se muestran una sola vez. En esta captura están difuminados: no deben quedar credenciales en la documentación](img/12-padron-pines.png)
-*Captura 12. Los PIN generados, que se muestran una sola vez. En esta captura están difuminados: no deben quedar credenciales en la documentación.*
+*Captura 12. Los PIN generados, que se muestran una sola vez, con su fecha de vencimiento. En esta captura están difuminados: no deben quedar credenciales en la documentación.*
 
-![Captura 13: El padrón actual: el PIN, el autenticador y el voto asistido de cada votante](img/13-padron-lista.png)
-*Captura 13. El padrón actual: el PIN, el autenticador y el voto asistido de cada votante.*
+![Captura 13: El padrón actual: hasta cuándo vale el PIN de cada votante, su autenticador y el voto asistido](img/13-padron-lista.png)
+*Captura 13. El padrón actual: hasta cuándo vale el PIN de cada votante (o si ya venció), su autenticador y el voto asistido.*
 
 ### 4.5 Usuarios
 
@@ -459,10 +479,9 @@ Resumen del recorrido de punta a punta:
 | # | Paso | Quién | Dónde |
 |---|---|---|---|
 | 1 | Crear la plantilla con los candidatos | Administrador | Plantillas |
-| 2 | Cargar el padrón de votantes | Administrador | Padrón |
-| 3 | Generar y entregar los PINes; marcar el voto asistido de quien lo necesite | Administrador | Padrón |
-| 3b | Crear los jurados de las mesas con votantes asistidos | Administrador | Usuarios |
-| 4 | Programar la elección con su ventana horaria | Administrador | Elecciones |
+| 2 | Programar la elección con su ventana horaria | Administrador | Elecciones |
+| 3 | Cargar el padrón y generar los PIN (vencen al cierre de la elección); entregarlos y marcar el voto asistido de quien lo necesite | Administrador | Padrón |
+| 4 | Crear los jurados de las mesas con votantes asistidos | Administrador | Usuarios |
 | 5 | **Apertura automática** al llegar la hora | Sistema | — |
 | 6 | Ingresar (PIN y código de su autenticador, o autorización del jurado) y votar | Votantes / Jurados | Vista de votante |
 | 7 | Seguir en vivo cuántas personas votaron | Administrador / Auditor | Resultados |
@@ -484,6 +503,13 @@ No. Una vez confirmado, el voto es definitivo.
 
 **Perdí mi PIN, ¿qué hago?**
 Pídale al administrador que le genere uno nuevo desde la pestaña Padrón.
+
+**Me salió "No hay una votación abierta en este momento".**
+El PIN solo sirve durante la votación: desde una hora antes de que abra la elección y
+hasta que cierra. Vuelva dentro de ese horario.
+
+**Me salió "Tu PIN venció".**
+Cada PIN tiene fecha de vencimiento. Pida uno nuevo al encargado del puesto.
 
 **Cambié o perdí el celular con el autenticador.**
 Avise al encargado del puesto: el administrador restablece su autenticador y usted lo

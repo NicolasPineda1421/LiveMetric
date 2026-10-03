@@ -65,12 +65,13 @@ export const api = {
   listUsers: (token) => request('auth', '/admin/users', { token }),
   resetUserTotp: (token, userId) =>
     request('auth', `/admin/users/${userId}/reset-totp`, { method: 'POST', token }),
-  uploadVoters: (token, voters) =>
-    request('auth', '/admin/voters/bulk', { method: 'POST', token, body: { voters } }),
+  // pinExpiresAt: vencimiento (ISO) de los PIN que se generen; sin él, el sugerido.
+  uploadVoters: (token, voters, pinExpiresAt) =>
+    request('auth', '/admin/voters/bulk', { method: 'POST', token, body: { voters, pinExpiresAt } }),
   listVoters: (token, limit = 100, offset = 0) =>
     request('auth', `/admin/voters?limit=${limit}&offset=${offset}`, { token }),
-  resetVoterPin: (token, voterId) =>
-    request('auth', `/admin/voters/${voterId}/reset-pin`, { method: 'POST', token }),
+  resetVoterPin: (token, voterId, pinExpiresAt) =>
+    request('auth', `/admin/voters/${voterId}/reset-pin`, { method: 'POST', token, body: { pinExpiresAt } }),
   resetVoterTotp: (token, voterId) =>
     request('auth', `/admin/voters/${voterId}/reset-totp`, { method: 'POST', token }),
   setVoterAssisted: (token, voterId, assisted) =>

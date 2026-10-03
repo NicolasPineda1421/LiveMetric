@@ -3,7 +3,7 @@
 // PIN de votante, que se muestran una sola vez.
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import AdminDashboard from '../pages/AdminDashboard.jsx';
+import AdminDashboard, { formatPinExpiry } from '../pages/AdminDashboard.jsx';
 import { api } from '../api.js';
 import { reiniciarApiFalsa } from './apiFalsa.js';
 
@@ -218,9 +218,10 @@ describe('Padrón', () => {
     api.uploadVoters.mockResolvedValue({ inserted: 1, updated: 0, accessCodes: [] });
     const usuario = await abrir('Padrón');
     await cargar(usuario, ' 1000000010 , Ana Gómez , Puesto Norte , Mesa 2 {enter}1000000011, Sin puesto{enter}{enter}');
+    // Sin vencimiento elegido (el servidor no sugirió ninguno), se manda vacío y el servidor usa el suyo.
     expect(api.uploadVoters).toHaveBeenCalledWith('jwt-admin', [
       { cedula: '1000000010', fullName: 'Ana Gómez', pollingPlace: 'Puesto Norte', votingTable: 'Mesa 2' },
-    ]);
+    ], undefined);
     expect(await screen.findByText('Padrón actualizado: 1 nuevos, 0 actualizados.')).toBeInTheDocument();
   });
 
@@ -242,7 +243,7 @@ describe('Padrón', () => {
     const panel = (await screen.findByText('PIN de acceso generados')).closest('.panel');
     expect(within(panel).getByText('482913')).toBeInTheDocument();
     const listado = (await screen.findByText('Ana Gómez')).closest('tr');
-    expect(within(listado).getByText('Asignado')).toBeInTheDocument();
+    expect(within(listado).getByText('Asignado (sin vencimiento)')).toBeInTheDocument();
     expect(listado).not.toHaveTextContent('482913');
 
     // Al cambiar de pestaña y volver, el PIN ya no está en ninguna parte.
@@ -262,8 +263,61 @@ describe('Padrón', () => {
     window.confirm.mockReturnValue(true);
     api.resetVoterPin.mockResolvedValue({ cedula: '1000000010', pin: '771204' });
     await usuario.click(screen.getByRole('button', { name: 'Regenerar PIN' }));
-    expect(api.resetVoterPin).toHaveBeenCalledWith('jwt-admin', 7);
+    expect(api.resetVoterPin).toHaveBeenCalledWith('jwt-admin', 7, undefined);
     expect(await screen.findByText('771204')).toBeInTheDocument();
+  });
+});
+
+describe('Padrón: vencimiento del PIN', () => {
+  // Dentro de los 90 días que admite el campo (el servidor nunca sugiere más).
+  const CIERRE = new Date(Math.ceil((Date.now() + 10 * 24 * 3600 * 1000) / 60000) * 60000);
+  const sugerencia = (titulo = 'Consulta 2030') => ({ suggested: CIERRE.toISOString(), electionTitle: titulo, maxDays: 90, windowMinutesBefore: 60 });
+  const votante = (cambios) => ({ id: 7, cedula: '1000000010', full_name: 'Ana Gómez', polling_place: 'P', voting_table: 'M', is_active: true, has_pin: true, has_totp: false, assisted: false, ...cambios });
+  const campoVencimiento = () => campo('Vencimiento de los PIN que se generen');
+
+  it('propone el cierre de la última elección programada y lo manda al cargar; los PIN muestran cuándo vencen', async () => {
+    api.listVoters.mockResolvedValue({ voters: [], pinExpiry: sugerencia() });
+    api.uploadVoters.mockResolvedValue({ inserted: 1, updated: 0, accessCodes: [{ cedula: '1000000010', pin: '482913' }], pinExpiresAt: CIERRE.toISOString() });
+    const usuario = await abrir('Padrón');
+    expect(await screen.findByText(/Sugerido: el cierre de «Consulta 2030»/)).toBeInTheDocument();
+    expect(new Date(campoVencimiento().value).getTime()).toBe(CIERRE.getTime());
+
+    await usuario.click(screen.getByRole('button', { name: 'Cargar al padrón' }));
+    expect(api.uploadVoters.mock.calls[0][2]).toBe(CIERRE.toISOString());
+    const panel = (await screen.findByText('PIN de acceso generados')).closest('.panel');
+    expect(panel).toHaveTextContent(`Vencen el ${formatPinExpiry(CIERRE)}`);
+  });
+
+  it('el administrador elige otra fecha, y vale también para regenerar un PIN', async () => {
+    api.listVoters.mockResolvedValue({ voters: [votante({ pin_expires_at: CIERRE.toISOString() })], pinExpiry: sugerencia() });
+    const elegida = new Date(CIERRE.getTime() - 3 * 24 * 3600 * 1000);
+    api.resetVoterPin.mockResolvedValue({ cedula: '1000000010', pin: '771204', pinExpiresAt: elegida.toISOString() });
+    const usuario = await abrir('Padrón');
+    await screen.findByText('Ana Gómez');
+    const local = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    await usuario.clear(campoVencimiento());
+    await usuario.type(campoVencimiento(), local(elegida));
+    await usuario.click(screen.getByRole('button', { name: 'Regenerar PIN' }));
+    expect(api.resetVoterPin).toHaveBeenCalledWith('jwt-admin', 7, elegida.toISOString());
+  });
+
+  it('el listado dice si el PIN vence, ya venció o es de antes del vencimiento', async () => {
+    api.listVoters.mockResolvedValue({
+      voters: [
+        votante({ id: 1, full_name: 'Con fecha', pin_expires_at: CIERRE.toISOString() }),
+        votante({ id: 2, full_name: 'PIN del año pasado', cedula: '2', pin_expires_at: '2020-01-01T00:00:00Z' }),
+        votante({ id: 3, full_name: 'Viejo', cedula: '3', pin_expires_at: null }),
+        votante({ id: 4, full_name: 'Sin PIN', cedula: '4', has_pin: false, pin_expires_at: null }),
+      ],
+      pinExpiry: sugerencia(null),
+    });
+    await abrir('Padrón');
+    const fila = async (nombre) => (await screen.findByText(nombre)).closest('tr');
+    expect(await fila('Con fecha')).toHaveTextContent(`Vence ${formatPinExpiry(CIERRE)}`);
+    expect(within(await fila('PIN del año pasado')).getByText('Vencido')).toBeInTheDocument();
+    expect(await fila('Viejo')).toHaveTextContent('Asignado (sin vencimiento)');
+    expect(await fila('Sin PIN')).toHaveTextContent('Sin asignar');
+    expect(screen.getByText(/No hay elecciones programadas: se sugieren 24 horas/)).toBeInTheDocument();
   });
 });
 

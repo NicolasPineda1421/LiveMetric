@@ -65,7 +65,7 @@ Estilo arquitectónico resumido:
 
 ### 3.2 Microservicio A — Auth
 
-**Responsabilidad:** dos flujos de login completamente distintos (administrador, auditor o jurado con usuario y contraseña; votante con cédula y un PIN de 6 dígitos que genera el administrador), el **segundo factor** de votantes y jurados (TOTP, RFC 6238: registro del autenticador con QR, verificación del código y la autorización del jurado en el voto asistido), gestión de identidad (crear administradores, auditores y jurados; cargar el padrón electoral cifrado; generar y regenerar PIN; restablecer autenticadores; marcar el voto asistido) y el módulo de auditoría.
+**Responsabilidad:** dos flujos de login completamente distintos (administrador, auditor o jurado con usuario y contraseña; votante con cédula y un PIN de 6 dígitos que genera el administrador), el **segundo factor** de votantes y jurados (TOTP, RFC 6238: registro del autenticador con QR, verificación del código y la autorización del jurado en el voto asistido), gestión de identidad (crear administradores, auditores y jurados; cargar el padrón electoral cifrado; generar y regenerar PIN con su vencimiento, que además solo sirven durante la votación; restablecer autenticadores; marcar el voto asistido) y el módulo de auditoría.
 
 **Por qué es un servicio separado:** la autenticación es el único lugar del sistema que debe conocer el salt privado usado para pseudonimizar la cédula (`VOTER_ID_SALT`). Aislarlo minimiza la superficie de código que maneja ese secreto.
 
@@ -215,8 +215,11 @@ sequenceDiagram
     AUTH->>DB: SELECT … FROM voters WHERE cedula = cifrado(cedula)
     DB-->>AUTH: votante {activo, puesto y mesa cifrados, bcrypt del PIN}
 
-    alt Votante activo, con PIN, y el PIN coincide (bcrypt)
+    alt Votación abierta (o abre en 1 h), votante activo, PIN vigente y correcto (bcrypt)
         AUTH-->>FE: 200 {next: codigo | registro | jurado, desafío de 5 min sin rol}
+    else Fuera de la votación o PIN vencido
+        AUTH->>DB: INSERT INTO audit_log (LOGIN_FAILURE_VOTER, fuera_de_votacion o pin_vencido)
+        AUTH-->>FE: 403 con el motivo (el de PIN vencido, solo si el PIN era correcto)
     else No existe, inactivo, sin PIN o PIN incorrecto
         AUTH->>DB: INSERT INTO audit_log (LOGIN_FAILURE_VOTER, motivo)
         AUTH-->>FE: 401 "Cédula o PIN incorrectos" (el mismo mensaje en todos los casos)
@@ -392,6 +395,7 @@ erDiagram
         string voting_table "cifrada"
         bool is_active
         string access_code_hash "bcrypt del PIN"
+        timestamp access_code_expires_at "vencimiento del PIN"
         string totp_secret "cifrado"
         bool assisted
     }

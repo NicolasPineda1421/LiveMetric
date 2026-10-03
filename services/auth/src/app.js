@@ -80,6 +80,76 @@ function generateAccessCode() {
   return crypto.randomInt(0, 1000000).toString().padStart(6, '0');
 }
 
+/* ============================================================
+ * VIGENCIA DEL PIN (migración 007)
+ * ============================================================
+ *
+ * El PIN que entrega el administrador sirve solo si se cumplen las dos:
+ *   - no venció: vence en la fecha que se elige al generarlo (por defecto,
+ *     el cierre de la última elección programada), nunca a más de 90 días;
+ *   - hay una votación abierta, o abre dentro de una hora (el margen para
+ *     registrar el autenticador con calma, antes de la apertura).
+ * Así un PIN filtrado no sirve fuera de la votación, y uno viejo no sirve
+ * en elecciones futuras. Las dos se comprueban en el primer paso del
+ * ingreso y otra vez en el segundo.
+ */
+const VENTANA_PREVIA_MINUTOS = 60;
+const PIN_VIGENCIA_MAXIMA_DIAS = 90;
+const PIN_VIGENCIA_SIN_ELECCION_HORAS = 24;
+const HORA_MS = 60 * 60 * 1000;
+
+const OUTSIDE_VOTING = {
+  error: 'No hay una votación abierta en este momento. El ingreso se habilita una hora antes de que abra la elección.',
+};
+const PIN_EXPIRED = { error: 'Tu PIN venció. Pide uno nuevo al encargado de tu puesto de votación.' };
+const PIN_EXPIRY_INVALID = {
+  error: `El vencimiento del PIN debe ser una fecha futura, de no más de ${PIN_VIGENCIA_MAXIMA_DIAS} días.`,
+};
+
+// ¿Hay una elección abierta, o que abre dentro del margen? Una detenida a
+// mano queda "closed" y ya no cuenta, aunque su horario no haya terminado.
+async function votingWindowOpen() {
+  const result = await pool.query(
+    `SELECT 1 FROM elections
+      WHERE status IN ('scheduled', 'active')
+        AND now() BETWEEN scheduled_start - make_interval(mins => $1) AND scheduled_end
+      LIMIT 1`,
+    [VENTANA_PREVIA_MINUTOS]
+  );
+  return result.rows.length === 1;
+}
+
+// La fecha que se propone al generar PIN: el cierre de la última elección
+// programada o abierta, para que el PIN sirva en ellas y venza al terminar.
+// Sin ninguna, 24 horas. Nunca más allá del máximo.
+async function suggestedPinExpiry() {
+  const result = await pool.query(
+    `SELECT title, scheduled_end FROM elections
+      WHERE status IN ('scheduled', 'active') AND scheduled_end > now()
+      ORDER BY scheduled_end DESC LIMIT 1`
+  );
+  const maximo = Date.now() + PIN_VIGENCIA_MAXIMA_DIAS * 24 * HORA_MS;
+  const eleccion = result.rows[0];
+  if (!eleccion) {
+    return { suggested: new Date(Date.now() + PIN_VIGENCIA_SIN_ELECCION_HORAS * HORA_MS), electionTitle: null };
+  }
+  return { suggested: new Date(Math.min(new Date(eleccion.scheduled_end).getTime(), maximo)), electionTitle: eleccion.title };
+}
+
+// El vencimiento pedido (o el sugerido, si no se pidió ninguno); null si el
+// pedido no es una fecha futura dentro del máximo.
+async function resolvePinExpiry(requested) {
+  if (requested === undefined || requested === null || requested === '') {
+    return (await suggestedPinExpiry()).suggested;
+  }
+  if (typeof requested !== 'string') return null;
+  const fecha = new Date(requested);
+  const ahora = Date.now();
+  if (Number.isNaN(fecha.getTime()) || fecha.getTime() <= ahora) return null;
+  if (fecha.getTime() > ahora + PIN_VIGENCIA_MAXIMA_DIAS * 24 * HORA_MS) return null;
+  return fecha;
+}
+
 app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', service: 'auth' }));
 
 /* ============================================================
@@ -340,8 +410,15 @@ app.post(
     const genericError = { error: 'Cédula o PIN incorrectos' };
 
     try {
+      // Fuera de la votación no se mira ni la cédula: el mensaje es el mismo
+      // para todos (si hay una elección abierta es información pública).
+      if (!(await votingWindowOpen())) {
+        return rejectVoter(req, res, voterIdHash, 'fuera_de_votacion', 403, OUTSIDE_VOTING);
+      }
+
       const result = await pool.query(
-        `SELECT id, is_active, assisted, totp_secret, access_code_hash
+        `SELECT id, is_active, assisted, totp_secret, access_code_hash,
+                (access_code_expires_at IS NOT NULL AND access_code_expires_at <= now()) AS pin_expired
            FROM voters WHERE cedula = $1`,
         [encryptField(cedula)]
       );
@@ -385,6 +462,12 @@ app.post(
         return res.status(401).json(genericError);
       }
 
+      // Recién con el PIN correcto se dice que venció: a quien no lo conoce,
+      // el mensaje no le revela nada.
+      if (voter.pin_expired) {
+        return rejectVoter(req, res, voterIdHash, 'pin_vencido', 403, PIN_EXPIRED);
+      }
+
       // El PIN es correcto, pero la sesión se abre recién con el segundo
       // factor (ver SEGUNDO FACTOR más arriba).
       const claims = { sub: voter.id, vh: voterIdHash };
@@ -407,12 +490,22 @@ app.post(
 // El votante del desafío, si sigue habilitado.
 async function voterFromChallenge(payload) {
   const result = await pool.query(
-    `SELECT id, is_active, assisted, polling_place, voting_table, totp_secret, totp_last_step
+    `SELECT id, is_active, assisted, polling_place, voting_table, totp_secret, totp_last_step,
+            (access_code_expires_at IS NOT NULL AND access_code_expires_at <= now()) AS pin_expired
        FROM voters WHERE id = $1`,
     [payload.sub]
   );
   const voter = result.rows[0];
   return voter && voter.is_active ? voter : null;
+}
+
+// El desafío dura 5 minutos: en el segundo paso se vuelve a comprobar la
+// vigencia, por si en el medio venció el PIN o cerró la votación. Devuelve
+// la respuesta de rechazo, o null si puede seguir.
+async function rejectIfOutsideAccess(req, res, voter, voterIdHash) {
+  if (voter.pin_expired) return rejectVoter(req, res, voterIdHash, 'pin_vencido', 403, PIN_EXPIRED);
+  if (!(await votingWindowOpen())) return rejectVoter(req, res, voterIdHash, 'fuera_de_votacion', 403, OUTSIDE_VOTING);
+  return null;
 }
 
 async function rejectVoter(req, res, voterIdHash, reason, status, payload) {
@@ -457,6 +550,8 @@ app.post('/login/voter/codigo', voterLoginLimiter, codeRules, async (req, res) =
   try {
     const voter = await voterFromChallenge(payload);
     if (!voter || voter.assisted || !voter.totp_secret) return res.status(401).json(CHALLENGE_EXPIRED);
+    const blocked = await rejectIfOutsideAccess(req, res, voter, payload.vh);
+    if (blocked) return blocked;
     const step = totp.verify(decryptField(voter.totp_secret), req.body.code, { lastStep: voter.totp_last_step });
     if (step === null || !(await consumeVoterStep(voter.id, step))) {
       return rejectVoter(req, res, payload.vh, 'codigo_incorrecto', 401, WRONG_CODE);
@@ -479,6 +574,8 @@ app.post('/login/voter/registro', voterLoginLimiter, codeRules, async (req, res)
   try {
     const voter = await voterFromChallenge(payload);
     if (!voter || voter.assisted) return res.status(401).json(CHALLENGE_EXPIRED);
+    const blocked = await rejectIfOutsideAccess(req, res, voter, payload.vh);
+    if (blocked) return blocked;
     const secret = decryptField(payload.s);
     const step = totp.verify(secret, req.body.code);
     if (step === null) return rejectVoter(req, res, payload.vh, 'codigo_registro_incorrecto', 401, WRONG_CODE);
@@ -523,6 +620,8 @@ app.post(
     try {
       const voter = await voterFromChallenge(payload);
       if (!voter || !voter.assisted) return res.status(401).json(CHALLENGE_EXPIRED);
+      const blocked = await rejectIfOutsideAccess(req, res, voter, payload.vh);
+      if (blocked) return blocked;
 
       const result = await pool.query(
         `SELECT id, username, polling_place, voting_table, totp_secret, totp_last_step
@@ -714,6 +813,9 @@ app.post(
     }
 
     const { voters } = req.body;
+    // Todos los PIN de esta carga vencen en la misma fecha (ver VIGENCIA DEL PIN).
+    const pinExpiresAt = await resolvePinExpiry(req.body.pinExpiresAt);
+    if (!pinExpiresAt) return res.status(400).json(PIN_EXPIRY_INVALID);
 
     // Hashing de bcrypt es intensivo en CPU: se hace en paralelo ANTES de la
     // transacción (no dentro del loop secuencial), para que cargar cientos
@@ -735,8 +837,8 @@ app.post(
         // cedula/polling_place/voting_table van cifrados (ver voterCrypto.js);
         // full_name se guarda tal cual, en texto plano.
         const result = await client.query(
-          `INSERT INTO voters (cedula, full_name, polling_place, voting_table, access_code_hash, created_by)
-           VALUES ($1, $2, $3, $4, $5, $6)
+          `INSERT INTO voters (cedula, full_name, polling_place, voting_table, access_code_hash, access_code_expires_at, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            ON CONFLICT (cedula) DO UPDATE SET
              full_name = EXCLUDED.full_name,
              polling_place = EXCLUDED.polling_place,
@@ -748,6 +850,7 @@ app.post(
             encryptField(v.pollingPlace),
             encryptField(v.votingTable),
             pinHashes[i],
+            pinExpiresAt,
             req.user.sub,
           ]
         );
@@ -767,10 +870,10 @@ app.post(
         actorType: 'admin',
         actorRef: req.user.username,
         req,
-        metadata: { totalReceived: voters.length, inserted, updated },
+        metadata: { totalReceived: voters.length, inserted, updated, pinExpiresAt },
       });
 
-      return res.status(201).json({ totalReceived: voters.length, inserted, updated, accessCodes });
+      return res.status(201).json({ totalReceived: voters.length, inserted, updated, accessCodes, pinExpiresAt });
     } catch (err) {
       await client.query('ROLLBACK');
       console.error('Error en /admin/voters/bulk:', err.message);
@@ -785,6 +888,7 @@ app.post(
 // "nunca tuvo uno" (padrón cargado antes de este cambio) como "perdió o
 // filtró su PIN". El PIN anterior queda inválido de inmediato (se
 // sobrescribe el hash) y el nuevo se devuelve en texto plano UNA sola vez.
+// El PIN nuevo trae su propio vencimiento (el pedido, o el sugerido).
 app.post(
   '/admin/voters/:id/reset-pin',
   requireAdmin,
@@ -797,11 +901,13 @@ app.post(
     }
 
     try {
+      const pinExpiresAt = await resolvePinExpiry(req.body?.pinExpiresAt);
+      if (!pinExpiresAt) return res.status(400).json(PIN_EXPIRY_INVALID);
       const pin = generateAccessCode();
       const pinHash = await bcrypt.hash(pin, 10);
       const updated = await pool.query(
-        'UPDATE voters SET access_code_hash = $1 WHERE id = $2 RETURNING id, cedula',
-        [pinHash, req.params.id]
+        'UPDATE voters SET access_code_hash = $1, access_code_expires_at = $2 WHERE id = $3 RETURNING id, cedula',
+        [pinHash, pinExpiresAt, req.params.id]
       );
       if (updated.rows.length === 0) {
         return res.status(404).json({ error: 'Votante no encontrado' });
@@ -812,10 +918,10 @@ app.post(
         actorType: 'admin',
         actorRef: req.user.username,
         req,
-        metadata: { voterId: req.params.id },
+        metadata: { voterId: req.params.id, pinExpiresAt },
       });
 
-      return res.status(200).json({ id: updated.rows[0].id, cedula: decryptField(updated.rows[0].cedula), pin });
+      return res.status(200).json({ id: updated.rows[0].id, cedula: decryptField(updated.rows[0].cedula), pin, pinExpiresAt });
     } catch (err) {
       console.error('Error en POST /admin/voters/:id/reset-pin:', err.message);
       return res.status(500).json({ error: 'Error interno del servidor' });
@@ -832,7 +938,8 @@ app.get('/admin/voters', requireAdmin, adminOpsLimiter, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT id, cedula, full_name, polling_place, voting_table, is_active,
-              (access_code_hash IS NOT NULL) AS has_pin, (totp_secret IS NOT NULL) AS has_totp,
+              (access_code_hash IS NOT NULL) AS has_pin, access_code_expires_at AS pin_expires_at,
+              (totp_secret IS NOT NULL) AS has_totp,
               assisted, created_at
          FROM voters
         ORDER BY id ASC
@@ -845,7 +952,14 @@ app.get('/admin/voters', requireAdmin, adminOpsLimiter, async (req, res) => {
       polling_place: decryptField(v.polling_place),
       voting_table: decryptField(v.voting_table),
     }));
-    return res.status(200).json({ limit, offset, voters });
+    // Lo que el panel propone como vencimiento al generar PIN, y el máximo.
+    const { suggested, electionTitle } = await suggestedPinExpiry();
+    return res.status(200).json({
+      limit,
+      offset,
+      voters,
+      pinExpiry: { suggested, electionTitle, maxDays: PIN_VIGENCIA_MAXIMA_DIAS, windowMinutesBefore: VENTANA_PREVIA_MINUTOS },
+    });
   } catch (err) {
     console.error('Error en GET /admin/voters:', err.message);
     return res.status(500).json({ error: 'Error interno del servidor' });
