@@ -17,6 +17,13 @@ RUN npm run build
 # usuario nginx.
 FROM nginx:1.30-alpine
 
+# ACTUALIZAR_PAQUETES: los scripts de arranque, el pipeline local y la
+# publicacion pasan la fecha (o la corrida). Con un valor nuevo, Docker no
+# reutiliza de su cache la capa de "apk upgrade" de un build anterior: sin
+# esto, un parche de Alpine publicado despues no llegaba a la imagen y Trivy
+# seguia marcando una CVE ya corregida.
+ARG ACTUALIZAR_PAQUETES=""
+
 # Parchea paquetes de SO (zlib, libxml2, musl, etc.) del snapshot de Alpine
 # de la imagen base oficial, que suele quedar unos dias detras de los
 # ultimos parches de seguridad de Alpine entre una republicacion y otra.

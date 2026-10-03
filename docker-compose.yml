@@ -113,6 +113,9 @@ services:
   auth-service:
     build:
       context: ./services/auth
+      # Fecha que pasan start.sh y contenedor.sh (ver ARG ACTUALIZAR_PAQUETES en el Dockerfile).
+      args:
+        ACTUALIZAR_PAQUETES: ${ACTUALIZAR_PAQUETES:-}
     # Modo desarrollo: "docker compose watch" reconstruye y reinicia solo este
     # servicio cuando cambia su codigo (ver docs/manual-desarrollo.md).
     develop:
@@ -159,6 +162,9 @@ services:
   voting-service:
     build:
       context: ./services/voting
+      # Fecha que pasan start.sh y contenedor.sh (ver ARG ACTUALIZAR_PAQUETES en el Dockerfile).
+      args:
+        ACTUALIZAR_PAQUETES: ${ACTUALIZAR_PAQUETES:-}
     # Modo desarrollo: "docker compose watch" reconstruye y reinicia solo este
     # servicio cuando cambia su codigo (ver docs/manual-desarrollo.md).
     develop:
@@ -200,6 +206,9 @@ services:
   analytics-service:
     build:
       context: ./services/analytics
+      # Fecha que pasan start.sh y contenedor.sh (ver ARG ACTUALIZAR_PAQUETES en el Dockerfile).
+      args:
+        ACTUALIZAR_PAQUETES: ${ACTUALIZAR_PAQUETES:-}
     # Modo desarrollo: "docker compose watch" reconstruye y reinicia solo este
     # servicio cuando cambia su codigo (ver docs/manual-desarrollo.md).
     develop:
@@ -250,6 +259,9 @@ services:
   scrutiny-service:
     build:
       context: ./services/scrutiny
+      # Fecha que pasan start.sh y contenedor.sh (ver ARG ACTUALIZAR_PAQUETES en el Dockerfile).
+      args:
+        ACTUALIZAR_PAQUETES: ${ACTUALIZAR_PAQUETES:-}
     # Modo desarrollo: "docker compose watch" reconstruye y reinicia solo este
     # servicio cuando cambia su codigo (ver docs/manual-desarrollo.md).
     develop:
@@ -302,6 +314,9 @@ services:
   scheduler-worker:
     build:
       context: ./services/scheduler
+      # Fecha que pasan start.sh y contenedor.sh (ver ARG ACTUALIZAR_PAQUETES en el Dockerfile).
+      args:
+        ACTUALIZAR_PAQUETES: ${ACTUALIZAR_PAQUETES:-}
     # Modo desarrollo: "docker compose watch" reconstruye y reinicia solo este
     # servicio cuando cambia su codigo (ver docs/manual-desarrollo.md).
     develop:
@@ -348,6 +363,9 @@ services:
   frontend:
     build:
       context: ./services/frontend
+      # Fecha que pasan start.sh y contenedor.sh (ver ARG ACTUALIZAR_PAQUETES en el Dockerfile).
+      args:
+        ACTUALIZAR_PAQUETES: ${ACTUALIZAR_PAQUETES:-}
     # Modo desarrollo: "docker compose watch" reconstruye y reinicia solo este
     # servicio cuando cambia su codigo (ver docs/manual-desarrollo.md).
     develop:

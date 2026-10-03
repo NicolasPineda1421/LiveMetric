@@ -56,6 +56,9 @@ Los hallazgos de Semgrep, ESLint, Trivy y Checkov se suben en formato **SARIF** 
 - Cada control termina en una línea ya interpretada: ✔ pasó, ⚠ para revisar (no bloquea), ✘ falló (bloquea). Debajo de un ✘ aparecen las líneas del log que explican por qué.
 - Al final, un cuadro con todos los controles por servicio y la duración.
 - La salida completa de cada herramienta queda en un log por paso; con `--detalle` además se ve en pantalla.
+- Una falla de la conexión no es un hallazgo: si npm audit o Trivy fallan por la red (DNS caído, `EAI_AGAIN`, `network is unreachable`, la base de Trivy que no baja), se reintentan hasta 3 veces antes de marcarse en rojo.
+- La base de vulnerabilidades de Trivy (unos 70 MB) queda en el volumen `livemetric-trivy-cache`: se descarga una vez, y otra solo cuando está vieja, en lugar de en cada uno de los 12 análisis. Para liberar el espacio: `docker volume rm livemetric-trivy-cache`.
+- Las imágenes se construyen con la fecha del día en `ACTUALIZAR_PAQUETES`, para que la capa de `apk upgrade` no salga de la caché de otro día (ver [Gestión de vulnerabilidades](manual-seguridad.md#5-gestión-de-vulnerabilidades)).
 - Fuera de alcance local (solo en GitHub Actions): Checkov, el despliegue con Terraform y el DAST.
 
 ## Cómo comprobar que los controles bloquean de verdad

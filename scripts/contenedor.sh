@@ -290,7 +290,7 @@ iniciar() {
   local log_compose
   log_compose="$(mktemp /tmp/livemetric-global-compose.XXXXXX)"
   correr "$log_compose" "docker compose up --build (construye y arranca los contenedores)" \
-    docker exec "$NOMBRE" docker compose up -d --build
+    docker exec -e ACTUALIZAR_PAQUETES="$(date +%F)" "$NOMBRE" docker compose up -d --build
   if [ $? -ne 0 ]; then
     falla "docker compose no pudo levantar el stack. Últimas líneas del log:"
     tail -n 15 "$log_compose" | sed "s/^/       ${C_GRIS}/; s/\$/${C_RESET}/"

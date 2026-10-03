@@ -221,6 +221,10 @@ fi
 # 3. Levantar el stack --------------------------------------------------------
 fase 4 4 "Levantar LiveMetric"
 COMPOSE_LOG="$(mktemp /tmp/livemetric-compose.XXXXXX)"
+# La fecha del día invalida la capa de "apk upgrade" de un build de otro día
+# (ver ARG ACTUALIZAR_PAQUETES en los Dockerfile y docker-compose.yml).
+ACTUALIZAR_PAQUETES="$(date +%F)"
+export ACTUALIZAR_PAQUETES
 correr "$COMPOSE_LOG" "docker compose up --build (construye y arranca los contenedores)" \
   docker compose up -d --build
 if [ $? -ne 0 ]; then

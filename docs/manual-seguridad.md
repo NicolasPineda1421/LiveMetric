@@ -147,6 +147,12 @@ Todo hallazgo, venga de la herramienta que venga, sigue el mismo camino:
 
 **Dependencias:** además del bloqueo automático, conviene actualizar las dependencias y las imágenes base antes de cada versión, aunque no haya CVE: así las correcciones de seguridad llegan en cambios chicos y no en uno grande y urgente.
 
+**Paquetes del sistema de las imágenes:** cada Dockerfile corre `apk upgrade` sobre la imagen base, que suele ir unos días detrás de los parches de Alpine. Docker guarda esa capa en su caché y la reutiliza mientras el Dockerfile no cambie, así que un parche publicado después no entraba, y Trivy seguía marcando una CVE ya corregida. Para evitarlo, el argumento `ACTUALIZAR_PAQUETES` invalida esa capa:
+- `start.sh`, `contenedor.sh` y el pipeline local pasan la fecha del día, así que la capa se rehace una vez por día y el `npm ci` sigue saliendo de la caché;
+- la publicación (`release.yml`) pasa el número de corrida.
+
+Si Trivy marca un paquete de Alpine, conviene ver primero si la corrección ya está publicada (`apk list -u` dentro de la imagen base). Si lo está, basta con volver a construir. Si no, se espera a que Alpine la publique o se documenta la excepción en `.trivyignore`.
+
 ## 6. Secretos
 
 Cada instalación genera su propio `.env` con secretos aleatorios (`scripts/lib/generar-env.js`, con permisos 600): no hay secretos compartidos entre personas ni en el repositorio, y el pipeline genera los suyos en cada corrida. Si un secreto se expone, se rota. Cada uno tiene sus consecuencias:

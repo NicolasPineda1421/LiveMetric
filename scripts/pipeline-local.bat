@@ -97,31 +97,37 @@ for %%S in (%SERVICES%) do (
 )
 
 REM --- 3-4. npm audit + Trivy fs (SCA) por servicio -----------------------
+REM La base de vulnerabilidades de Trivy (unos 70 MB) queda en el volumen
+REM livemetric-trivy-cache: se descarga una vez y no en cada analisis.
 call :paso 3
 for %%S in (%SERVICES%) do (
   call :en_curso "%%S - npm audit"
   pushd services\%%S
   call npm install --package-lock-only --silent --ignore-scripts > "%LOG_DIR%\npm-install-%%S.log" 2>&1
-  call npm audit --omit=dev --audit-level=high > "%LOG_DIR%\npm-audit-%%S.log" 2>&1
+  call :npm_audit %%S
   set RC=!errorlevel!
   popd
   call :resumir npm-audit %%S !RC! "%LOG_DIR%\npm-audit-%%S.log"
 
   call :en_curso "%%S - Trivy (deps)"
-  docker run --rm -v "%cd%:/repo" -w /repo aquasec/trivy:0.70.0 fs services/%%S --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed --scanners vuln --ignorefile /repo/.trivyignore --skip-version-check --no-progress > "%LOG_DIR%\trivy-fs-%%S.log" 2>&1
+  docker run --rm -v livemetric-trivy-cache:/root/.cache/trivy -v "%cd%:/repo" -w /repo aquasec/trivy:0.70.0 fs services/%%S --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed --scanners vuln --ignorefile /repo/.trivyignore --skip-version-check --no-progress > "%LOG_DIR%\trivy-fs-%%S.log" 2>&1
   call :resumir trivy-fs %%S !errorlevel! "%LOG_DIR%\trivy-fs-%%S.log"
 )
 
 REM --- 5. docker build + Trivy image (Container Scan) ---------------------
+REM Fecha del dia (AAAA-MM-DD): con un valor nuevo, Docker no reutiliza de su
+REM cache la capa de "apk upgrade" de un build de otro dia (ver ARG
+REM ACTUALIZAR_PAQUETES en los Dockerfile).
+for /f %%d in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd"') do set "ACTUALIZAR_PAQUETES=%%d"
 call :paso 4
 for %%S in (%SERVICES%) do (
   call :en_curso "%%S - construyendo la imagen"
-  docker build -t livemetric-%%S-localcheck services\%%S > "%LOG_DIR%\docker-build-%%S.log" 2>&1
+  docker build --build-arg ACTUALIZAR_PAQUETES=!ACTUALIZAR_PAQUETES! -t livemetric-%%S-localcheck services\%%S > "%LOG_DIR%\docker-build-%%S.log" 2>&1
   set RC=!errorlevel!
   call :resumir build %%S !RC! "%LOG_DIR%\docker-build-%%S.log"
   if !RC!==0 (
     call :en_curso "%%S - Trivy (imagen)"
-    docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "%cd%:/repo" aquasec/trivy:0.70.0 image livemetric-%%S-localcheck --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed --scanners vuln --ignorefile /repo/.trivyignore --skip-version-check --no-progress > "%LOG_DIR%\trivy-image-%%S.log" 2>&1
+    docker run --rm -v livemetric-trivy-cache:/root/.cache/trivy -v /var/run/docker.sock:/var/run/docker.sock -v "%cd%:/repo" aquasec/trivy:0.70.0 image livemetric-%%S-localcheck --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed --scanners vuln --ignorefile /repo/.trivyignore --skip-version-check --no-progress > "%LOG_DIR%\trivy-image-%%S.log" 2>&1
     call :resumir trivy-image %%S !errorlevel! "%LOG_DIR%\trivy-image-%%S.log"
   )
   docker rmi livemetric-%%S-localcheck >nul 2>nul
@@ -175,3 +181,19 @@ REM para el cuadro final.
 :resumir
 %RESUMEN% resultado "%RESULTADOS%" %*
 goto :eof
+
+REM npm audit del servicio %1, en su carpeta. Si el registro de npm no responde
+REM (DNS o red, como EAI_AGAIN), reintenta hasta 3 veces: es una falla de la
+REM conexion, no un hallazgo.
+:npm_audit
+set INTENTO=0
+:npm_audit_intento
+set /a INTENTO+=1
+call npm audit --omit=dev --audit-level=high > "%LOG_DIR%\npm-audit-%~1.log" 2>&1
+set RC_AUDIT=!errorlevel!
+if !RC_AUDIT!==0 exit /b 0
+findstr /c:"EAI_AGAIN" /c:"ENOTFOUND" /c:"ETIMEDOUT" /c:"ECONNRESET" /c:"audit endpoint returned an error" "%LOG_DIR%\npm-audit-%~1.log" > nul
+if errorlevel 1 exit /b !RC_AUDIT!
+if !INTENTO! GEQ 3 exit /b !RC_AUDIT!
+ping -n 6 127.0.0.1 > nul
+goto npm_audit_intento

@@ -150,6 +150,9 @@ jobs:
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: ./services/${{ matrix.service }}
+          # Un valor por corrida: la capa de "apk upgrade" no sale de la cache de
+          # una publicacion anterior (ver ARG ACTUALIZAR_PAQUETES en el Dockerfile).
+          build-args: ACTUALIZAR_PAQUETES=${{ github.run_id }}
           load: true
           push: false
           tags: livemetric-${{ matrix.service }}:release-candidate
@@ -190,6 +193,9 @@ jobs:
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: ./services/${{ matrix.service }}
+          # Un valor por corrida: la capa de "apk upgrade" no sale de la cache de
+          # una publicacion anterior (ver ARG ACTUALIZAR_PAQUETES en el Dockerfile).
+          build-args: ACTUALIZAR_PAQUETES=${{ github.run_id }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

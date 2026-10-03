@@ -225,8 +225,12 @@ if errorlevel 1 (
 REM --- 4. Levantar el stack, adentro ------------------------------------------
 call :fase 4 "Levantar LiveMetric, adentro del contenedor global"
 set "LOG_COMPOSE=%TEMP%\livemetric-global-compose-%RANDOM%.log"
+REM Fecha del dia (AAAA-MM-DD): con un valor nuevo, Docker no reutiliza de su
+REM cache la capa de "apk upgrade" de un build de otro dia (ver ARG
+REM ACTUALIZAR_PAQUETES en los Dockerfile).
+for /f %%d in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd"') do set "ACTUALIZAR_PAQUETES=%%d"
 <nul set /p "=%GRIS%   ... docker compose up --build: construyendo y arrancando los contenedores%RESET%"
-docker exec %NOMBRE% docker compose up -d --build > "%LOG_COMPOSE%" 2>&1
+docker exec -e ACTUALIZAR_PAQUETES=%ACTUALIZAR_PAQUETES% %NOMBRE% docker compose up -d --build > "%LOG_COMPOSE%" 2>&1
 if errorlevel 1 (
   echo.
   call :falla "docker compose no pudo levantar el stack. Ultimas lineas del log:"

@@ -91,6 +91,10 @@ if errorlevel 1 (
 REM --- 3. Levantar el stack --------------------------------------------------
 call :fase 4 "Levantar LiveMetric"
 set "COMPOSE_LOG=%TEMP%\livemetric-compose-%RANDOM%.log"
+REM Fecha del dia (AAAA-MM-DD): con un valor nuevo, Docker no reutiliza de su
+REM cache la capa de "apk upgrade" de un build de otro dia (ver ARG
+REM ACTUALIZAR_PAQUETES en los Dockerfile).
+for /f %%d in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd"') do set "ACTUALIZAR_PAQUETES=%%d"
 if "%ARG_DETALLE%"=="" (
   <nul set /p "=%GRIS%   ... docker compose up --build: construyendo y arrancando los contenedores%RESET%"
   call docker compose up -d --build > "%COMPOSE_LOG%" 2>&1

@@ -190,10 +190,36 @@ for svc in "${SERVICES[@]}"; do
 done
 
 # 3-4. npm audit + Trivy fs (SCA) por servicio -----------------------------
+# Una falla de la conexión (DNS caído, sin red, un registro que no responde)
+# no es un hallazgo: los pasos que bajan datos de internet se reintentan
+# antes de darse por fallidos.
+PATRON_RED='EAI_AGAIN|ENOTFOUND|ETIMEDOUT|ECONNRESET|audit endpoint returned an error|network is unreachable|failed to download vulnerability DB|i/o timeout|TLS handshake timeout'
+
+# reintentar_red <comando> [args...]: hasta 3 intentos (esperando 10 y 20 s),
+# solo si la salida es la de una falla de red.
+reintentar_red() {
+  local intento salida rc
+  for intento in 1 2 3; do
+    salida="$("$@" 2>&1)"
+    rc=$?
+    if [ "$rc" -eq 0 ] || ! grep -qE "$PATRON_RED" <<< "$salida"; then
+      break
+    fi
+    [ "$intento" -lt 3 ] && sleep $(( intento * 10 ))
+  done
+  printf '%s\n' "$salida"
+  return "$rc"
+}
+
+# La base de vulnerabilidades de Trivy (unos 70 MB) queda en un volumen: se
+# descarga una vez, y de nuevo solo cuando está vieja, no en cada uno de los
+# 12 análisis.
+TRIVY=(docker run --rm -v livemetric-trivy-cache:/root/.cache/trivy)
+
 npm_audit() {
   cd "services/$1" || return 1
   npm install --package-lock-only --silent --ignore-scripts > "$LOG_DIR/npm-install-$1.log" 2>&1
-  npm audit --omit=dev --audit-level=high
+  reintentar_red npm audit --omit=dev --audit-level=high
 }
 
 paso 3
@@ -202,23 +228,26 @@ for svc in "${SERVICES[@]}"; do
   resumir npm-audit "$svc" $? "$LOG_DIR/npm-audit-$svc.log"
 
   correr "$LOG_DIR/trivy-fs-$svc.log" "$svc · Trivy (deps)" \
-    docker run --rm -v "$DOCKER_MOUNT_ROOT:/repo" -w /repo aquasec/trivy:0.70.0 \
+    reintentar_red "${TRIVY[@]}" -v "$DOCKER_MOUNT_ROOT:/repo" -w /repo aquasec/trivy:0.70.0 \
     fs "services/$svc" --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed \
     --scanners vuln --ignorefile /repo/.trivyignore --skip-version-check --no-progress
   resumir trivy-fs "$svc" $? "$LOG_DIR/trivy-fs-$svc.log"
 done
 
 # 5. docker build + Trivy image (Container Scan) --------------------------
+# La fecha del día invalida la capa de "apk upgrade" de un build de otro día
+# (ver ARG ACTUALIZAR_PAQUETES en los Dockerfile).
+ACTUALIZAR_PAQUETES="${ACTUALIZAR_PAQUETES:-$(date +%F)}"
 paso 4
 for svc in "${SERVICES[@]}"; do
   correr "$LOG_DIR/docker-build-$svc.log" "$svc · construyendo la imagen" \
-    docker build -t "livemetric-$svc-localcheck" "services/$svc"
+    docker build --build-arg ACTUALIZAR_PAQUETES="$ACTUALIZAR_PAQUETES" -t "livemetric-$svc-localcheck" "services/$svc"
   BUILD_RC=$?
   resumir build "$svc" "$BUILD_RC" "$LOG_DIR/docker-build-$svc.log"
 
   if [ "$BUILD_RC" -eq 0 ]; then
     correr "$LOG_DIR/trivy-image-$svc.log" "$svc · Trivy (imagen)" \
-      docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$DOCKER_MOUNT_ROOT:/repo" \
+      reintentar_red "${TRIVY[@]}" -v /var/run/docker.sock:/var/run/docker.sock -v "$DOCKER_MOUNT_ROOT:/repo" \
       aquasec/trivy:0.70.0 image "livemetric-$svc-localcheck" --severity CRITICAL,HIGH \
       --exit-code 1 --ignore-unfixed --scanners vuln --ignorefile /repo/.trivyignore \
       --skip-version-check --no-progress
