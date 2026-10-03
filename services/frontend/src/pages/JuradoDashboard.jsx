@@ -25,12 +25,17 @@ export default function JuradoDashboard({ session, onLogout }) {
       <div className="content">
         <h2 className="section-title">Jurado de mesa</h2>
         {error && <div className="error-banner">{error}</div>}
-        {mesa && (
+        {mesa && (mesa.votingTable ? (
           <p className="section-desc">
             Tu mesa: <strong>{mesa.pollingPlace} — {mesa.votingTable}</strong>. Solo puedes autorizar a los votantes
             asistidos de esta mesa.
           </p>
-        )}
+        ) : (
+          <p className="section-desc">
+            Tu puesto: <strong>{mesa.pollingPlace}</strong>, todas las mesas. Puedes autorizar a los votantes asistidos
+            de cualquier mesa de este puesto.
+          </p>
+        ))}
 
         <div className="panel">
           <h3>Cómo autorizar un voto asistido</h3>
@@ -43,19 +48,20 @@ export default function JuradoDashboard({ session, onLogout }) {
         </div>
 
         <div className="panel">
-          <h3>Votantes asistidos de tu mesa{mesa ? ` (${mesa.assistedVoters.length})` : ''}</h3>
+          <h3>Votantes asistidos de tu {mesa && !mesa.votingTable ? 'puesto' : 'mesa'}{mesa ? ` (${mesa.assistedVoters.length})` : ''}</h3>
           {!mesa ? (
             <div className="empty-state">{error ? 'No se pudo cargar tu mesa.' : 'Cargando…'}</div>
           ) : mesa.assistedVoters.length === 0 ? (
-            <div className="empty-state">Ningún votante de tu mesa está marcado para el voto asistido.</div>
+            <div className="empty-state">Ningún votante de tu {mesa.votingTable ? 'mesa' : 'puesto'} está marcado para el voto asistido.</div>
           ) : (
             <table className="table">
-              <thead><tr><th>Nombre</th><th>Cédula termina en</th></tr></thead>
+              <thead><tr><th>Nombre</th><th>Cédula termina en</th><th>Mesa</th></tr></thead>
               <tbody>
                 {mesa.assistedVoters.map((v) => (
                   <tr key={`${v.fullName}-${v.cedulaEnd}`}>
                     <td>{v.fullName}</td>
                     <td className="mono">···{v.cedulaEnd}</td>
+                    <td>{v.votingTable}</td>
                   </tr>
                 ))}
               </tbody>

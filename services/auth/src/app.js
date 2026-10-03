@@ -12,6 +12,7 @@ const { recordAuditEvent } = require('./audit');
 const { requireAdmin, requireRole } = require('./middleware/auth');
 const { encryptField, decryptField } = require('./voterCrypto');
 const totp = require('./totp');
+const { juradoCubre, lugaresDelPadron, ubicarEnPadron } = require('./lugares');
 
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -635,19 +636,24 @@ app.post(
       const juradoInvalid = { error: 'Usuario o código del jurado incorrectos.' };
       if (step === null) return rejectVoter(req, res, payload.vh, 'jurado_no_valido', 401, juradoInvalid);
 
-      // Solo el jurado de la mesa del votante. Puesto y mesa están cifrados
-      // con el mismo cifrado determinístico, así que se comparan sin descifrar.
-      if (jurado.polling_place !== voter.polling_place || jurado.voting_table !== voter.voting_table) {
+      // Solo el jurado de la mesa del votante, o el de todo su puesto (sin
+      // mesa). Se comparan descifrados y sin depender de cómo se escribieron
+      // ("Mesa 1" y "1", mayúsculas, tildes: ver lugares.js).
+      const pollingPlace = decryptField(voter.polling_place);
+      const votingTable = decryptField(voter.voting_table);
+      const lugarJurado = {
+        pollingPlace: decryptField(jurado.polling_place),
+        votingTable: jurado.voting_table ? decryptField(jurado.voting_table) : null,
+      };
+      if (!juradoCubre(lugarJurado, { pollingPlace, votingTable })) {
         return rejectVoter(req, res, payload.vh, 'jurado_de_otra_mesa', 403, {
-          error: 'Ese jurado no es de la mesa de este votante.',
+          error: 'Ese jurado no es de la mesa ni del puesto de este votante.',
         });
       }
       if (!(await consumeJuradoStep(jurado.id, step))) {
         return rejectVoter(req, res, payload.vh, 'jurado_no_valido', 401, juradoInvalid);
       }
 
-      const pollingPlace = decryptField(voter.polling_place);
-      const votingTable = decryptField(voter.voting_table);
       await recordAuditEvent({
         eventType: 'ASSISTED_LOGIN_AUTHORIZED',
         actorType: 'jurado',
@@ -667,9 +673,28 @@ app.post(
  * ADMINISTRACIÓN DE IDENTIDAD — requiere JWT de administrador
  * ============================================================ */
 
-// Crear un usuario: administrador, auditor (solo lectura) o jurado de mesa.
-// El jurado necesita su puesto y su mesa: solo puede autorizar a los
-// votantes asistidos de esa mesa. Se guardan cifrados igual que en el padrón.
+// El puesto y la mesa de un jurado se eligen del padrón: así coinciden
+// siempre con los de sus votantes. Sin mesa, el jurado es de todo el puesto.
+const LUGAR_JURADO_ERRORES = {
+  padron_vacio: 'Carga el padrón antes de crear jurados: el puesto y la mesa se eligen de él.',
+  puesto: 'Ese puesto no está en el padrón.',
+  mesa: 'Esa mesa no está en ese puesto del padrón.',
+};
+
+async function lugarDelJurado(pollingPlace, votingTable) {
+  const lugar = ubicarEnPadron(await lugaresDelPadron(pool), pollingPlace, votingTable);
+  return lugar.error ? { error: LUGAR_JURADO_ERRORES[lugar.error] } : lugar;
+}
+
+const lugarJuradoRules = [
+  body('pollingPlace').if(body('role').equals('jurado')).trim().isLength({ min: 2, max: 150 }),
+  body('votingTable').optional({ values: 'falsy' }).trim().isLength({ min: 1, max: 50 }),
+];
+
+// Crear un usuario: administrador, auditor (solo lectura) o jurado. El
+// jurado necesita su puesto, y su mesa o ninguna (todo el puesto): solo
+// puede autorizar a los votantes asistidos de ahí. Se guardan cifrados
+// igual que en el padrón.
 app.post(
   '/admin/users',
   requireAdmin,
@@ -678,14 +703,13 @@ app.post(
     body('username').trim().isLength({ min: 3, max: 50 }).escape(),
     body('password').isLength({ min: 10, max: 128 }),
     body('role').optional().isIn(['admin', 'auditor', 'jurado']),
-    body('pollingPlace').if(body('role').equals('jurado')).trim().isLength({ min: 2, max: 150 }),
-    body('votingTable').if(body('role').equals('jurado')).trim().isLength({ min: 1, max: 50 }),
+    ...lugarJuradoRules,
   ],
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
-        error: 'Datos inválidos: la contraseña necesita al menos 10 caracteres, y un jurado, su puesto y su mesa',
+        error: 'Datos inválidos: la contraseña necesita al menos 10 caracteres, y un jurado, su puesto',
       });
     }
 
@@ -694,6 +718,8 @@ app.post(
     const jurado = role === 'jurado';
 
     try {
+      const lugar = jurado ? await lugarDelJurado(req.body.pollingPlace, req.body.votingTable) : null;
+      if (lugar?.error) return res.status(400).json({ error: lugar.error });
       const passwordHash = await bcrypt.hash(password, 12);
       const created = await pool.query(
         `INSERT INTO admins (username, password_hash, role, polling_place, voting_table)
@@ -702,8 +728,8 @@ app.post(
           username,
           passwordHash,
           role,
-          jurado ? encryptField(req.body.pollingPlace) : null,
-          jurado ? encryptField(req.body.votingTable) : null,
+          jurado ? encryptField(lugar.pollingPlace) : null,
+          lugar?.votingTable ? encryptField(lugar.votingTable) : null,
         ]
       );
 
@@ -715,7 +741,7 @@ app.post(
         metadata: {
           newAdminUsername: username,
           role,
-          ...(jurado ? { pollingPlace: req.body.pollingPlace, votingTable: req.body.votingTable } : {}),
+          ...(jurado ? { pollingPlace: lugar.pollingPlace, votingTable: lugar.votingTable } : {}),
         },
       });
 
@@ -749,6 +775,52 @@ app.get('/admin/users', requireAdmin, adminOpsLimiter, async (_req, res) => {
     return res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
+
+// Los puestos del padrón con sus mesas: de ahí se elige el lugar de cada jurado.
+app.get('/admin/padron/lugares', requireAdmin, adminOpsLimiter, async (_req, res) => {
+  try {
+    return res.status(200).json({ places: await lugaresDelPadron(pool) });
+  } catch (err) {
+    console.error('Error en GET /admin/padron/lugares:', err.message);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// Cambia el puesto y la mesa de un jurado (sin mesa: todo el puesto).
+app.put(
+  '/admin/users/:id/mesa',
+  requireAdmin,
+  adminOpsLimiter,
+  [
+    param('id').isInt({ min: 1 }).toInt(),
+    body('pollingPlace').trim().isLength({ min: 2, max: 150 }),
+    body('votingTable').optional({ values: 'falsy' }).trim().isLength({ min: 1, max: 50 }),
+  ],
+  async (req, res) => {
+    if (!validationResult(req).isEmpty()) return res.status(400).json({ error: 'Indica el puesto (y la mesa, si es de una sola)' });
+    try {
+      const lugar = await lugarDelJurado(req.body.pollingPlace, req.body.votingTable);
+      if (lugar.error) return res.status(400).json({ error: lugar.error });
+      const updated = await pool.query(
+        `UPDATE admins SET polling_place = $1, voting_table = $2
+          WHERE id = $3 AND role = 'jurado' RETURNING username`,
+        [encryptField(lugar.pollingPlace), lugar.votingTable ? encryptField(lugar.votingTable) : null, req.params.id]
+      );
+      if (updated.rows.length === 0) return res.status(404).json({ error: 'Jurado no encontrado' });
+      await recordAuditEvent({
+        eventType: 'JURADO_MESA_CHANGED',
+        actorType: 'admin',
+        actorRef: req.user.username,
+        req,
+        metadata: { targetUsername: updated.rows[0].username, ...lugar },
+      });
+      return res.status(200).json({ id: req.params.id, ...lugar });
+    } catch (err) {
+      console.error('Error en PUT /admin/users/:id/mesa:', err.message);
+      return res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  }
+);
 
 // Un jurado perdió o cambió el celular: se borra su autenticador y lo vuelve
 // a registrar en su próximo ingreso.
@@ -1030,8 +1102,10 @@ app.put(
  * JURADO DE MESA
  * ============================================================ */
 
-// Su mesa y los votantes asistidos que puede autorizar: el nombre y los
-// últimos 4 dígitos de la cédula, para reconocerlos al cotejar el documento.
+// Su mesa (o todo su puesto, si no tiene mesa) y los votantes asistidos que
+// puede autorizar: el nombre, la mesa y los últimos 4 dígitos de la cédula,
+// para reconocerlos al cotejar el documento. Los asistidos son pocos: se
+// descifran y se filtran con la misma regla que la autorización.
 app.get('/jurado/mesa', requireRole('jurado'), adminOpsLimiter, async (req, res) => {
   try {
     const jurado = await pool.query(
@@ -1039,18 +1113,23 @@ app.get('/jurado/mesa', requireRole('jurado'), adminOpsLimiter, async (req, res)
       [req.user.sub]
     );
     if (jurado.rows.length === 0) return res.status(404).json({ error: 'Jurado no encontrado' });
-    const { polling_place: pollingPlace, voting_table: votingTable } = jurado.rows[0];
+    const lugar = {
+      pollingPlace: decryptField(jurado.rows[0].polling_place),
+      votingTable: jurado.rows[0].voting_table ? decryptField(jurado.rows[0].voting_table) : null,
+    };
     const voters = await pool.query(
-      `SELECT full_name, cedula FROM voters
-        WHERE polling_place = $1 AND voting_table = $2 AND assisted AND is_active
-        ORDER BY full_name`,
-      [pollingPlace, votingTable]
+      `SELECT full_name, cedula, polling_place, voting_table FROM voters WHERE assisted AND is_active ORDER BY full_name`
     );
-    return res.status(200).json({
-      pollingPlace: decryptField(pollingPlace),
-      votingTable: decryptField(votingTable),
-      assistedVoters: voters.rows.map((v) => ({ fullName: v.full_name, cedulaEnd: decryptField(v.cedula).slice(-4) })),
-    });
+    const assistedVoters = voters.rows
+      .map((v) => ({
+        fullName: v.full_name,
+        cedulaEnd: decryptField(v.cedula).slice(-4),
+        pollingPlace: decryptField(v.polling_place),
+        votingTable: decryptField(v.voting_table),
+      }))
+      .filter((v) => juradoCubre(lugar, v))
+      .map(({ fullName, cedulaEnd, votingTable }) => ({ fullName, cedulaEnd, votingTable }));
+    return res.status(200).json({ ...lugar, assistedVoters });
   } catch (err) {
     console.error('Error en GET /jurado/mesa:', err.message);
     return res.status(500).json({ error: 'Error interno del servidor' });

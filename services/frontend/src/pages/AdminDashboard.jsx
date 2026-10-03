@@ -748,28 +748,75 @@ function ScrutinyTab({ session }) {
 
 const ROLE_LABEL = { admin: 'administrador', auditor: 'auditor', jurado: 'jurado de mesa' };
 
+// Dónde autoriza un jurado: su mesa, o todo su puesto si no tiene mesa.
+export const lugarJurado = (pollingPlace, votingTable) =>
+  `${pollingPlace} — ${votingTable || 'todas las mesas'}`;
+
+// Puesto y mesa de un jurado, elegidos del padrón (así coinciden con los de
+// sus votantes). La mesa vacía es "todas las mesas del puesto".
+function LugarJuradoFields({ places, pollingPlace, votingTable, onChange }) {
+  const puesto = places.find((p) => p.pollingPlace === pollingPlace);
+  return (
+    <div className="grid-2">
+      <div className="field-dark">
+        <label>Puesto de votación</label>
+        <select value={pollingPlace} onChange={(e) => onChange(e.target.value, '')} required>
+          <option value="">Elige un puesto del padrón…</option>
+          {places.map((p) => <option key={p.pollingPlace} value={p.pollingPlace}>{p.pollingPlace}</option>)}
+        </select>
+      </div>
+      <div className="field-dark">
+        <label>Mesa</label>
+        <select value={votingTable} onChange={(e) => onChange(pollingPlace, e.target.value)} disabled={!puesto}>
+          <option value="">Todas las mesas del puesto</option>
+          {(puesto?.votingTables || []).map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </div>
+    </div>
+  );
+}
+
 function UsersTab({ session }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('admin');
   const [pollingPlace, setPollingPlace] = useState('');
   const [votingTable, setVotingTable] = useState('');
+  const [places, setPlaces] = useState(null);
   const [users, setUsers] = useState([]);
+  // Jurado al que se le está cambiando la mesa: { id, pollingPlace, votingTable }.
+  const [editing, setEditing] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   function load() {
     api.listUsers(session.token).then((d) => setUsers(d.users)).catch((e) => setError(e.message));
+    api.listPadronPlaces(session.token).then((d) => setPlaces(d.places)).catch(() => setPlaces([]));
   }
   useEffect(load, [session.token]);
+
+  const sinPadron = places !== null && places.length === 0;
 
   async function submit(e) {
     e.preventDefault();
     setError(''); setSuccess('');
     try {
       await api.createAdminUser(session.token, username, password, role, role === 'jurado' ? { pollingPlace, votingTable } : {});
-      setSuccess(`Usuario "${username}" (${ownValue(ROLE_LABEL, role)}) creado correctamente.`);
+      const donde = role === 'jurado' ? `, en ${lugarJurado(pollingPlace, votingTable)}` : '';
+      setSuccess(`Usuario "${username}" (${ownValue(ROLE_LABEL, role)}${donde}) creado correctamente.`);
       setUsername(''); setPassword('');
+      load();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function saveMesa() {
+    setError(''); setSuccess('');
+    try {
+      const result = await api.changeJuradoMesa(session.token, editing.id, editing.pollingPlace, editing.votingTable);
+      setSuccess(`Jurado "${editing.username}" ahora en ${lugarJurado(result.pollingPlace, result.votingTable)}.`);
+      setEditing(null);
       load();
     } catch (err) {
       setError(err.message);
@@ -793,9 +840,9 @@ function UsersTab({ session }) {
       <h2 className="section-title">Usuarios</h2>
       <p className="section-desc">
         Crea cuentas de administrador, de auditor (solo lectura: puede ver resultados y reportes, nunca gestionar el
-        sistema) o de jurado de mesa. El jurado autoriza el ingreso de los votantes asistidos de su mesa con el código
-        de su propio autenticador, que registra en su primer ingreso. Úsalo también para reemplazar la credencial de
-        arranque apenas configures el sistema.
+        sistema) o de jurado de mesa. El jurado autoriza el ingreso de los votantes asistidos de su mesa, o de todo su
+        puesto, con el código de su propio autenticador, que registra en su primer ingreso. Úsalo también para
+        reemplazar la credencial de arranque apenas configures el sistema.
       </p>
 
       <div className="panel">
@@ -818,36 +865,72 @@ function UsersTab({ session }) {
               <option value="jurado">Jurado de mesa (autoriza votos asistidos)</option>
             </select>
           </div>
-          {role === 'jurado' && (
-            <div className="grid-2">
-              <div className="field-dark">
-                <label>Puesto de votación</label>
-                <input value={pollingPlace} onChange={(e) => setPollingPlace(e.target.value)} required minLength={2} />
+          {role === 'jurado' && (sinPadron ? (
+            <div className="error-banner">Carga el padrón antes de crear jurados: el puesto y la mesa se eligen de él.</div>
+          ) : (
+            <>
+              <LugarJuradoFields
+                places={places || []}
+                pollingPlace={pollingPlace}
+                votingTable={votingTable}
+                onChange={(p, m) => { setPollingPlace(p); setVotingTable(m); }}
+              />
+              <div className="field-hint-dark" style={{ marginTop: '-0.4rem', marginBottom: '0.9rem' }}>
+                Con «Todas las mesas del puesto», el jurado puede autorizar a los votantes asistidos de cualquier mesa
+                de ese puesto.
               </div>
-              <div className="field-dark">
-                <label>Mesa</label>
-                <input value={votingTable} onChange={(e) => setVotingTable(e.target.value)} required />
-              </div>
-            </div>
-          )}
-          <button className="btn btn-gold">Crear usuario</button>
+            </>
+          ))}
+          <button className="btn btn-gold" disabled={role === 'jurado' && sinPadron}>Crear usuario</button>
         </form>
       </div>
 
       <div className="panel">
         <h3>Usuarios ({users.length})</h3>
         <table className="table">
-          <thead><tr><th>Usuario</th><th>Rol</th><th>Mesa</th><th>Autenticador</th><th></th></tr></thead>
+          <thead><tr><th>Usuario</th><th>Rol</th><th>Puesto y mesa</th><th>Autenticador</th><th></th></tr></thead>
           <tbody>
             {users.map((u) => (
               <tr key={u.id}>
                 <td>{u.username}</td>
                 <td>{ownValue(ROLE_LABEL, u.role) || u.role}</td>
-                <td>{u.role === 'jurado' ? `${u.polling_place} — ${u.voting_table}` : '—'}</td>
+                <td>
+                  {u.role !== 'jurado' ? '—' : editing?.id === u.id ? (
+                    <div className="editar-mesa">
+                      <LugarJuradoFields
+                        places={places || []}
+                        pollingPlace={editing.pollingPlace}
+                        votingTable={editing.votingTable}
+                        onChange={(p, m) => setEditing({ ...editing, pollingPlace: p, votingTable: m })}
+                      />
+                      <div className="acciones-padron">
+                        <button className="btn btn-gold" disabled={!editing.pollingPlace} onClick={saveMesa}>Guardar</button>
+                        <button className="btn btn-outline" onClick={() => setEditing(null)}>Cancelar</button>
+                      </div>
+                    </div>
+                  ) : lugarJurado(u.polling_place, u.voting_table)}
+                </td>
                 <td>{u.role !== 'jurado' ? '—' : u.has_totp ? 'Registrado' : 'Pendiente (primer ingreso)'}</td>
                 <td>
-                  {u.role === 'jurado' && u.has_totp && (
-                    <button className="btn btn-outline" onClick={() => resetTotp(u)}>Restablecer autenticador</button>
+                  {u.role === 'jurado' && (
+                    <div className="acciones-padron">
+                      {editing?.id !== u.id && !sinPadron && (
+                        <button
+                          className="btn btn-outline"
+                          onClick={() => {
+                            // Si su puesto está en el padrón, se parte de él (y de su mesa, si existe).
+                            const puesto = (places || []).find((p) => p.pollingPlace === u.polling_place);
+                            const mesa = puesto?.votingTables.includes(u.voting_table) ? u.voting_table : '';
+                            setEditing({ id: u.id, username: u.username, pollingPlace: puesto ? u.polling_place : '', votingTable: mesa });
+                          }}
+                        >
+                          Cambiar mesa
+                        </button>
+                      )}
+                      {u.has_totp && (
+                        <button className="btn btn-outline" onClick={() => resetTotp(u)}>Restablecer autenticador</button>
+                      )}
+                    </div>
                   )}
                 </td>
               </tr>

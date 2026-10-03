@@ -4,7 +4,8 @@
 -- de su app autenticadora (Microsoft Authenticator, Google Authenticator,
 -- Authy: TOTP, RFC 6238), que registra en su primer ingreso. Quien no puede
 -- usar una app vota "asistido": el jurado de su mesa verifica su cédula en
--- persona y autoriza el ingreso con el código de SU autenticador. Ver
+-- persona y autoriza el ingreso con el código de SU autenticador. El jurado
+-- es de una mesa, o de todo su puesto si no tiene mesa. Ver
 -- services/auth/src/totp.js y las rutas /login/voter/* de auth-service.
 --
 -- db/init.sql ya incluye todo esto: solo hace falta para una base creada con
@@ -38,4 +39,4 @@ END $$;
 ALTER TABLE admins ADD CONSTRAINT admins_role_check
     CHECK (role IN ('admin', 'auditor', 'jurado'));
 ALTER TABLE admins ADD CONSTRAINT admins_jurado_mesa_check
-    CHECK (role <> 'jurado' OR (polling_place IS NOT NULL AND voting_table IS NOT NULL));
+    CHECK (role <> 'jurado' OR polling_place IS NOT NULL);

@@ -290,7 +290,7 @@
                   "severity": "Medium",
                   "type": "Spoofing",
                   "description": "En el voto asistido, el segundo factor es el código del autenticador del jurado de la mesa: un jurado de acuerdo con quien tenga el PIN de un votante asistido podría abrirle la sesión.",
-                  "mitigation": "Mitigado parcial. El jurado solo autoriza a votantes de su propia mesa, marcados como asistidos por el administrador; coteja la cédula física en persona; su código es de un solo uso; cada autorización queda en la auditoría con su nombre (ASSISTED_LOGIN_AUTHORIZED). Residual: la complicidad, igual que en una elección física.",
+                  "mitigation": "Mitigado parcial. El jurado solo autoriza a votantes de su propia mesa (o de su puesto, si se lo asignó a todo el puesto), marcados como asistidos por el administrador; coteja la cédula física en persona; su código es de un solo uso; cada autorización queda en la auditoría con su nombre (ASSISTED_LOGIN_AUTHORIZED). Residual: la complicidad, igual que en una elección física.",
                   "modelType": "STRIDE",
                   "new": false,
                   "number": 18,

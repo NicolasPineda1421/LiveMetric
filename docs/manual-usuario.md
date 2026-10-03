@@ -133,8 +133,8 @@ Si usted no tiene un celular con apps o no puede usarlo, el administrador lo mar
 ![Captura 30: Voto asistido: el jurado de la mesa escribe su usuario y el código de su autenticador](img/30-voto-asistido.png)
 *Captura 30. Voto asistido: el jurado de la mesa escribe su usuario y el código de su autenticador.*
 
-Solo puede autorizarlo el jurado **de su mesa**, y cada autorización queda registrada con
-el nombre del jurado.
+Solo puede autorizarlo el jurado **de su mesa** (o uno asignado a todo su puesto), y cada
+autorización queda registrada con el nombre del jurado.
 
 **Si el ingreso falla**, el sistema siempre responde lo mismo: *"Cédula o PIN
 incorrectos"*. No distingue entre una cédula que no existe y un PIN equivocado. Esto es
@@ -283,16 +283,22 @@ Para crear otros administradores, auditores o jurados de mesa.
 1. Pestaña **Usuarios**.
 2. **Usuario** y **Contraseña** (mínimo 10 caracteres).
 3. Elija el rol: **Administrador**, **Auditor (solo lectura)** o **Jurado de mesa**.
-4. Para un jurado, escriba su **Puesto de votación** y su **Mesa**: solo podrá autorizar a
-   los votantes asistidos de esa mesa.
+4. Para un jurado, elija su **Puesto de votación** y su **Mesa** de las listas, que salen
+   del padrón (por eso hay que cargar el padrón antes de crear jurados). Con **Todas las
+   mesas del puesto**, el jurado puede autorizar a los votantes asistidos de cualquier mesa
+   de ese puesto; con una mesa, solo a los de esa mesa.
 5. Botón **Crear usuario**.
 
-El listado de abajo muestra la mesa de cada jurado y si ya registró su autenticador. Si un
-jurado cambia o pierde el celular, **Restablecer autenticador** hace que lo registre de
-nuevo en su próximo ingreso.
+El listado de abajo muestra el puesto y la mesa de cada jurado y si ya registró su
+autenticador. **Cambiar mesa** le asigna otro puesto o mesa (o todo el puesto), también
+elegidos del padrón. Si un jurado cambia o pierde el celular, **Restablecer autenticador**
+hace que lo registre de nuevo en su próximo ingreso.
 
-![Captura 14: Creación de un jurado de mesa, con su puesto y su mesa, y el listado de usuarios](img/14-usuarios.png)
-*Captura 14. Creación de un jurado de mesa, con su puesto y su mesa, y el listado de usuarios.*
+Al comparar la mesa del jurado con la del votante, el sistema no distingue mayúsculas,
+tildes ni espacios de más, y toma "1" y "Mesa 1" como la misma mesa.
+
+![Captura 14: Creación de un jurado de todo el Puesto Central, con el puesto y la mesa elegidos del padrón, y el listado de usuarios con «Cambiar mesa»](img/14-usuarios.png)
+*Captura 14. Creación de un jurado de todo el Puesto Central, con el puesto y la mesa elegidos del padrón, y el listado de usuarios con «Cambiar mesa».*
 
 ### 4.6 Resultados
 
@@ -444,8 +450,9 @@ servidor rechaza cualquier intento de usar esas funciones con una sesión de aud
 
 ## 7. Guía del Jurado de mesa
 
-El jurado autoriza el ingreso de los votantes **asistidos** de su mesa: quienes no pueden
-usar una app autenticadora. Su autorización reemplaza el código del celular del votante,
+El jurado autoriza el ingreso de los votantes **asistidos** de su mesa, o de todas las mesas
+de su puesto si el administrador lo asignó así: quienes no pueden usar una app
+autenticadora. Su autorización reemplaza el código del celular del votante,
 así que su propio ingreso también lleva segundo factor.
 
 **Primer ingreso:** entra por la pestaña **Administrador / Auditor / Jurado** con el
@@ -453,11 +460,11 @@ usuario y la contraseña que le dio el administrador, y registra su autenticador
 que un votante (ver [3.2](#32-votante)). Conviene activar el bloqueo con huella o rostro de
 la app.
 
-**Su panel** muestra su mesa, los pasos para autorizar y la lista de votantes asistidos
-que puede autorizar (nombre y los últimos 4 dígitos de la cédula).
+**Su panel** muestra su mesa (o su puesto), los pasos para autorizar y la lista de
+votantes asistidos que puede autorizar: nombre, últimos 4 dígitos de la cédula y mesa.
 
-![Captura 31: El panel del jurado: su mesa, cómo autorizar y los votantes asistidos de su mesa](img/31-panel-jurado.png)
-*Captura 31. El panel del jurado: su mesa, cómo autorizar y los votantes asistidos de su mesa.*
+![Captura 31: El panel de un jurado de todo el puesto: cómo autorizar y los votantes asistidos de sus mesas](img/31-panel-jurado.png)
+*Captura 31. El panel de un jurado de todo el puesto: cómo autorizar y los votantes asistidos de sus mesas.*
 
 **Cómo autorizar un voto asistido:**
 
@@ -468,7 +475,8 @@ que puede autorizar (nombre y los últimos 4 dígitos de la cédula).
    dígitos de su autenticador (Captura 30).
 4. **Apártese**: el voto es secreto. Su autorización queda registrada en la auditoría.
 
-El sistema rechaza la autorización si el votante es de otra mesa o si el código ya se usó.
+El sistema rechaza la autorización si el votante es de otra mesa (o de otro puesto, para un
+jurado de todo el puesto) o si el código ya se usó.
 
 ---
 
@@ -574,7 +582,7 @@ instalación de prueba ya borrada (además, cada código vence a los 30 segundos
 | 11 | `11-padron-carga.png` | Carga del padrón |
 | 12 | `12-padron-pines.png` | PINes generados (difuminados) |
 | 13 | `13-padron-lista.png` | Listado del padrón (PIN, autenticador, voto asistido) |
-| 14 | `14-usuarios.png` | Creación de usuarios y jurados |
+| 14 | `14-usuarios.png` | Creación de usuarios y jurados (puesto y mesa del padrón) |
 | 15 | `15-resultados-vivo.png` | Total en vivo (sin votos por opción) |
 | 16 | `16-resultados-certificados.png` | Resultados certificados |
 | 17 | `17-reportes.png` | Tablero de reportes |
@@ -590,7 +598,7 @@ instalación de prueba ya borrada (además, cada código vence a los 30 segundos
 | 28 | `28-registro-autenticador.png` | Registro del autenticador (primer ingreso) |
 | 29 | `29-codigo-autenticador.png` | Código del autenticador |
 | 30 | `30-voto-asistido.png` | Voto asistido: autorización del jurado |
-| 31 | `31-panel-jurado.png` | Panel del jurado de mesa |
+| 31 | `31-panel-jurado.png` | Panel del jurado (de todo el puesto) |
 
 Las capturas 05 y 26 juntas muestran el control de acceso por rol: conviene usarlas también
 en el informe y en el video.

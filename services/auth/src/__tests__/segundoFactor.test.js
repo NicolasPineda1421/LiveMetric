@@ -33,7 +33,10 @@ let ipLibre = 10;
 const otraIp = () => `198.51.100.${ipLibre++}`;
 const post = (ruta, cuerpo, ip = '192.0.2.1') => request(app).post(ruta).set('X-Forwarded-For', ip).send(cuerpo);
 const METODOS = { get: (r) => request(app).get(r), post: (r) => request(app).post(r), put: (r) => request(app).put(r) };
-const conToken = (metodo, ruta, token) => METODOS[metodo](ruta).set('Authorization', `Bearer ${token}`); // eslint-disable-line security/detect-object-injection -- metodo es siempre un literal de estas pruebas
+// Las operaciones de administración tienen su propio límite por IP (20 por
+// minuto): cada bloque que hace muchas usa la suya.
+let ipAdmin = '192.0.2.200';
+const conToken = (metodo, ruta, token) => METODOS[metodo](ruta).set('Authorization', `Bearer ${token}`).set('X-Forwarded-For', ipAdmin); // eslint-disable-line security/detect-object-injection -- metodo es siempre un literal de estas pruebas
 
 async function votante(cedula) {
   const r = await pool.query('SELECT id, totp_secret, totp_last_step FROM voters WHERE cedula = $1', [encryptField(cedula)]);
@@ -202,7 +205,7 @@ describe('Voto asistido', () => {
     expect(auditoria.map((e) => e.metadata)).toContainEqual({ voterId: ids.asistida, assisted: true });
   });
 
-  it('un jurado sin puesto y mesa no se puede crear', async () => {
+  it('un jurado sin puesto no se puede crear', async () => {
     const res = await conToken('post', '/admin/users', adminToken).send({
       username: `${RUN_ID}_jx`,
       password: JURADO_1.password,
@@ -228,7 +231,7 @@ describe('Voto asistido', () => {
     expect(res.body).toEqual({
       pollingPlace: PUESTO,
       votingTable: 'Mesa 1',
-      assistedVoters: [{ fullName: 'Votante Asistida', cedulaEnd: CEDULAS.asistida.slice(-4) }],
+      assistedVoters: [{ fullName: 'Votante Asistida', cedulaEnd: CEDULAS.asistida.slice(-4), votingTable: 'Mesa 1' }],
     });
     expect((await conToken('get', '/admin/voters', tokenJurado1)).status).toBe(403);
     expect((await conToken('get', '/jurado/mesa', adminToken)).status).toBe(403);
@@ -313,5 +316,102 @@ describe('Voto asistido', () => {
 
     const admin = lista.body.users.find((u) => u.username === ADMIN.username);
     expect((await conToken('post', `/admin/users/${admin.id}/reset-totp`, adminToken)).status).toBe(404);
+  });
+});
+
+// El puesto y la mesa del jurado se eligen del padrón y se comparan sin
+// depender de cómo se escribieron; sin mesa, el jurado es de todo el puesto.
+// Corre después de "Voto asistido": los dos votantes asistidos (Mesa 1 y
+// Mesa 2) ya están marcados.
+describe('Puesto y mesa del jurado', () => {
+  const JURADO_PUESTO = { username: `${RUN_ID}_jp`, password: JURADO_1.password };
+  const JURADO_VIEJO = { username: `${RUN_ID}_jv`, password: JURADO_1.password };
+
+  beforeAll(() => {
+    ipAdmin = '192.0.2.201';
+  });
+
+  async function registrarJurado(cuenta) {
+    const ip = otraIp();
+    const paso1 = await post('/login/admin', cuenta, ip);
+    const sesion = await post('/login/admin/registro', { challenge: paso1.body.challenge, code: codigoDelQr(paso1) }, ip);
+    return sesion.body.token;
+  }
+
+  // Cada código del jurado sirve una vez, y el margen es de ±30 s: para
+  // autorizar varias veces seguidas sin esperar al siguiente paso real, la
+  // prueba olvida el último paso usado (en la vida real, pasan 30 s).
+  async function autorizar(cedula, cuenta, ip) {
+    await pool.query('UPDATE admins SET totp_last_step = NULL WHERE username = $1', [cuenta.username]);
+    const paso1 = await post('/login/voter', { cedula, pin: pins.get(cedula) }, ip);
+    return post('/login/voter/asistido', {
+      challenge: paso1.body.challenge,
+      juradoUsername: cuenta.username,
+      juradoCode: codigoSiguiente(await jurado(cuenta.username)),
+    }, ip);
+  }
+
+  it('el administrador ve los puestos del padrón con sus mesas', async () => {
+    const res = await conToken('get', '/admin/padron/lugares', adminToken);
+    expect(res.status).toBe(200);
+    expect(res.body.places).toContainEqual({ pollingPlace: PUESTO, votingTables: ['Mesa 1', 'Mesa 2'] });
+  });
+
+  it('al crearlo, el puesto y la mesa se guardan como figuran en el padrón, aunque se escriban distinto', async () => {
+    const cuenta = { username: `${RUN_ID}_jn`, password: JURADO_1.password };
+    const res = await conToken('post', '/admin/users', adminToken).send({ ...cuenta, role: 'jurado', pollingPlace: PUESTO.toLowerCase(), votingTable: '1' });
+    expect(res.status).toBe(201);
+    const fila = (await conToken('get', '/admin/users', adminToken)).body.users.find((u) => u.username === cuenta.username);
+    expect(fila).toMatchObject({ polling_place: PUESTO, voting_table: 'Mesa 1' });
+  });
+
+  it('un puesto o una mesa que no están en el padrón se rechazan', async () => {
+    const crear = (lugar) => conToken('post', '/admin/users', adminToken).send({ username: `${RUN_ID}_jx2`, password: JURADO_1.password, role: 'jurado', ...lugar });
+    const puesto = await crear({ pollingPlace: 'Punto central', votingTable: 'Mesa 1' });
+    expect(puesto.status).toBe(400);
+    expect(puesto.body.error).toBe('Ese puesto no está en el padrón.');
+    const mesa = await crear({ pollingPlace: PUESTO, votingTable: 'Mesa 9' });
+    expect(mesa.body.error).toBe('Esa mesa no está en ese puesto del padrón.');
+  });
+
+  it('un jurado de todo el puesto ve los asistidos de todas sus mesas y autoriza en cualquiera', async () => {
+    const creado = await conToken('post', '/admin/users', adminToken).send({ ...JURADO_PUESTO, role: 'jurado', pollingPlace: PUESTO });
+    expect(creado.status).toBe(201);
+    const token = await registrarJurado(JURADO_PUESTO);
+    const panel = await conToken('get', '/jurado/mesa', token);
+    expect(panel.body.votingTable).toBeNull();
+    expect(panel.body.assistedVoters.map((v) => v.votingTable).sort()).toEqual(['Mesa 1', 'Mesa 2']);
+
+    const res = await autorizar(CEDULAS.otraMesa, JURADO_PUESTO);
+    expect(res.status).toBe(200);
+    expect(res.body.votingTable).toBe('Mesa 2');
+  });
+
+  it('un jurado creado antes, con la mesa escrita "1", autoriza a los votantes de la "Mesa 1"', async () => {
+    await pool.query(
+      `INSERT INTO admins (username, password_hash, role, polling_place, voting_table) VALUES ($1, $2, 'jurado', $3, $4)`,
+      [JURADO_VIEJO.username, await bcrypt.hash(JURADO_VIEJO.password, 4), encryptField(PUESTO.toUpperCase()), encryptField('1')]
+    );
+    await registrarJurado(JURADO_VIEJO);
+    const res = await autorizar(CEDULAS.asistida, JURADO_VIEJO);
+    expect(res.status).toBe(200);
+    const otra = await autorizar(CEDULAS.otraMesa, JURADO_VIEJO, otraIp());
+    expect(otra.status).toBe(403);
+    expect(otra.body.error).toBe('Ese jurado no es de la mesa ni del puesto de este votante.');
+  });
+
+  it('el administrador cambia la mesa de un jurado (o lo deja en todo el puesto), y queda en la auditoría', async () => {
+    const { id } = await jurado(JURADO_VIEJO.username);
+    const res = await conToken('put', `/admin/users/${id}/mesa`, adminToken).send({ pollingPlace: PUESTO, votingTable: 'mesa 2' });
+    expect(res.body).toEqual({ id, pollingPlace: PUESTO, votingTable: 'Mesa 2' });
+    expect((await autorizar(CEDULAS.otraMesa, JURADO_VIEJO)).status).toBe(200);
+
+    const todo = await conToken('put', `/admin/users/${id}/mesa`, adminToken).send({ pollingPlace: PUESTO, votingTable: '' });
+    expect(todo.body.votingTable).toBeNull();
+    expect((await conToken('put', `/admin/users/${id}/mesa`, adminToken).send({ pollingPlace: 'Punto central' })).status).toBe(400);
+    const admin = (await conToken('get', '/admin/users', adminToken)).body.users.find((u) => u.username === ADMIN.username);
+    expect((await conToken('put', `/admin/users/${admin.id}/mesa`, adminToken).send({ pollingPlace: PUESTO })).status).toBe(404);
+    const auditoria = await eventos('JURADO_MESA_CHANGED', ADMIN.username);
+    expect(auditoria.map((e) => e.metadata.votingTable)).toEqual(expect.arrayContaining(['Mesa 2', null]));
   });
 });

@@ -280,7 +280,7 @@ graph LR
         UC12(["Emitir voto"])
         UC17(["Consultar su historial<br/>(sin elección ni opción)"])
         UC18(["Registrar el autenticador<br/>(primer ingreso)"])
-        UC19(["Autorizar un voto asistido<br/>de su mesa"])
+        UC19(["Autorizar un voto asistido<br/>de su mesa o su puesto"])
         UC13(["Activar / cerrar<br/>elecciones por horario"])
         UC14(["Certificar y firmar el acta"])
     end
@@ -384,7 +384,7 @@ erDiagram
         string password_hash
         string role "admin, auditor o jurado"
         string polling_place "solo jurado, cifrado"
-        string voting_table "solo jurado, cifrada"
+        string voting_table "solo jurado, cifrada (vacía: todo el puesto)"
         string totp_secret "cifrado"
     }
     VOTERS {

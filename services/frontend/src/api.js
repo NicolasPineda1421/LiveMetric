@@ -63,6 +63,11 @@ export const api = {
   createAdminUser: (token, username, password, role = 'admin', mesa = {}) =>
     request('auth', '/admin/users', { method: 'POST', token, body: { username, password, role, ...mesa } }),
   listUsers: (token) => request('auth', '/admin/users', { token }),
+  // Puestos del padrón con sus mesas: de ahí se elige el lugar de un jurado.
+  listPadronPlaces: (token) => request('auth', '/admin/padron/lugares', { token }),
+  // votingTable vacío: el jurado queda de todo el puesto.
+  changeJuradoMesa: (token, userId, pollingPlace, votingTable) =>
+    request('auth', `/admin/users/${userId}/mesa`, { method: 'PUT', token, body: { pollingPlace, votingTable } }),
   resetUserTotp: (token, userId) =>
     request('auth', `/admin/users/${userId}/reset-totp`, { method: 'POST', token }),
   // pinExpiresAt: vencimiento (ISO) de los PIN que se generen; sin él, el sugerido.

@@ -164,22 +164,56 @@ describe('Usuarios', () => {
     expect(clave).toHaveValue('');
   });
 
-  it('un jurado se crea con su puesto y su mesa', async () => {
+  const LUGARES = {
+    places: [
+      { pollingPlace: 'Puesto Central', votingTables: ['Mesa 1', 'Mesa 2'] },
+      { pollingPlace: 'Puesto Norte', votingTables: ['Mesa 1'] },
+    ],
+  };
+
+  it('un jurado se crea eligiendo del padrón su puesto y su mesa', async () => {
     api.createAdminUser.mockResolvedValue({});
     api.listUsers.mockResolvedValue({ users: [] });
+    api.listPadronPlaces.mockResolvedValue(LUGARES);
     const usuario = await abrir('Usuarios');
     expect(screen.queryByText('Mesa', { selector: 'label' })).not.toBeInTheDocument();
     await usuario.type(campo('Usuario'), 'jurado.mesa1');
     await usuario.type(campo('Contraseña (mínimo 10 caracteres)'), 'una-clave-larga');
     await usuario.selectOptions(campo('Rol'), 'jurado');
-    await usuario.type(campo('Puesto de votación'), 'Puesto Central');
-    await usuario.type(campo('Mesa'), 'Mesa 1');
+    // Sin puesto, la mesa no se puede elegir; con él, solo sus mesas.
+    expect(campo('Mesa')).toBeDisabled();
+    await usuario.selectOptions(campo('Puesto de votación'), 'Puesto Central');
+    expect(within(campo('Mesa')).getAllByRole('option').map((o) => o.textContent)).toEqual(['Todas las mesas del puesto', 'Mesa 1', 'Mesa 2']);
+    await usuario.selectOptions(campo('Mesa'), 'Mesa 1');
     await usuario.click(screen.getByRole('button', { name: 'Crear usuario' }));
     expect(api.createAdminUser).toHaveBeenCalledWith('jwt-admin', 'jurado.mesa1', 'una-clave-larga', 'jurado', {
       pollingPlace: 'Puesto Central',
       votingTable: 'Mesa 1',
     });
-    expect(await screen.findByText('Usuario "jurado.mesa1" (jurado de mesa) creado correctamente.')).toBeInTheDocument();
+    expect(await screen.findByText('Usuario "jurado.mesa1" (jurado de mesa, en Puesto Central — Mesa 1) creado correctamente.')).toBeInTheDocument();
+  });
+
+  it('un jurado de todo el puesto se crea sin mesa', async () => {
+    api.createAdminUser.mockResolvedValue({});
+    api.listUsers.mockResolvedValue({ users: [] });
+    api.listPadronPlaces.mockResolvedValue(LUGARES);
+    const usuario = await abrir('Usuarios');
+    await usuario.type(campo('Usuario'), 'jurado.norte');
+    await usuario.type(campo('Contraseña (mínimo 10 caracteres)'), 'una-clave-larga');
+    await usuario.selectOptions(campo('Rol'), 'jurado');
+    await usuario.selectOptions(campo('Puesto de votación'), 'Puesto Norte');
+    await usuario.click(screen.getByRole('button', { name: 'Crear usuario' }));
+    expect(api.createAdminUser).toHaveBeenCalledWith('jwt-admin', 'jurado.norte', 'una-clave-larga', 'jurado', { pollingPlace: 'Puesto Norte', votingTable: '' });
+    expect(await screen.findByText(/en Puesto Norte — todas las mesas/)).toBeInTheDocument();
+  });
+
+  it('sin padrón cargado, avisa que hay que cargarlo y no deja crear un jurado', async () => {
+    api.listUsers.mockResolvedValue({ users: [] });
+    api.listPadronPlaces.mockResolvedValue({ places: [] });
+    const usuario = await abrir('Usuarios');
+    await usuario.selectOptions(campo('Rol'), 'jurado');
+    expect(await screen.findByText(/Carga el padrón antes de crear jurados/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Crear usuario' })).toBeDisabled();
   });
 
   it('lista los usuarios; a un jurado con autenticador se le puede restablecer, con confirmación', async () => {
@@ -187,20 +221,40 @@ describe('Usuarios', () => {
       users: [
         { id: 1, username: 'admin', role: 'admin', polling_place: null, voting_table: null, has_totp: false },
         { id: 5, username: 'jurado.mesa1', role: 'jurado', polling_place: 'Puesto Central', voting_table: 'Mesa 1', has_totp: true },
-        { id: 6, username: 'jurado.mesa2', role: 'jurado', polling_place: 'Puesto Central', voting_table: 'Mesa 2', has_totp: false },
+        { id: 6, username: 'jurado.puesto', role: 'jurado', polling_place: 'Puesto Central', voting_table: null, has_totp: false },
       ],
     });
+    api.listPadronPlaces.mockResolvedValue(LUGARES);
     api.resetUserTotp.mockResolvedValue({});
     const usuario = await abrir('Usuarios');
     const fila = (await screen.findByText('jurado.mesa1')).closest('tr');
     expect(fila).toHaveTextContent('Puesto Central — Mesa 1');
     expect(fila).toHaveTextContent('Registrado');
-    expect(screen.getByText('jurado.mesa2').closest('tr')).toHaveTextContent('Pendiente (primer ingreso)');
+    const delPuesto = screen.getByText('jurado.puesto').closest('tr');
+    expect(delPuesto).toHaveTextContent('Puesto Central — todas las mesas');
+    expect(delPuesto).toHaveTextContent('Pendiente (primer ingreso)');
     expect(screen.getAllByRole('button', { name: 'Restablecer autenticador' })).toHaveLength(1);
 
     await usuario.click(within(fila).getByRole('button', { name: 'Restablecer autenticador' }));
     expect(window.confirm).toHaveBeenCalled();
     expect(api.resetUserTotp).toHaveBeenCalledWith('jwt-admin', 5);
+  });
+
+  it('cambiar la mesa de un jurado: parte de la suya y se elige del padrón', async () => {
+    api.listUsers.mockResolvedValue({
+      users: [{ id: 7, username: 'nikoo', role: 'jurado', polling_place: 'Puesto Central', voting_table: '1', has_totp: true }],
+    });
+    api.listPadronPlaces.mockResolvedValue(LUGARES);
+    api.changeJuradoMesa.mockResolvedValue({ id: 7, pollingPlace: 'Puesto Central', votingTable: 'Mesa 1' });
+    const usuario = await abrir('Usuarios');
+    const fila = (await screen.findByText('nikoo')).closest('tr');
+    await usuario.click(within(fila).getByRole('button', { name: 'Cambiar mesa' }));
+    // Su mesa "1" no figura así en el padrón: se propone el puesto y hay que elegir la mesa.
+    expect(within(fila).getByDisplayValue('Puesto Central')).toBeInTheDocument();
+    await usuario.selectOptions(within(fila).getAllByRole('combobox')[1], 'Mesa 1');
+    await usuario.click(within(fila).getByRole('button', { name: 'Guardar' }));
+    expect(api.changeJuradoMesa).toHaveBeenCalledWith('jwt-admin', 7, 'Puesto Central', 'Mesa 1');
+    expect(await screen.findByText('Jurado "nikoo" ahora en Puesto Central — Mesa 1.')).toBeInTheDocument();
   });
 });
 

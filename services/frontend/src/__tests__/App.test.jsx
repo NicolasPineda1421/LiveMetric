@@ -81,7 +81,7 @@ it('un jurado entra a su panel: su mesa y los votantes asistidos, sin pestañas 
   api.getJuradoMesa.mockResolvedValue({
     pollingPlace: 'Puesto Central',
     votingTable: 'Mesa 1',
-    assistedVoters: [{ fullName: 'Rosa Pérez', cedulaEnd: '0042' }],
+    assistedVoters: [{ fullName: 'Rosa Pérez', cedulaEnd: '0042', votingTable: 'Mesa 1' }],
   });
   const usuario = userEvent.setup();
   render(<App />);
@@ -96,4 +96,28 @@ it('un jurado entra a su panel: su mesa y los votantes asistidos, sin pestañas 
   expect(screen.getByText('Rosa Pérez')).toBeInTheDocument();
   expect(screen.getByText('···0042')).toBeInTheDocument();
   expect(pestanas()).toEqual([]);
+});
+
+it('un jurado de todo el puesto ve que puede autorizar en cualquier mesa, con la mesa de cada votante', async () => {
+  api.loginAdmin.mockResolvedValue({ next: 'codigo', challenge: 'desafio-j' });
+  api.verifyAdminCode.mockResolvedValue({ token: 'jwt-jurado', role: 'jurado' });
+  api.getJuradoMesa.mockResolvedValue({
+    pollingPlace: 'Puesto Central',
+    votingTable: null,
+    assistedVoters: [
+      { fullName: 'Rosa Pérez', cedulaEnd: '0042', votingTable: 'Mesa 1' },
+      { fullName: 'Luis Gómez', cedulaEnd: '0077', votingTable: 'Mesa 2' },
+    ],
+  });
+  const usuario = userEvent.setup();
+  render(<App />);
+  await usuario.type(screen.getByLabelText('Usuario'), 'jurado.puesto');
+  await usuario.type(screen.getByLabelText('Contraseña'), 'clave');
+  await usuario.click(screen.getByRole('button', { name: 'Ingresar como administrador' }));
+  await usuario.type(screen.getByLabelText('Código de la app'), '123456');
+  await usuario.click(screen.getByRole('button', { name: 'Entrar' }));
+
+  expect(await screen.findByText(/Puedes autorizar a los votantes asistidos de cualquier mesa de este puesto/)).toBeInTheDocument();
+  expect(screen.getByText('Votantes asistidos de tu puesto (2)')).toBeInTheDocument();
+  expect(screen.getByText('Luis Gómez').closest('tr')).toHaveTextContent('Mesa 2');
 });

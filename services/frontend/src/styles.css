@@ -238,6 +238,8 @@ input, select, textarea {
 .jurado-pasos li { margin-bottom: 0.35rem; }
 .acciones-padron { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .acciones-padron .btn { white-space: nowrap; }
+.editar-mesa { min-width: 280px; }
+.editar-mesa .grid-2 { grid-template-columns: 1fr; gap: 0; }
 .table td.sin-corte { white-space: nowrap; }
 
 .btn {
