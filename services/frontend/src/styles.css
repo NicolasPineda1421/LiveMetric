@@ -242,6 +242,11 @@ input, select, textarea {
 .acciones-padron { display: flex; flex-wrap: nowrap; gap: 0.4rem; align-items: center; }
 .acciones-padron .btn { white-space: nowrap; padding: 0.35rem 0.7rem; font-size: 0.8rem; }
 .tabla-desplazable { overflow-x: auto; }
+.content.content-ancho { max-width: 1440px; }
+/* Padrón: cada acción en su columna, alineada en todas las filas */
+.table td.accion { white-space: nowrap; padding-left: 0.25rem; padding-right: 0.25rem; }
+.table td.accion .btn { padding: 0.35rem 0.7rem; font-size: 0.8rem; }
+.table th.acciones-titulo { padding-left: 0.25rem; }
 .editar-mesa { min-width: 280px; }
 
 /* Padrón: una fila del formulario por votante, y los filtros del listado */

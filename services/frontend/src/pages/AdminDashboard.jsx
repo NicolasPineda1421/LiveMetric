@@ -37,7 +37,8 @@ export default function AdminDashboard({ session, onLogout }) {
         ))}
       </div>
 
-      <div className="content">
+      {/* El Padrón tiene la tabla más ancha: usa más pantalla para no apretarla. */}
+      <div className={`content${tab === 'voters' ? ' content-ancho' : ''}`}>
         {tab === 'overview' && <OverviewTab session={session} />}
         {tab === 'templates' && <TemplatesTab session={session} />}
         {tab === 'elections' && <ElectionsTab session={session} />}
@@ -1315,7 +1316,12 @@ function VotersTab({ session }) {
           <>
             <div className="tabla-desplazable">
               <table className="table">
-                <thead><tr><th>Cédula</th><th>Nombre</th><th>Puesto</th><th>Mesa</th><th>PIN</th><th>Autenticador</th><th>Voto asistido</th><th></th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>Cédula</th><th>Nombre</th><th>Puesto</th><th>Mesa</th><th>PIN</th><th>Autenticador</th><th>Voto asistido</th>
+                    <th colSpan={3} className="acciones-titulo">Acciones</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {voters.map((v) => (
                     <tr key={v.id}>
@@ -1334,20 +1340,24 @@ function VotersTab({ session }) {
                           onChange={(e) => setAssisted(v, e.target.checked)}
                         />
                       </td>
-                      <td>
-                        <div className="acciones-padron">
-                          <button className="btn btn-outline" disabled={resettingId === v.id} onClick={() => resetPin(v.id)}>
-                            {resettingId === v.id ? 'Generando…' : v.has_pin ? 'Regenerar PIN' : 'Generar PIN'}
+                      {/* Una columna por acción: así cada una queda alineada en
+                          todas las filas, aunque a un votante le falte alguna. */}
+                      <td className="accion">
+                        <button className="btn btn-outline" disabled={resettingId === v.id} onClick={() => resetPin(v.id)}>
+                          {resettingId === v.id ? 'Generando…' : v.has_pin ? 'Regenerar PIN' : 'Generar PIN'}
+                        </button>
+                      </td>
+                      <td className="accion">
+                        {v.has_totp && !v.assisted && (
+                          <button className="btn btn-outline" disabled={savingId === v.id} onClick={() => resetTotp(v)}>
+                            Restablecer autenticador
                           </button>
-                          {v.has_totp && !v.assisted && (
-                            <button className="btn btn-outline" disabled={savingId === v.id} onClick={() => resetTotp(v)}>
-                              Restablecer autenticador
-                            </button>
-                          )}
-                          <button className="btn btn-danger-outline" disabled={savingId === v.id} onClick={() => remove(v)}>
-                            Eliminar
-                          </button>
-                        </div>
+                        )}
+                      </td>
+                      <td className="accion">
+                        <button className="btn btn-danger-outline" disabled={savingId === v.id} onClick={() => remove(v)}>
+                          Eliminar
+                        </button>
                       </td>
                     </tr>
                   ))}
