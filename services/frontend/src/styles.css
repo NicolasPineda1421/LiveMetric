@@ -239,6 +239,17 @@ input, select, textarea {
 .acciones-padron { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .acciones-padron .btn { white-space: nowrap; }
 .editar-mesa { min-width: 280px; }
+
+/* Padrón: una fila del formulario por votante, y los filtros del listado */
+.fila-votante { border: 1px solid var(--color-border); border-radius: var(--radius); padding: 0.8rem 0.9rem 0.1rem; margin: 0 0 0.9rem; display: grid; grid-template-columns: 1fr 1.6fr 1.4fr 0.8fr auto; gap: 0 0.8rem; align-items: end; }
+.fila-votante legend { font-size: 0.78rem; color: var(--color-text-muted); padding: 0 0.3rem; }
+.quitar-fila { margin-bottom: 1.2rem; }
+@media (max-width: 900px) { .fila-votante { grid-template-columns: 1fr 1fr; } }
+.filtros-padron { display: grid; grid-template-columns: 2fr repeat(5, 1fr); gap: 0 0.8rem; }
+@media (max-width: 900px) { .filtros-padron { grid-template-columns: 1fr 1fr; } }
+.busqueda { display: flex; gap: 0.4rem; }
+.busqueda input { flex: 1; min-width: 0; }
+.resumen-filtros { display: flex; gap: 1rem; align-items: center; color: var(--color-text-muted); font-size: 0.85rem; margin: 0 0 0.6rem; }
 .editar-mesa .grid-2 { grid-template-columns: 1fr; gap: 0; }
 .table td.sin-corte { white-space: nowrap; }
 

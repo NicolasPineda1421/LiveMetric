@@ -6,13 +6,13 @@ const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
-const { body, param, validationResult } = require('express-validator');
+const { body, param, query, validationResult } = require('express-validator');
 const pool = require('./db');
 const { recordAuditEvent } = require('./audit');
 const { requireAdmin, requireRole } = require('./middleware/auth');
 const { encryptField, decryptField } = require('./voterCrypto');
 const totp = require('./totp');
-const { juradoCubre, lugaresDelPadron, ubicarEnPadron } = require('./lugares');
+const { juradoCubre, lugaresDelPadron, ubicarEnPadron, normalizarPuesto, mismoPuesto, mismaMesa } = require('./lugares');
 
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -60,9 +60,20 @@ const adminLoginLimiter = rateLimit({
   message: { error: 'Demasiados intentos de login. Intenta de nuevo más tarde.' },
 });
 
+// Operaciones de administración que cambian algo (crear, cargar, regenerar,
+// eliminar): 20 por minuto. Las consultas tienen su propio límite, más
+// amplio (los filtros del padrón hacen un pedido por cambio): si compartieran
+// el contador, filtrar el listado dejaba sin cupo para eliminar o regenerar.
 const adminOpsLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const adminReadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -758,7 +769,7 @@ app.post(
 
 // Usuarios del panel, con la mesa de cada jurado y si ya registró su
 // autenticador (nunca el secreto).
-app.get('/admin/users', requireAdmin, adminOpsLimiter, async (_req, res) => {
+app.get('/admin/users', requireAdmin, adminReadLimiter, async (_req, res) => {
   try {
     const result = await pool.query(
       `SELECT id, username, role, polling_place, voting_table, (totp_secret IS NOT NULL) AS has_totp, created_at
@@ -777,7 +788,7 @@ app.get('/admin/users', requireAdmin, adminOpsLimiter, async (_req, res) => {
 });
 
 // Los puestos del padrón con sus mesas: de ahí se elige el lugar de cada jurado.
-app.get('/admin/padron/lugares', requireAdmin, adminOpsLimiter, async (_req, res) => {
+app.get('/admin/padron/lugares', requireAdmin, adminReadLimiter, async (_req, res) => {
   try {
     return res.status(200).json({ places: await lugaresDelPadron(pool) });
   } catch (err) {
@@ -1001,42 +1012,205 @@ app.post(
   }
 );
 
-// Consulta del padrón (paginada) — solo para verificación administrativa;
-// nunca se expone al público ni a los propios votantes.
-app.get('/admin/voters', requireAdmin, adminOpsLimiter, async (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
-  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+// Consulta del padrón, con filtros y paginada — solo para verificación
+// administrativa; nunca se expone al público ni a los propios votantes.
+// Cédula, puesto y mesa están cifrados, así que los filtros se aplican
+// después de descifrar (un padrón de miles de filas se descifra en
+// milisegundos). Filtros, todos opcionales:
+//   q          parte de la cédula o del nombre (sin mayúsculas ni tildes)
+//   pollingPlace / votingTable   como en lugares.js ("1" = "Mesa 1")
+//   pin        sin_asignar | vigente | vencido | sin_vencimiento
+//   totp       registrado | pendiente
+//   assisted   true | false
+const VOTER_FILTERS = {
+  pin: ['sin_asignar', 'vigente', 'vencido', 'sin_vencimiento'],
+  totp: ['registrado', 'pendiente'],
+  assisted: ['true', 'false'],
+};
 
-  try {
-    const result = await pool.query(
-      `SELECT id, cedula, full_name, polling_place, voting_table, is_active,
-              (access_code_hash IS NOT NULL) AS has_pin, access_code_expires_at AS pin_expires_at,
-              (totp_secret IS NOT NULL) AS has_totp,
-              assisted, created_at
-         FROM voters
-        ORDER BY id ASC
-        LIMIT $1 OFFSET $2`,
-      [limit, offset]
-    );
-    const voters = result.rows.map((v) => ({
-      ...v,
-      cedula: decryptField(v.cedula),
-      polling_place: decryptField(v.polling_place),
-      voting_table: decryptField(v.voting_table),
-    }));
-    // Lo que el panel propone como vencimiento al generar PIN, y el máximo.
-    const { suggested, electionTitle } = await suggestedPinExpiry();
-    return res.status(200).json({
-      limit,
-      offset,
-      voters,
-      pinExpiry: { suggested, electionTitle, maxDays: PIN_VIGENCIA_MAXIMA_DIAS, windowMinutesBefore: VENTANA_PREVIA_MINUTOS },
-    });
-  } catch (err) {
-    console.error('Error en GET /admin/voters:', err.message);
-    return res.status(500).json({ error: 'Error interno del servidor' });
+function pinState(v) {
+  if (!v.has_pin) return 'sin_asignar';
+  if (!v.pin_expires_at) return 'sin_vencimiento';
+  return v.pin_expired ? 'vencido' : 'vigente';
+}
+
+app.get(
+  '/admin/voters',
+  requireAdmin,
+  adminReadLimiter,
+  [
+    query('q').optional().isString().isLength({ max: 50 }),
+    query('pollingPlace').optional().isString().isLength({ max: 150 }),
+    query('votingTable').optional().isString().isLength({ max: 50 }),
+    query('pin').optional({ values: 'falsy' }).isIn(VOTER_FILTERS.pin),
+    query('totp').optional({ values: 'falsy' }).isIn(VOTER_FILTERS.totp),
+    query('assisted').optional({ values: 'falsy' }).isIn(VOTER_FILTERS.assisted),
+  ],
+  async (req, res) => {
+    if (!validationResult(req).isEmpty()) return res.status(400).json({ error: 'Filtro del padrón inválido' });
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const { q, pollingPlace, votingTable, pin, totp: totpFilter, assisted } = req.query;
+    const texto = q ? normalizarPuesto(q) : '';
+
+    try {
+      const result = await pool.query(
+        `SELECT id, cedula, full_name, polling_place, voting_table, is_active,
+                (access_code_hash IS NOT NULL) AS has_pin, access_code_expires_at AS pin_expires_at,
+                (access_code_expires_at IS NOT NULL AND access_code_expires_at <= now()) AS pin_expired,
+                (totp_secret IS NOT NULL) AS has_totp,
+                assisted, created_at
+           FROM voters
+          ORDER BY id ASC`
+      );
+      const filtered = result.rows
+        .map((v) => ({
+          ...v,
+          cedula: decryptField(v.cedula),
+          polling_place: decryptField(v.polling_place),
+          voting_table: decryptField(v.voting_table),
+          pin_state: pinState(v),
+        }))
+        .filter((v) => !texto || v.cedula.toLowerCase().includes(texto) || normalizarPuesto(v.full_name).includes(texto))
+        .filter((v) => !pollingPlace || mismoPuesto(v.polling_place, pollingPlace))
+        .filter((v) => !votingTable || mismaMesa(v.voting_table, votingTable))
+        .filter((v) => !pin || v.pin_state === pin)
+        .filter((v) => !totpFilter || v.has_totp === (totpFilter === 'registrado'))
+        .filter((v) => !assisted || v.assisted === (assisted === 'true'));
+      const voters = filtered.slice(offset, offset + limit).map(({ pin_expired: _vencido, ...v }) => v);
+      // Lo que el panel propone como vencimiento al generar PIN, y el máximo.
+      const { suggested, electionTitle } = await suggestedPinExpiry();
+      return res.status(200).json({
+        limit,
+        offset,
+        total: filtered.length,
+        registered: result.rows.length,
+        voters,
+        pinExpiry: { suggested, electionTitle, maxDays: PIN_VIGENCIA_MAXIMA_DIAS, windowMinutesBefore: VENTANA_PREVIA_MINUTOS },
+      });
+    } catch (err) {
+      console.error('Error en GET /admin/voters:', err.message);
+      return res.status(500).json({ error: 'Error interno del servidor' });
+    }
   }
-});
+);
+
+// Agregar votantes desde el formulario del panel: uno o varios, pero nunca
+// modifica a uno que ya está (a diferencia de la carga masiva, que actualiza
+// sus datos). Las cédulas que ya estaban se informan y quedan como estaban.
+// Si el puesto o la mesa ya figuran en el padrón escritos de otra forma
+// ("puesto central", "1"), se guardan como figuran, para que el padrón no
+// tenga el mismo lugar escrito de dos maneras.
+const VOTER_FIELD_LABELS = {
+  cedula: 'la cédula debe tener de 5 a 20 letras, números o guiones',
+  fullName: 'el nombre debe tener 3 caracteres o más',
+  pollingPlace: 'falta el puesto de votación',
+  votingTable: 'falta la mesa',
+};
+
+app.post(
+  '/admin/voters',
+  requireAdmin,
+  adminOpsLimiter,
+  [
+    body('voters').isArray({ min: 1, max: 200 }),
+    body('voters.*.cedula').isString().trim().isLength({ min: 5, max: 20 }).matches(/^[0-9A-Za-z-]+$/),
+    body('voters.*.fullName').isString().trim().isLength({ min: 3, max: 200 }),
+    body('voters.*.pollingPlace').isString().trim().isLength({ min: 2, max: 150 }),
+    body('voters.*.votingTable').isString().trim().isLength({ min: 1, max: 50 }),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req).array();
+    if (errors.length > 0) {
+      // "voters[2].cedula" -> "Votante 3: la cédula debe tener…"
+      const match = /^voters\[(\d+)\]\.(\w+)$/.exec(errors[0].path || '');
+      const motivo = match ? Object.hasOwn(VOTER_FIELD_LABELS, match[2]) && VOTER_FIELD_LABELS[match[2]] : null;
+      return res.status(400).json({
+        error: match && motivo ? `Votante ${Number(match[1]) + 1}: ${motivo}.` : 'Agrega entre 1 y 200 votantes por vez.',
+      });
+    }
+
+    const { voters } = req.body;
+    const cedulas = voters.map((v) => v.cedula);
+    const repetida = cedulas.find((c, i) => cedulas.indexOf(c) !== i);
+    if (repetida) return res.status(400).json({ error: `La cédula ${repetida} está dos veces en el formulario.` });
+
+    const pinExpiresAt = await resolvePinExpiry(req.body.pinExpiresAt);
+    if (!pinExpiresAt) return res.status(400).json(PIN_EXPIRY_INVALID);
+
+    const lugares = await lugaresDelPadron(pool);
+    const pins = voters.map(() => generateAccessCode());
+    const pinHashes = await Promise.all(pins.map((pin) => bcrypt.hash(pin, 10)));
+
+    const client = await pool.connect();
+    const accessCodes = [];
+    const duplicates = [];
+    try {
+      await client.query('BEGIN');
+      for (const [i, v] of voters.entries()) {
+        const puesto = lugares.find((p) => mismoPuesto(p.pollingPlace, v.pollingPlace));
+        const pollingPlace = puesto ? puesto.pollingPlace : v.pollingPlace;
+        const votingTable = (puesto && puesto.votingTables.find((m) => mismaMesa(m, v.votingTable))) || v.votingTable;
+        const result = await client.query(
+          `INSERT INTO voters (cedula, full_name, polling_place, voting_table, access_code_hash, access_code_expires_at, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (cedula) DO NOTHING
+           RETURNING id`,
+          // eslint-disable-next-line security/detect-object-injection -- i es el índice numérico de voters, pins y pinHashes, arreglos paralelos
+          [encryptField(v.cedula), v.fullName, encryptField(pollingPlace), encryptField(votingTable), pinHashes[i], pinExpiresAt, req.user.sub]
+        );
+        // eslint-disable-next-line security/detect-object-injection -- i es el índice numérico de pins, paralelo a voters
+        if (result.rows.length === 1) accessCodes.push({ cedula: v.cedula, pin: pins[i] });
+        else duplicates.push(v.cedula);
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      console.error('Error en POST /admin/voters:', err.message);
+      return res.status(500).json({ error: 'Error interno del servidor' });
+    } finally {
+      client.release();
+    }
+
+    await recordAuditEvent({
+      eventType: 'VOTERS_ADDED',
+      actorType: 'admin',
+      actorRef: req.user.username,
+      req,
+      metadata: { inserted: accessCodes.length, duplicates: duplicates.length, pinExpiresAt },
+    });
+    return res.status(201).json({ inserted: accessCodes.length, duplicates, accessCodes, pinExpiresAt });
+  }
+);
+
+// Eliminar a un votante del padrón. No hay edición: si un dato está mal, se
+// elimina y se vuelve a agregar. Los votos que ya emitió se conservan (son
+// anónimos: no apuntan a esta fila) y el acta no cambia. Queda en la
+// auditoría con el hash de su cédula, nunca con la cédula.
+app.delete(
+  '/admin/voters/:id',
+  requireAdmin,
+  adminOpsLimiter,
+  [param('id').isInt({ min: 1 }).toInt()],
+  async (req, res) => {
+    if (!validationResult(req).isEmpty()) return res.status(400).json({ error: 'id de votante inválido' });
+    try {
+      const deleted = await pool.query('DELETE FROM voters WHERE id = $1 RETURNING cedula', [req.params.id]);
+      if (deleted.rows.length === 0) return res.status(404).json({ error: 'Votante no encontrado' });
+      await recordAuditEvent({
+        eventType: 'VOTER_DELETED',
+        actorType: 'admin',
+        actorRef: req.user.username,
+        req,
+        metadata: { voterId: req.params.id, voterIdHash: buildVoterIdHash(decryptField(deleted.rows[0].cedula)) },
+      });
+      return res.status(204).send();
+    } catch (err) {
+      console.error('Error en DELETE /admin/voters/:id:', err.message);
+      return res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  }
+);
 
 // El votante perdió o cambió el celular: se borra su autenticador y lo
 // vuelve a registrar en su próximo ingreso (con su cédula y su PIN).
@@ -1106,7 +1280,7 @@ app.put(
 // puede autorizar: el nombre, la mesa y los últimos 4 dígitos de la cédula,
 // para reconocerlos al cotejar el documento. Los asistidos son pocos: se
 // descifran y se filtran con la misma regla que la autorización.
-app.get('/jurado/mesa', requireRole('jurado'), adminOpsLimiter, async (req, res) => {
+app.get('/jurado/mesa', requireRole('jurado'), adminReadLimiter, async (req, res) => {
   try {
     const jurado = await pool.query(
       `SELECT polling_place, voting_table FROM admins WHERE id = $1 AND role = 'jurado'`,
@@ -1139,7 +1313,7 @@ app.get('/jurado/mesa', requireRole('jurado'), adminOpsLimiter, async (req, res)
 // Módulo de auditoría: consulta del registro inmutable de eventos de login
 // y de gestión de identidad. Nunca expone cédulas ni contraseñas en texto
 // plano (ver audit.js y el schema de audit_log).
-app.get('/admin/audit-log', requireAdmin, adminOpsLimiter, async (req, res) => {
+app.get('/admin/audit-log', requireAdmin, adminReadLimiter, async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
   const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
   const eventType = req.query.eventType || null;

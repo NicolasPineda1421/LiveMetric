@@ -43,7 +43,7 @@ Todas corren en el job `unit-tests` del pipeline en cada push. Durante la operac
 2. **Plantilla.** En **Plantillas**, crear una genérica con tres opciones.
 3. **Padrón y autenticadores.** El PIN solo sirve durante la votación (desde una hora antes de que abra), así que:
    - En **Elecciones**, programar una **elección de ensayo** con esa plantilla, que abra en unos minutos.
-   - En **Padrón**, cargar tres votantes y anotar los PIN que muestra (solo se ven esa vez). En el campo de vencimiento, elegir una fecha que llegue al día de la sustentación.
+   - En **Padrón**, agregar tres votantes con el formulario y anotar los PIN que muestra (solo se ven esa vez). En el campo de vencimiento, elegir una fecha que llegue al día de la sustentación.
    - Ingresar una vez con cada votante para registrar su autenticador: escanear el QR con Microsoft Authenticator o Google Authenticator en un celular (pueden quedar las tres cuentas en el mismo) y salir. Así, en la demostración, cada ingreso es cédula, PIN y código.
    - **Opcional, voto asistido:** marcar a uno de los tres como **Voto asistido**, crear en **Usuarios** el jurado de su mesa y registrar el autenticador del jurado.
    - Detener la elección de ensayo (**Elecciones** → **Detener**).

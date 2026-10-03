@@ -225,17 +225,26 @@ activa.
 El **padrón** es la lista de quiénes tienen derecho a votar. Sin estar en el padrón, una
 persona no puede ingresar.
 
-**Cargar votantes:**
+**Agregar votantes:**
 
-1. Pestaña **Padrón**.
-2. En **Votantes a cargar**, pegue la lista con los datos de cada persona (cédula,
-   nombre, puesto de votación y mesa).
-3. Botón **Cargar al padrón**.
+1. Pestaña **Padrón**, sección **Agregar votantes**.
+2. Complete los datos del votante: **Cédula**, **Nombre completo**, **Puesto de votación**
+   y **Mesa**. El puesto y la mesa sugieren los que ya están en el padrón.
+3. Para agregar varios de una vez, **+ Agregar otro votante**: la fila nueva copia el
+   puesto y la mesa de la anterior. **Quitar** saca una fila del formulario.
+4. Botón **Agregar al padrón** (o **Agregar N votantes al padrón**).
+
+Si una cédula ya está en el padrón, no se modifica: el sistema avisa *"Ya estaban y no se
+modificaron"* y agrega el resto. Si el puesto o la mesa ya figuran escritos de otra forma
+("puesto central", "1"), se guardan como figuran ("Puesto Central", "Mesa 1").
+
+**Los datos de un votante no se editan.** Si algo está mal, se elimina y se vuelve a
+agregar (ver más abajo).
 
 **Generar los PINes:**
 
-Cada votante necesita un **PIN de acceso** para poder ingresar. Se generan desde esta
-misma pestaña, en la sección **PIN de acceso generados**.
+Cada votante nuevo recibe un **PIN de acceso** al agregarlo, que aparece en la sección
+**PIN de acceso generados**.
 
 **Vencimiento de los PIN.** Antes de cargar, revise el campo **Vencimiento de los PIN que
 se generen**. El sistema propone el **cierre de la última elección programada**, para que
@@ -267,14 +276,26 @@ solo durante la votación, y conviene regenerarlo).
 - **Restablecer autenticador**: para quien cambió o perdió el celular. En su próximo
   ingreso, con su cédula y su PIN, lo registra de nuevo.
 
-![Captura 11: Carga del padrón: una fila por votante (cédula, nombre, puesto y mesa) y el vencimiento de los PIN, que propone el cierre de la elección programada](img/11-padron-carga.png)
-*Captura 11. Carga del padrón: una fila por votante (cédula, nombre, puesto y mesa) y el vencimiento de los PIN, que propone el cierre de la elección programada.*
+![Captura 11: Agregar votantes con el formulario: una fila por votante (cédula, nombre, puesto y mesa) y el vencimiento de los PIN, que propone el cierre de la elección programada](img/11-padron-carga.png)
+*Captura 11. Agregar votantes con el formulario: una fila por votante (cédula, nombre, puesto y mesa) y el vencimiento de los PIN, que propone el cierre de la elección programada. El tercero escribió "puesto central" y "1": se guardan como "Puesto Central" y "Mesa 1".*
 
 ![Captura 12: Los PIN generados, que se muestran una sola vez. En esta captura están difuminados: no deben quedar credenciales en la documentación](img/12-padron-pines.png)
 *Captura 12. Los PIN generados, que se muestran una sola vez, con su fecha de vencimiento. En esta captura están difuminados: no deben quedar credenciales en la documentación.*
 
-![Captura 13: El padrón actual: hasta cuándo vale el PIN de cada votante, su autenticador y el voto asistido](img/13-padron-lista.png)
-*Captura 13. El padrón actual: hasta cuándo vale el PIN de cada votante (o si ya venció), su autenticador y el voto asistido.*
+**Buscar y filtrar.** Sobre el listado (**Padrón actual**) hay filtros: **Buscar por
+cédula o nombre** (parte de la cédula o del nombre, sin importar mayúsculas ni tildes; se
+aplica con **Buscar**), **Puesto**, **Mesa** (las del puesto elegido), **PIN** (vigente,
+vencido, sin vencimiento o sin asignar), **Autenticador** (registrado o pendiente) y
+**Voto asistido**. Debajo se ve cuántos coinciden ("4 de 8 votantes") y **Limpiar
+filtros**. El listado muestra 50 votantes por página.
+
+**Eliminar.** El botón **Eliminar** de cada fila saca al votante del padrón, después de
+confirmar. No se puede deshacer: ya no podrá ingresar. Los votos que ya emitió se
+conservan, porque son anónimos (no apuntan a su fila del padrón), así que el acta no
+cambia. Queda en **Auditoría** quién lo eliminó y cuándo, sin la cédula.
+
+![Captura 13: El padrón filtrado por puesto y mesa: hasta cuándo vale el PIN de cada votante, su autenticador, el voto asistido y el botón Eliminar](img/13-padron-lista.png)
+*Captura 13. El padrón filtrado por puesto y mesa: hasta cuándo vale el PIN de cada votante (o si no tiene), su autenticador, el voto asistido y el botón Eliminar.*
 
 ### 4.5 Usuarios
 
@@ -488,7 +509,7 @@ Resumen del recorrido de punta a punta:
 |---|---|---|---|
 | 1 | Crear la plantilla con los candidatos | Administrador | Plantillas |
 | 2 | Programar la elección con su ventana horaria | Administrador | Elecciones |
-| 3 | Cargar el padrón y generar los PIN (vencen al cierre de la elección); entregarlos y marcar el voto asistido de quien lo necesite | Administrador | Padrón |
+| 3 | Agregar a los votantes al padrón (se generan sus PIN, que vencen al cierre de la elección); entregarlos y marcar el voto asistido de quien lo necesite | Administrador | Padrón |
 | 4 | Crear los jurados de las mesas con votantes asistidos | Administrador | Usuarios |
 | 5 | **Apertura automática** al llegar la hora | Sistema | — |
 | 6 | Ingresar (PIN y código de su autenticador, o autorización del jurado) y votar | Votantes / Jurados | Vista de votante |
@@ -579,9 +600,9 @@ instalación de prueba ya borrada (además, cada código vence a los 30 segundos
 | 08 | `08-plantillas-lista.png` | Listado de plantillas |
 | 09 | `09-eleccion-programar.png` | Programar elección |
 | 10 | `10-elecciones-lista.png` | Listado de elecciones |
-| 11 | `11-padron-carga.png` | Carga del padrón |
+| 11 | `11-padron-carga.png` | Agregar votantes (formulario) |
 | 12 | `12-padron-pines.png` | PINes generados (difuminados) |
-| 13 | `13-padron-lista.png` | Listado del padrón (PIN, autenticador, voto asistido) |
+| 13 | `13-padron-lista.png` | Listado del padrón con filtros y Eliminar |
 | 14 | `14-usuarios.png` | Creación de usuarios y jurados (puesto y mesa del padrón) |
 | 15 | `15-resultados-vivo.png` | Total en vivo (sin votos por opción) |
 | 16 | `16-resultados-certificados.png` | Resultados certificados |

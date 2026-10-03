@@ -259,52 +259,135 @@ describe('Usuarios', () => {
 });
 
 describe('Padrón', () => {
-  beforeEach(() => api.listVoters.mockResolvedValue({ voters: [] }));
+  beforeEach(() => api.listVoters.mockResolvedValue({ voters: [], total: 0, registered: 0 }));
 
-  async function cargar(usuario, texto) {
-    const area = campo('Votantes a cargar');
-    await usuario.clear(area);
-    await usuario.type(area, texto);
-    await usuario.click(screen.getByRole('button', { name: 'Cargar al padrón' }));
+  // Llena la fila n (desde 1) del formulario de alta.
+  async function llenarFila(usuario, n, { cedula, fullName, pollingPlace, votingTable }) {
+    const fila = screen.getByText(`Votante ${n}`, { selector: 'legend' }).closest('fieldset');
+    const llenar = async (etiqueta, valor) => {
+      const campoFila = within(fila).getByLabelText(etiqueta);
+      await usuario.clear(campoFila);
+      if (valor) await usuario.type(campoFila, valor);
+    };
+    await llenar('Cédula', cedula);
+    await llenar('Nombre completo', fullName);
+    await llenar('Puesto de votación', pollingPlace);
+    await llenar('Mesa', votingTable);
   }
 
-  it('lee una fila por votante, sin espacios de más, y descarta las incompletas', async () => {
-    api.uploadVoters.mockResolvedValue({ inserted: 1, updated: 0, accessCodes: [] });
+  it('agrega un votante con el formulario, sin espacios de más, y deja el puesto y la mesa para el siguiente', async () => {
+    api.addVoters.mockResolvedValue({ inserted: 1, duplicates: [], accessCodes: [{ cedula: '1000000010', pin: '482913' }] });
     const usuario = await abrir('Padrón');
-    await cargar(usuario, ' 1000000010 , Ana Gómez , Puesto Norte , Mesa 2 {enter}1000000011, Sin puesto{enter}{enter}');
-    // Sin vencimiento elegido (el servidor no sugirió ninguno), se manda vacío y el servidor usa el suyo.
-    expect(api.uploadVoters).toHaveBeenCalledWith('jwt-admin', [
+    await llenarFila(usuario, 1, { cedula: '1000000010', fullName: ' Ana Gómez ', pollingPlace: 'Puesto Norte', votingTable: 'Mesa 2' });
+    await usuario.click(screen.getByRole('button', { name: 'Agregar al padrón' }));
+    expect(api.addVoters).toHaveBeenCalledWith('jwt-admin', [
       { cedula: '1000000010', fullName: 'Ana Gómez', pollingPlace: 'Puesto Norte', votingTable: 'Mesa 2' },
     ], undefined);
-    expect(await screen.findByText('Padrón actualizado: 1 nuevos, 0 actualizados.')).toBeInTheDocument();
+    expect(await screen.findByText('Se agregó 1 votante al padrón.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Cédula')).toHaveValue('');
+    expect(screen.getByLabelText('Puesto de votación')).toHaveValue('Puesto Norte');
+    expect(screen.getByLabelText('Mesa', { selector: 'input' })).toHaveValue('Mesa 2');
   });
 
-  it('sin ninguna fila válida, explica el formato y no llama al servicio', async () => {
+  it('con un campo vacío o una cédula inválida, no llama al servicio', async () => {
     const usuario = await abrir('Padrón');
-    await cargar(usuario, 'solo-una-columna');
-    expect(screen.getByText(/No se reconoció ninguna fila válida/)).toBeInTheDocument();
-    expect(api.uploadVoters).not.toHaveBeenCalled();
+    await llenarFila(usuario, 1, { cedula: '12', fullName: 'Ana Gómez', pollingPlace: 'Puesto Norte', votingTable: 'Mesa 2' });
+    await usuario.click(screen.getByRole('button', { name: 'Agregar al padrón' }));
+    await llenarFila(usuario, 1, { cedula: '1000000010', fullName: 'Ana Gómez', pollingPlace: '', votingTable: 'Mesa 2' });
+    await usuario.click(screen.getByRole('button', { name: 'Agregar al padrón' }));
+    expect(api.addVoters).not.toHaveBeenCalled();
+  });
+
+  it('varios votantes a la vez: «Agregar otro» copia el puesto y la mesa, «Quitar» saca una fila, y los repetidos se informan', async () => {
+    api.addVoters.mockResolvedValue({ inserted: 1, duplicates: ['1000000011'], accessCodes: [{ cedula: '1000000010', pin: '482913' }] });
+    const usuario = await abrir('Padrón');
+    await llenarFila(usuario, 1, { cedula: '1000000010', fullName: 'Ana Gómez', pollingPlace: 'Puesto Norte', votingTable: 'Mesa 2' });
+    await usuario.click(screen.getByRole('button', { name: '+ Agregar otro votante' }));
+    await usuario.click(screen.getByRole('button', { name: '+ Agregar otro votante' }));
+    const segunda = screen.getByText('Votante 2', { selector: 'legend' }).closest('fieldset');
+    expect(within(segunda).getByLabelText('Puesto de votación')).toHaveValue('Puesto Norte');
+    await usuario.click(within(screen.getByText('Votante 3', { selector: 'legend' }).closest('fieldset')).getByRole('button', { name: 'Quitar' }));
+    await llenarFila(usuario, 2, { cedula: '1000000011', fullName: 'Luis Peña', pollingPlace: 'Puesto Norte', votingTable: 'Mesa 1' });
+    await usuario.click(screen.getByRole('button', { name: 'Agregar 2 votantes al padrón' }));
+    expect(api.addVoters.mock.calls[0][1]).toHaveLength(2);
+    expect(await screen.findByText('Se agregó 1 votante al padrón. Ya estaban y no se modificaron: 1000000011.')).toBeInTheDocument();
+    expect(screen.queryByText('Votante 2', { selector: 'legend' })).not.toBeInTheDocument();
   });
 
   it('muestra los PIN generados una sola vez, y el listado solo dice si tiene PIN', async () => {
-    api.uploadVoters.mockResolvedValue({ inserted: 1, updated: 0, accessCodes: [{ cedula: '1000000010', pin: '482913' }] });
+    api.addVoters.mockResolvedValue({ inserted: 1, duplicates: [], accessCodes: [{ cedula: '1000000010', pin: '482913' }] });
     api.listVoters
-      .mockResolvedValueOnce({ voters: [] })
-      .mockResolvedValue({ voters: [{ id: 1, cedula: '1000000010', full_name: 'Ana Gómez', polling_place: 'Puesto Norte', voting_table: 'Mesa 2', is_active: true, has_pin: true }] });
+      .mockResolvedValueOnce({ voters: [], total: 0, registered: 0 })
+      .mockResolvedValue({ voters: [{ id: 1, cedula: '1000000010', full_name: 'Ana Gómez', polling_place: 'Puesto Norte', voting_table: 'Mesa 2', is_active: true, has_pin: true }], total: 1, registered: 1 });
     const usuario = await abrir('Padrón');
-    await cargar(usuario, '1000000010, Ana Gómez, Puesto Norte, Mesa 2');
+    await llenarFila(usuario, 1, { cedula: '1000000010', fullName: 'Ana Gómez', pollingPlace: 'Puesto Norte', votingTable: 'Mesa 2' });
+    await usuario.click(screen.getByRole('button', { name: 'Agregar al padrón' }));
 
     const panel = (await screen.findByText('PIN de acceso generados')).closest('.panel');
     expect(within(panel).getByText('482913')).toBeInTheDocument();
-    const listado = (await screen.findByText('Ana Gómez')).closest('tr');
+    const listado = (await screen.findByText('Ana Gómez', { selector: 'td' })).closest('tr');
     expect(within(listado).getByText('Asignado (sin vencimiento)')).toBeInTheDocument();
     expect(listado).not.toHaveTextContent('482913');
 
     // Al cambiar de pestaña y volver, el PIN ya no está en ninguna parte.
     await usuario.click(screen.getByRole('button', { name: 'Resumen' }));
     await usuario.click(screen.getByRole('button', { name: 'Padrón' }));
-    await screen.findByText('Ana Gómez');
+    await screen.findByText('Ana Gómez', { selector: 'td' });
     expect(screen.queryByText('482913')).not.toBeInTheDocument();
+  });
+
+  it('los filtros consultan al servicio: la búsqueda al pulsar Buscar, el resto al elegirlos; y se limpian', async () => {
+    api.listPadronPlaces.mockResolvedValue({ places: [{ pollingPlace: 'Puesto Central', votingTables: ['Mesa 1', 'Mesa 2'] }] });
+    api.listVoters.mockResolvedValue({ voters: [], total: 0, registered: 12 });
+    const usuario = await abrir('Padrón');
+    await screen.findByText('12 votantes');
+    expect(api.listVoters).toHaveBeenLastCalledWith('jwt-admin', expect.objectContaining({ q: '', limit: 50, offset: 0 }));
+
+    await usuario.type(screen.getByLabelText('Buscar por cédula o nombre'), ' gómez ');
+    expect(api.listVoters).toHaveBeenCalledTimes(1);
+    await usuario.click(screen.getByRole('button', { name: 'Buscar' }));
+    expect(api.listVoters).toHaveBeenLastCalledWith('jwt-admin', expect.objectContaining({ q: 'gómez' }));
+
+    expect(screen.getByLabelText('Mesa', { selector: 'select' })).toBeDisabled();
+    await usuario.selectOptions(screen.getByLabelText('Puesto', { selector: 'select' }), 'Puesto Central');
+    await usuario.selectOptions(screen.getByLabelText('Mesa', { selector: 'select' }), 'Mesa 2');
+    await usuario.selectOptions(screen.getByLabelText('PIN'), 'vencido');
+    await usuario.selectOptions(screen.getByLabelText('Autenticador'), 'pendiente');
+    await usuario.selectOptions(screen.getByLabelText('Voto asistido'), 'true');
+    expect(api.listVoters).toHaveBeenLastCalledWith('jwt-admin', {
+      q: 'gómez', pollingPlace: 'Puesto Central', votingTable: 'Mesa 2', pin: 'vencido', totp: 'pendiente', assisted: 'true', limit: 50, offset: 0,
+    });
+    expect(screen.getByText('0 de 12 votantes')).toBeInTheDocument();
+    expect(screen.getByText('Ningún votante coincide con los filtros.')).toBeInTheDocument();
+
+    await usuario.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
+    expect(api.listVoters).toHaveBeenLastCalledWith('jwt-admin', expect.objectContaining({ q: '', pollingPlace: '', pin: '' }));
+    expect(screen.getByLabelText('Buscar por cédula o nombre')).toHaveValue('');
+  });
+
+  it('pagina de a 50 votantes', async () => {
+    const pagina = (offset) => Array.from({ length: 50 }, (_, i) => ({ id: offset + i + 1, cedula: String(1000000000 + offset + i), full_name: `Votante ${offset + i + 1}`, polling_place: 'P', voting_table: 'M', is_active: true, has_pin: false }));
+    api.listVoters.mockImplementation((token, { offset }) => Promise.resolve({ voters: pagina(offset), total: 120, registered: 120 }));
+    const usuario = await abrir('Padrón');
+    expect(await screen.findByText('Página 1 de 3 · 120 votantes')).toBeInTheDocument();
+    await usuario.click(screen.getByRole('button', { name: 'Siguiente →' }));
+    expect(api.listVoters).toHaveBeenLastCalledWith('jwt-admin', expect.objectContaining({ offset: 50 }));
+    expect(await screen.findByText('Página 2 de 3 · 120 votantes')).toBeInTheDocument();
+  });
+
+  it('eliminar a un votante pide confirmación; confirmado, lo elimina', async () => {
+    api.listVoters.mockResolvedValue({ voters: [{ id: 7, cedula: '1000000010', full_name: 'Ana Gómez', polling_place: 'P', voting_table: 'M', is_active: true, has_pin: true }], total: 1, registered: 1 });
+    api.deleteVoter.mockResolvedValue(null);
+    window.confirm.mockReturnValue(false);
+    const usuario = await abrir('Padrón');
+    await usuario.click(await screen.findByRole('button', { name: 'Eliminar' }));
+    expect(window.confirm.mock.calls[0][0]).toMatch(/Ana Gómez.*No se puede deshacer.*Los votos que ya emitió se conservan/);
+    expect(api.deleteVoter).not.toHaveBeenCalled();
+
+    window.confirm.mockReturnValue(true);
+    await usuario.click(screen.getByRole('button', { name: 'Eliminar' }));
+    expect(api.deleteVoter).toHaveBeenCalledWith('jwt-admin', 7);
+    expect(await screen.findByText('Ana Gómez fue eliminado del padrón.')).toBeInTheDocument();
   });
 
   it('regenerar un PIN pide confirmación, porque invalida el anterior', async () => {
@@ -331,13 +414,17 @@ describe('Padrón: vencimiento del PIN', () => {
 
   it('propone el cierre de la última elección programada y lo manda al cargar; los PIN muestran cuándo vencen', async () => {
     api.listVoters.mockResolvedValue({ voters: [], pinExpiry: sugerencia() });
-    api.uploadVoters.mockResolvedValue({ inserted: 1, updated: 0, accessCodes: [{ cedula: '1000000010', pin: '482913' }], pinExpiresAt: CIERRE.toISOString() });
+    api.addVoters.mockResolvedValue({ inserted: 1, duplicates: [], accessCodes: [{ cedula: '1000000010', pin: '482913' }], pinExpiresAt: CIERRE.toISOString() });
     const usuario = await abrir('Padrón');
     expect(await screen.findByText(/Sugerido: el cierre de «Consulta 2030»/)).toBeInTheDocument();
     expect(new Date(campoVencimiento().value).getTime()).toBe(CIERRE.getTime());
 
-    await usuario.click(screen.getByRole('button', { name: 'Cargar al padrón' }));
-    expect(api.uploadVoters.mock.calls[0][2]).toBe(CIERRE.toISOString());
+    await usuario.type(screen.getByLabelText('Cédula'), '1000000010');
+    await usuario.type(screen.getByLabelText('Nombre completo'), 'Ana Gómez');
+    await usuario.type(screen.getByLabelText('Puesto de votación'), 'Puesto Norte');
+    await usuario.type(screen.getByLabelText('Mesa', { selector: 'input' }), 'Mesa 1');
+    await usuario.click(screen.getByRole('button', { name: 'Agregar al padrón' }));
+    expect(api.addVoters.mock.calls[0][2]).toBe(CIERRE.toISOString());
     const panel = (await screen.findByText('PIN de acceso generados')).closest('.panel');
     expect(panel).toHaveTextContent(`Vencen el ${formatPinExpiry(CIERRE)}`);
   });

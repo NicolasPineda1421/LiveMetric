@@ -70,11 +70,16 @@ export const api = {
     request('auth', `/admin/users/${userId}/mesa`, { method: 'PUT', token, body: { pollingPlace, votingTable } }),
   resetUserTotp: (token, userId) =>
     request('auth', `/admin/users/${userId}/reset-totp`, { method: 'POST', token }),
+  // Agrega votantes desde el formulario: nunca modifica a uno que ya está.
   // pinExpiresAt: vencimiento (ISO) de los PIN que se generen; sin él, el sugerido.
-  uploadVoters: (token, voters, pinExpiresAt) =>
-    request('auth', '/admin/voters/bulk', { method: 'POST', token, body: { voters, pinExpiresAt } }),
-  listVoters: (token, limit = 100, offset = 0) =>
-    request('auth', `/admin/voters?limit=${limit}&offset=${offset}`, { token }),
+  addVoters: (token, voters, pinExpiresAt) =>
+    request('auth', '/admin/voters', { method: 'POST', token, body: { voters, pinExpiresAt } }),
+  // filtros: { q, pollingPlace, votingTable, pin, totp, assisted, limit, offset }; los vacíos no se mandan.
+  listVoters: (token, filtros = {}) => {
+    const params = new URLSearchParams(Object.entries(filtros).filter(([, valor]) => valor !== '' && valor !== undefined && valor !== null));
+    return request('auth', `/admin/voters?${params}`, { token });
+  },
+  deleteVoter: (token, voterId) => request('auth', `/admin/voters/${voterId}`, { method: 'DELETE', token }),
   resetVoterPin: (token, voterId, pinExpiresAt) =>
     request('auth', `/admin/voters/${voterId}/reset-pin`, { method: 'POST', token, body: { pinExpiresAt } }),
   resetVoterTotp: (token, voterId) =>

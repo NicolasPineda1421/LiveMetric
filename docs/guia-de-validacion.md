@@ -35,6 +35,17 @@ Las pruebas automáticas están en `services/auth/src/__tests__/segundoFactor.te
 8. **El PIN solo sirve durante la votación** — Sin ninguna elección programada, `POST /login/voter` con cédula y PIN correctos responde `403` "No hay una votación abierta en este momento", igual que con una cédula inexistente. Programar una elección que abra en 30 minutos: el mismo PIN ya entra (el margen es de una hora). Una que abra en dos horas, no. Detenerla: deja de entrar, aunque su horario no haya terminado. En **Auditoría** queda `LOGIN_FAILURE_VOTER` con motivo `fuera_de_votacion`.
 9. **Vencimiento del PIN** — En **Padrón**, el campo de vencimiento propone el cierre de la última elección programada; generar un PIN con una fecha cercana y esperar a que pase (o, para no esperar, `UPDATE voters SET access_code_expires_at = now() - interval '1 minute' WHERE …` en PostgreSQL): con la votación abierta, el PIN correcto responde `403` "Tu PIN venció" (motivo `pin_vencido`), y uno equivocado, el `401` genérico de siempre. Una fecha pasada o de más de 90 días al generar se rechaza con `400`. Si vence entre el PIN y el código del autenticador, el segundo paso también se rechaza.
 
+## Padrón: agregar, filtrar y eliminar
+
+Las pruebas automáticas están en `services/auth/src/__tests__/padron.test.js` y en `services/frontend/src/__tests__/AdminTabs.test.jsx`.
+
+1. **Agregar no modifica** — En **Padrón**, agregar con el formulario una cédula que ya existe, con otro nombre: el panel avisa *"Ya estaban y no se modificaron"* y el votante conserva su nombre. Los demás del mismo formulario sí se agregan, cada uno con su PIN.
+2. **Mismo lugar, mismas palabras** — Agregar un votante con puesto "puesto central" y mesa "1": en el listado aparece como "Puesto Central" / "Mesa 1", como los que ya estaban.
+3. **Errores claros** — Con la API (`POST /admin/voters`), un votante con la cédula `x` responde `400` "Votante N: la cédula debe tener de 5 a 20 letras, números o guiones", y una cédula repetida en el mismo pedido, `400`.
+4. **Filtros** — Buscar parte de un nombre sin tildes ("rios" encuentra "Ríos"), filtrar por puesto y mesa, y por estado del PIN, del autenticador y del voto asistido: el contador dice "N de M votantes". Un filtro con un valor que no existe (`?pin=cualquiera`) responde `400`.
+5. **Eliminar** — **Eliminar** pide confirmación; confirmado, el votante desaparece y ya no puede ingresar con su PIN. En **Auditoría** queda `VOTER_DELETED` con el hash de su cédula, nunca la cédula. Sus votos anteriores y el acta no cambian.
+6. **Filtrar no agota el cupo** — Las consultas del panel tienen un límite propio (60 por minuto) y los cambios otro (20 por minuto): después de cambiar muchas veces los filtros, **Eliminar** y **Regenerar PIN** siguen funcionando.
+
 ## Detener una elección, plantilla presidencial, mesas y acta
 
 1. **Detener una elección antes de tiempo** — En "Elecciones", crea una con ventana larga (ej. 1 hora) y pulsa "Detener" mientras está `scheduled` o `active`. Debe quedar `closed` de inmediato, con `stopped_manually: true`. En menos de un minuto (`SCHEDULER_CRON`), `scheduler-worker` la certifica igual que a una cerrada por tiempo — revisa `docker compose logs -f scheduler-worker` para confirmarlo, y luego "Resultados" debe mostrar `certified: true`.

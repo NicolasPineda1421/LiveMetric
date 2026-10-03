@@ -970,11 +970,30 @@ function pinStatus(v, ahora) {
   return `Vence ${formatPinExpiry(v.pin_expires_at)}`;
 }
 
+const VOTERS_PAGE_SIZE = 50;
+const SIN_FILTROS = { q: '', pollingPlace: '', votingTable: '', pin: '', totp: '', assisted: '' };
+const PIN_FILTRO = { vigente: 'Vigente', vencido: 'Vencido', sin_vencimiento: 'Sin vencimiento', sin_asignar: 'Sin asignar' };
+
+let siguienteFila = 1;
+// Una fila del formulario de alta. Puesto y mesa se copian de la anterior:
+// suelen agregarse varios votantes de la misma mesa seguidos.
+const filaNueva = (anterior = {}) => ({
+  key: siguienteFila++,
+  cedula: '',
+  fullName: '',
+  pollingPlace: anterior.pollingPlace || '',
+  votingTable: anterior.votingTable || '',
+});
+
 function VotersTab({ session }) {
-  const [rows, setRows] = useState(
-    '1000000006, Nuevo Votante Uno, Puesto Central, Mesa 1\n1000000007, Nuevo Votante Dos, Puesto Central, Mesa 2'
-  );
+  const [filas, setFilas] = useState(() => [filaNueva()]);
   const [voters, setVoters] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [registered, setRegistered] = useState(0);
+  const [places, setPlaces] = useState([]);
+  const [filtros, setFiltros] = useState(SIN_FILTROS);
+  const [busqueda, setBusqueda] = useState('');
+  const [page, setPage] = useState(0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [newAccessCodes, setNewAccessCodes] = useState([]);
@@ -987,9 +1006,11 @@ function VotersTab({ session }) {
   const [codesExpireAt, setCodesExpireAt] = useState(null);
 
   function load() {
-    api.listVoters(session.token, 100, 0)
+    api.listVoters(session.token, { ...filtros, limit: VOTERS_PAGE_SIZE, offset: page * VOTERS_PAGE_SIZE })
       .then((d) => {
         setVoters(d.voters);
+        setTotal(d.total ?? d.voters.length);
+        setRegistered(d.registered ?? d.voters.length);
         if (d.pinExpiry) {
           setPinExpiry(d.pinExpiry);
           setExpiresAt((actual) => actual || toLocalInput(d.pinExpiry.suggested));
@@ -997,34 +1018,52 @@ function VotersTab({ session }) {
       })
       .catch((e) => setError(e.message));
   }
-  useEffect(load, [session.token]);
+  useEffect(load, [session.token, filtros, page]);
+
+  // Los puestos (para los filtros y las sugerencias del formulario) cambian
+  // solo al agregar o eliminar: no se piden en cada cambio de filtro.
+  function loadPlaces() {
+    api.listPadronPlaces(session.token).then((d) => setPlaces(d.places || [])).catch(() => {});
+  }
+  useEffect(loadPlaces, [session.token]);
 
   const pinExpiresAt = () => (expiresAt ? new Date(expiresAt).toISOString() : undefined);
+  const limpiarMensajes = () => { setError(''); setSuccess(''); setNewAccessCodes([]); };
+
+  // Los filtros se aplican al cambiarlos (la búsqueda, al pulsar Buscar), y
+  // vuelven a la primera página.
+  function filtrar(cambios) {
+    setFiltros((actual) => ({ ...actual, ...cambios }));
+    setPage(0);
+  }
+  const hayFiltros = Object.values(filtros).some(Boolean);
+  const mesasDelFiltro = places.find((p) => p.pollingPlace === filtros.pollingPlace)?.votingTables || [];
+
+  function cambiarFila(key, campo, valor) {
+    setFilas((actuales) => actuales.map((f) => (f.key === key ? { ...f, [campo]: valor } : f)));
+  }
 
   async function submit(e) {
     e.preventDefault();
-    setError(''); setSuccess(''); setNewAccessCodes([]);
-    const parsed = rows
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => {
-        const [cedula, fullName, pollingPlace, votingTable] = line.split(',').map((s) => (s || '').trim());
-        return { cedula, fullName, pollingPlace, votingTable };
-      })
-      .filter((v) => v.cedula && v.fullName && v.pollingPlace && v.votingTable);
-
-    if (parsed.length === 0) {
-      setError('No se reconoció ninguna fila válida (formato: cedula, nombre completo, puesto de votación, mesa).');
-      return;
-    }
-
+    limpiarMensajes();
+    const nuevos = filas.map(({ cedula, fullName, pollingPlace, votingTable }) => ({
+      cedula: cedula.trim(),
+      fullName: fullName.trim(),
+      pollingPlace: pollingPlace.trim(),
+      votingTable: votingTable.trim(),
+    }));
     try {
-      const result = await api.uploadVoters(session.token, parsed, pinExpiresAt());
-      setSuccess(`Padrón actualizado: ${result.inserted} nuevos, ${result.updated} actualizados.`);
+      const result = await api.addVoters(session.token, nuevos, pinExpiresAt());
+      const agregados = `Se ${result.inserted === 1 ? 'agregó 1 votante' : `agregaron ${result.inserted} votantes`} al padrón.`;
+      const repetidos = result.duplicates?.length
+        ? ` Ya estaban y no se modificaron: ${result.duplicates.join(', ')}.`
+        : '';
+      setSuccess(agregados + repetidos);
       setNewAccessCodes(result.accessCodes || []);
       setCodesExpireAt(result.pinExpiresAt || null);
+      setFilas([filaNueva(filas[filas.length - 1])]);
       load();
+      loadPlaces();
     } catch (err) {
       setError(err.message);
     }
@@ -1033,7 +1072,7 @@ function VotersTab({ session }) {
   async function resetPin(voterId) {
     if (!window.confirm('¿Generar un PIN nuevo para este votante? El PIN anterior (si tenía) dejará de funcionar.')) return;
     setResettingId(voterId);
-    setError(''); setSuccess(''); setNewAccessCodes([]);
+    limpiarMensajes();
     try {
       const result = await api.resetVoterPin(session.token, voterId, pinExpiresAt());
       setNewAccessCodes([{ cedula: result.cedula, pin: result.pin }]);
@@ -1048,7 +1087,7 @@ function VotersTab({ session }) {
 
   async function resetTotp(voter) {
     if (!window.confirm(`¿Restablecer el autenticador de ${voter.full_name}? En su próximo ingreso, con su cédula y su PIN, lo registra de nuevo.`)) return;
-    setError(''); setSuccess(''); setNewAccessCodes([]);
+    limpiarMensajes();
     setSavingId(voter.id);
     try {
       await api.resetVoterTotp(session.token, voter.id);
@@ -1066,7 +1105,7 @@ function VotersTab({ session }) {
       ? `¿Marcar a ${voter.full_name} para el voto asistido? Entrará con su PIN y la autorización del jurado de su mesa, en lugar de su autenticador.`
       : `¿Quitar el voto asistido de ${voter.full_name}? Entrará con su PIN y su autenticador.`;
     if (!window.confirm(aviso)) return;
-    setError(''); setSuccess(''); setNewAccessCodes([]);
+    limpiarMensajes();
     setSavingId(voter.id);
     try {
       await api.setVoterAssisted(session.token, voter.id, assisted);
@@ -1079,17 +1118,38 @@ function VotersTab({ session }) {
     }
   }
 
+  async function remove(voter) {
+    if (!window.confirm(
+      `¿Eliminar a ${voter.full_name} (cédula ${voter.cedula}) del padrón? No se puede deshacer: ya no podrá ingresar. ` +
+      'Los votos que ya emitió se conservan, porque son anónimos.'
+    )) return;
+    limpiarMensajes();
+    setSavingId(voter.id);
+    try {
+      await api.deleteVoter(session.token, voter.id);
+      setSuccess(`${voter.full_name} fue eliminado del padrón.`);
+      load();
+      loadPlaces();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  const totalPages = Math.max(1, Math.ceil(total / VOTERS_PAGE_SIZE));
+
   return (
     <div>
       <h2 className="section-title">Padrón electoral</h2>
       <p className="section-desc">
-        Carga masiva de votantes. Una fila por votante, formato <code>cedula, nombre completo, puesto de votación, mesa</code>.
-        El puesto y la mesa identifican dónde está habilitado cada votante y quedan asociados a cada voto que emita, para
-        poder consolidar el escrutinio por mesa. A cada votante nuevo se le genera un PIN de acceso: es lo que usa para
-        entrar a votar (junto a su cédula), no una contraseña que él mismo elige. Además, en su primer ingreso registra
-        un autenticador (Microsoft o Google Authenticator) y desde ahí entra también con su código. Quien no pueda usar
-        una app se marca para el <strong>voto asistido</strong>: lo autoriza el jurado de su mesa, que verifica su
-        cédula en persona.
+        Agrega a cada votante con su cédula, su nombre, su puesto de votación y su mesa. El puesto y la mesa identifican
+        dónde está habilitado y quedan asociados a cada voto que emita, para poder consolidar el escrutinio por mesa. A
+        cada votante nuevo se le genera un PIN de acceso: es lo que usa para entrar a votar (junto a su cédula), no una
+        contraseña que él mismo elige. Además, en su primer ingreso registra un autenticador (Microsoft o Google
+        Authenticator) y desde ahí entra también con su código. Quien no pueda usar una app se marca para el{' '}
+        <strong>voto asistido</strong>: lo autoriza el jurado de su mesa, que verifica su cédula en persona. Los datos de
+        un votante no se editan: si algo está mal, se elimina y se vuelve a agregar.
       </p>
       <p className="section-desc">
         <strong>Vigencia del PIN:</strong> cada PIN vence en la fecha que elijas al generarlo y, además, solo sirve
@@ -1097,16 +1157,60 @@ function VotersTab({ session }) {
       </p>
 
       <div className="panel">
+        <h3>Agregar votantes</h3>
         {error && <div className="error-banner">{error}</div>}
         {success && <div className="success-banner">{success}</div>}
         <form onSubmit={submit}>
+          <datalist id="puestos-padron">
+            {places.map((p) => <option key={p.pollingPlace} value={p.pollingPlace} />)}
+          </datalist>
+          {filas.map((fila, i) => {
+            const mesas = places.find((p) => p.pollingPlace.toLowerCase() === fila.pollingPlace.trim().toLowerCase())?.votingTables || [];
+            return (
+              <fieldset className="fila-votante" key={fila.key}>
+                <legend>Votante {i + 1}</legend>
+                <div className="field-dark">
+                  <label htmlFor={`cedula-${fila.key}`}>Cédula</label>
+                  <input
+                    id={`cedula-${fila.key}`}
+                    value={fila.cedula}
+                    onChange={(e) => cambiarFila(fila.key, 'cedula', e.target.value)}
+                    required
+                    pattern="[0-9A-Za-z\-]{5,20}"
+                    title="De 5 a 20 letras, números o guiones"
+                    inputMode="numeric"
+                  />
+                </div>
+                <div className="field-dark">
+                  <label htmlFor={`nombre-${fila.key}`}>Nombre completo</label>
+                  <input id={`nombre-${fila.key}`} value={fila.fullName} onChange={(e) => cambiarFila(fila.key, 'fullName', e.target.value)} required minLength={3} />
+                </div>
+                <div className="field-dark">
+                  <label htmlFor={`puesto-${fila.key}`}>Puesto de votación</label>
+                  <input id={`puesto-${fila.key}`} list="puestos-padron" value={fila.pollingPlace} onChange={(e) => cambiarFila(fila.key, 'pollingPlace', e.target.value)} required minLength={2} />
+                </div>
+                <div className="field-dark">
+                  <label htmlFor={`mesa-${fila.key}`}>Mesa</label>
+                  <input id={`mesa-${fila.key}`} list={`mesas-${fila.key}`} value={fila.votingTable} onChange={(e) => cambiarFila(fila.key, 'votingTable', e.target.value)} required />
+                  <datalist id={`mesas-${fila.key}`}>
+                    {mesas.map((m) => <option key={m} value={m} />)}
+                  </datalist>
+                </div>
+                {filas.length > 1 && (
+                  <button type="button" className="link-button quitar-fila" onClick={() => setFilas(filas.filter((f) => f.key !== fila.key))}>
+                    Quitar
+                  </button>
+                )}
+              </fieldset>
+            );
+          })}
+          <button type="button" className="btn btn-outline" style={{ marginBottom: '1rem' }} onClick={() => setFilas([...filas, filaNueva(filas[filas.length - 1])])}>
+            + Agregar otro votante
+          </button>
           <div className="field-dark">
-            <label>Votantes a cargar</label>
-            <textarea rows={6} value={rows} onChange={(e) => setRows(e.target.value)} />
-          </div>
-          <div className="field-dark">
-            <label>Vencimiento de los PIN que se generen</label>
+            <label htmlFor="vencimiento-pin">Vencimiento de los PIN que se generen</label>
             <input
+              id="vencimiento-pin"
               type="datetime-local"
               value={expiresAt}
               onChange={(e) => setExpiresAt(e.target.value)}
@@ -1122,7 +1226,7 @@ function VotersTab({ session }) {
               </div>
             )}
           </div>
-          <button className="btn btn-gold">Cargar al padrón</button>
+          <button className="btn btn-gold">{filas.length === 1 ? 'Agregar al padrón' : `Agregar ${filas.length} votantes al padrón`}</button>
         </form>
       </div>
 
@@ -1149,47 +1253,115 @@ function VotersTab({ session }) {
       )}
 
       <div className="panel">
-        <h3>Padrón actual ({voters.length} mostrados)</h3>
+        <h3>Padrón actual</h3>
+        <form className="filtros-padron" onSubmit={(e) => { e.preventDefault(); filtrar({ q: busqueda.trim() }); }}>
+          <div className="field-dark filtro-busqueda">
+            <label htmlFor="filtro-busqueda">Buscar por cédula o nombre</label>
+            <div className="busqueda">
+              <input id="filtro-busqueda" type="search" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} maxLength={50} />
+              <button className="btn btn-outline">Buscar</button>
+            </div>
+          </div>
+          <div className="field-dark">
+            <label htmlFor="filtro-puesto">Puesto</label>
+            <select id="filtro-puesto" value={filtros.pollingPlace} onChange={(e) => filtrar({ pollingPlace: e.target.value, votingTable: '' })}>
+              <option value="">Todos</option>
+              {places.map((p) => <option key={p.pollingPlace} value={p.pollingPlace}>{p.pollingPlace}</option>)}
+            </select>
+          </div>
+          <div className="field-dark">
+            <label htmlFor="filtro-mesa">Mesa</label>
+            <select id="filtro-mesa" value={filtros.votingTable} onChange={(e) => filtrar({ votingTable: e.target.value })} disabled={!filtros.pollingPlace}>
+              <option value="">Todas</option>
+              {mesasDelFiltro.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div className="field-dark">
+            <label htmlFor="filtro-pin">PIN</label>
+            <select id="filtro-pin" value={filtros.pin} onChange={(e) => filtrar({ pin: e.target.value })}>
+              <option value="">Todos</option>
+              {Object.entries(PIN_FILTRO).map(([valor, texto]) => <option key={valor} value={valor}>{texto}</option>)}
+            </select>
+          </div>
+          <div className="field-dark">
+            <label htmlFor="filtro-totp">Autenticador</label>
+            <select id="filtro-totp" value={filtros.totp} onChange={(e) => filtrar({ totp: e.target.value })}>
+              <option value="">Todos</option>
+              <option value="registrado">Registrado</option>
+              <option value="pendiente">Pendiente</option>
+            </select>
+          </div>
+          <div className="field-dark">
+            <label htmlFor="filtro-asistido">Voto asistido</label>
+            <select id="filtro-asistido" value={filtros.assisted} onChange={(e) => filtrar({ assisted: e.target.value })}>
+              <option value="">Todos</option>
+              <option value="true">Sí</option>
+              <option value="false">No</option>
+            </select>
+          </div>
+        </form>
+        <div className="resumen-filtros">
+          <span>{hayFiltros ? `${total} de ${registered} votantes` : `${registered} votante${registered === 1 ? '' : 's'}`}</span>
+          {hayFiltros && (
+            <button className="link-button" onClick={() => { setBusqueda(''); filtrar(SIN_FILTROS); }}>Limpiar filtros</button>
+          )}
+        </div>
+
         {voters.length === 0 ? (
-          <div className="empty-state">Sin votantes cargados todavía.</div>
+          <div className="empty-state">{hayFiltros ? 'Ningún votante coincide con los filtros.' : 'Sin votantes cargados todavía.'}</div>
         ) : (
-          <table className="table">
-            <thead><tr><th>Cédula</th><th>Nombre</th><th>Puesto</th><th>Mesa</th><th>Activo</th><th>PIN</th><th>Autenticador</th><th>Voto asistido</th><th></th></tr></thead>
-            <tbody>
-              {voters.map((v) => (
-                <tr key={v.id}>
-                  <td className="mono sin-corte">{v.cedula}</td>
-                  <td>{v.full_name}</td>
-                  <td>{v.polling_place}</td>
-                  <td>{v.voting_table}</td>
-                  <td>{v.is_active ? 'Sí' : 'No'}</td>
-                  <td>{pinStatus(v, Date.now())}</td>
-                  <td>{v.assisted ? 'No lo usa' : v.has_totp ? 'Registrado' : 'Pendiente'}</td>
-                  <td>
-                    <input
-                      type="checkbox"
-                      aria-label={`Voto asistido de ${v.full_name}`}
-                      checked={v.assisted}
-                      disabled={savingId === v.id}
-                      onChange={(e) => setAssisted(v, e.target.checked)}
-                    />
-                  </td>
-                  <td>
-                    <div className="acciones-padron">
-                      <button className="btn btn-outline" disabled={resettingId === v.id} onClick={() => resetPin(v.id)}>
-                        {resettingId === v.id ? 'Generando…' : v.has_pin ? 'Regenerar PIN' : 'Generar PIN'}
-                      </button>
-                      {v.has_totp && !v.assisted && (
-                        <button className="btn btn-outline" disabled={savingId === v.id} onClick={() => resetTotp(v)}>
-                          Restablecer autenticador
+          <>
+            <table className="table">
+              <thead><tr><th>Cédula</th><th>Nombre</th><th>Puesto</th><th>Mesa</th><th>PIN</th><th>Autenticador</th><th>Voto asistido</th><th></th></tr></thead>
+              <tbody>
+                {voters.map((v) => (
+                  <tr key={v.id}>
+                    <td className="mono sin-corte">{v.cedula}</td>
+                    <td>{v.full_name}</td>
+                    <td>{v.polling_place}</td>
+                    <td>{v.voting_table}</td>
+                    <td>{pinStatus(v, Date.now())}</td>
+                    <td>{v.assisted ? 'No lo usa' : v.has_totp ? 'Registrado' : 'Pendiente'}</td>
+                    <td>
+                      <input
+                        type="checkbox"
+                        aria-label={`Voto asistido de ${v.full_name}`}
+                        checked={v.assisted}
+                        disabled={savingId === v.id}
+                        onChange={(e) => setAssisted(v, e.target.checked)}
+                      />
+                    </td>
+                    <td>
+                      <div className="acciones-padron">
+                        <button className="btn btn-outline" disabled={resettingId === v.id} onClick={() => resetPin(v.id)}>
+                          {resettingId === v.id ? 'Generando…' : v.has_pin ? 'Regenerar PIN' : 'Generar PIN'}
                         </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                        {v.has_totp && !v.assisted && (
+                          <button className="btn btn-outline" disabled={savingId === v.id} onClick={() => resetTotp(v)}>
+                            Restablecer autenticador
+                          </button>
+                        )}
+                        <button className="btn btn-danger-outline" disabled={savingId === v.id} onClick={() => remove(v)}>
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {total > VOTERS_PAGE_SIZE && (
+              <div className="pagination">
+                <button className="btn btn-outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+                  ← Anterior
+                </button>
+                <span className="pagination-info">Página {page + 1} de {totalPages} · {total} votantes</span>
+                <button className="btn btn-outline" disabled={page + 1 >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                  Siguiente →
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
