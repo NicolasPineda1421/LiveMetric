@@ -4,7 +4,7 @@
 // si el informe dice que todo cuadra.
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ResultsTab } from '../pages/AdminDashboard.jsx';
+import { LIVE_REFRESH_MS, ResultsTab } from '../pages/AdminDashboard.jsx';
 import { api } from '../api.js';
 import { reiniciarApiFalsa } from './apiFalsa.js';
 
@@ -23,7 +23,8 @@ const CERTIFICADA = {
   recordHash: 'ab'.repeat(32),
   results: [{ optionId: 10, label: 'Lista A', votes: 70 }, { optionId: 11, label: 'Lista B', votes: 50 }],
 };
-const EN_VIVO = { certified: false, results: [{ optionId: 20, label: 'Ana', votes: 3 }] };
+// Sin acta, analytics-service solo informa cuántos votaron.
+const EN_VIVO = { status: 'active', certified: false, resultsHidden: true, totalVotes: 3 };
 const INTEGRA = { state: 'integra', publicKeyId: 'a1b2c3d4e5f60718', problems: [], votes: { storedTotal: 120 } };
 
 // Deja una promesa en manos de la prueba, para decidir cuándo se resuelve.
@@ -91,12 +92,48 @@ it('un estado que la pantalla no conoce no muestra ningún sello', async () => {
   expect(screen.queryByText(/Acta verificada/)).not.toBeInTheDocument();
 });
 
-it('una elección en curso se muestra "en vivo", sin sello ni acta', async () => {
+it('una elección en curso muestra en vivo solo cuántos votaron, sin votos por opción, sello ni acta', async () => {
   await elegir(userEvent.setup(), ADMIN, 2);
   expect(await screen.findByText('En vivo')).toBeInTheDocument();
-  expect(screen.getByText('Ana')).toBeInTheDocument();
+  expect(screen.getByText('3')).toBeInTheDocument();
+  expect(screen.getByText('personas votaron')).toBeInTheDocument();
+  expect(screen.getByText(/se publican cuando el escrutinio certifica el acta/)).toBeInTheDocument();
+  expect(document.querySelector('.tally')).toBeNull();
   expect(api.getIntegrity).not.toHaveBeenCalled();
   expect(screen.queryByRole('button', { name: /Descargar Acta/ })).not.toBeInTheDocument();
+});
+
+it('el total en vivo se actualiza solo y, cuando se certifica el acta, la muestra y deja de refrescar', async () => {
+  jest.useFakeTimers();
+  try {
+    api.getIntegrity.mockResolvedValue(INTEGRA);
+    api.getResults
+      .mockResolvedValueOnce(EN_VIVO)
+      .mockResolvedValueOnce({ ...EN_VIVO, totalVotes: 5 })
+      .mockResolvedValue(CERTIFICADA);
+    await elegir(userEvent.setup({ advanceTimers: jest.advanceTimersByTime }), ADMIN, 2);
+    expect(await screen.findByText('3')).toBeInTheDocument();
+
+    await act(async () => { jest.advanceTimersByTime(LIVE_REFRESH_MS); });
+    expect(await screen.findByText('5')).toBeInTheDocument();
+
+    await act(async () => { jest.advanceTimersByTime(LIVE_REFRESH_MS); });
+    expect(await screen.findByText('✓ Acta verificada')).toBeInTheDocument();
+    expect(screen.getByText('Lista A')).toBeInTheDocument();
+
+    const consultas = api.getResults.mock.calls.length;
+    await act(async () => { jest.advanceTimersByTime(LIVE_REFRESH_MS * 3); });
+    expect(api.getResults).toHaveBeenCalledTimes(consultas);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+it('una elección cerrada sin acta todavía avisa que se está certificando, con el total', async () => {
+  api.getResults.mockResolvedValue({ status: 'closed', certified: false, resultsHidden: true, totalVotes: 1 });
+  await elegir(userEvent.setup(), ADMIN, 2);
+  expect(await screen.findByText(/el escrutinio la certifica en menos de un minuto/)).toBeInTheDocument();
+  expect(screen.getByText('persona votó')).toBeInTheDocument();
 });
 
 it('si se cambia de elección antes de que llegue la verificación, no muestra el sello de la anterior', async () => {

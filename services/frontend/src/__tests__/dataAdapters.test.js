@@ -2,7 +2,7 @@
 // a lo que muestran los widgets de los tableros. Lo más delicado es el
 // widget de integridad: es el indicador de veracidad del acta, y solo puede
 // quedar en verde si todo cuadra.
-import { adaptForWidgets } from '../components/widgets/dataAdapters.js';
+import { adaptForWidgets, HIDDEN_RESULTS_NOTE } from '../components/widgets/dataAdapters.js';
 
 const fila = (tabla, titulo) => tabla.rows.find((r) => r[0] === titulo);
 
@@ -119,6 +119,29 @@ describe('resultados y participación', () => {
     const sinVotos = adaptForWidgets('concentration', { results: [{ label: 'A', votes: 0 }] });
     expect(sinVotos.table.rows).toEqual([['A', 0, '—']]);
     expect(sinVotos.kpi.value).toBe('0 (sin datos)');
+  });
+});
+
+// Sin acta certificada, analytics-service solo informa cuántos votaron: los
+// widgets no pueden mostrar votos por opción ni quién va adelante.
+describe('resultados ocultos hasta certificar el acta', () => {
+  it('results: el total, sin barras ni filas, y el aviso en el KPI y en los gráficos', () => {
+    const datos = adaptForWidgets('results', { resultsHidden: true, totalVotes: 42 });
+    expect(datos.kpi).toEqual({ label: 'Total de votos', value: 42, note: HIDDEN_RESULTS_NOTE });
+    expect(datos.items).toEqual([]);
+    expect(datos.table.rows).toEqual([]);
+    expect(datos.emptyMessage).toBe(HIDDEN_RESULTS_NOTE);
+    expect(datos.table.emptyMessage).toBe(HIDDEN_RESULTS_NOTE);
+  });
+
+  it('concentration y leadTimeline: no calculan nada, solo avisan cuándo se publica', () => {
+    const hhi = adaptForWidgets('concentration', { resultsHidden: true, totalVotes: 42 });
+    expect(hhi.kpi.value).toBe('Al certificar');
+    expect(hhi.items).toEqual([]);
+    const lider = adaptForWidgets('leadTimeline', { state: 'oculto_hasta_certificar' });
+    expect(lider.kpi).toEqual({ label: 'Cambios de primer lugar', value: 'Al certificar', note: HIDDEN_RESULTS_NOTE });
+    expect(lider.items).toEqual([]);
+    expect(lider.table.rows).toEqual([]);
   });
 });
 

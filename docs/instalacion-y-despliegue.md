@@ -143,7 +143,7 @@ El requisito común es [Docker Desktop](https://www.docker.com/products/docker-d
 4. En **Elecciones**, instancia una con una ventana corta (2–3 minutos) para ver el ciclo completo.
 5. En una ventana de incógnito → "Votante" → cédula `1000000001` con el PIN que generaste → vota. Repite con `1000000003` (otra mesa) para tener votos en más de una mesa.
 6. En **Elecciones** puedes pulsar "Detener" para cerrarla antes de tiempo.
-7. En **Resultados**: "En vivo" mientras está activa; tras cerrarla, el indicador de veracidad del acta ("✓ Acta verificada": firma digital válida, sin modificaciones y con los votos guardados coincidiendo), el ganador y el desglose por mesa. El PDF del acta lleva el mismo veredicto en el encabezado.
+7. En **Resultados**: mientras está activa, solo cuántas personas votaron, en vivo (los votos por opción no se publican antes del acta); tras cerrarla, el indicador de veracidad del acta ("✓ Acta verificada": firma digital válida, sin modificaciones y con los votos guardados coincidiendo), el ganador y el desglose por mesa. El PDF del acta lleva el mismo veredicto en el encabezado.
 8. En **Escrutinio**, "Verificar actas" muestra acta por acta si su contenido, la cadena y la firma digital están en orden.
 9. En **Reportes**, arma un tablero con widgets: resultados, participación, proyección, momento de definición, integridad del acta, accesos sospechosos, etc. Se exporta a PDF.
 10. En **Auditoría**, revisa todos los intentos de ingreso, exitosos y fallidos.

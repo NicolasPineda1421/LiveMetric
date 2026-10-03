@@ -122,34 +122,26 @@ describe('GET /api/elections/:id/results', () => {
     expect(res.status).toBe(404);
   });
 
-  it('devuelve resultados en vivo (no certificados) para una elección activa, como admin', async () => {
+  it('en vivo (elección activa, sin acta) solo devuelve el total de votos, no los votos por opción', async () => {
     const res = await request(app)
       .get(`/api/elections/${electionId}/results`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('active');
     expect(res.body.certified).toBe(false);
-    expect(Array.isArray(res.body.results)).toBe(true);
-    expect(res.body.results).toHaveLength(2);
-    const votesTotal = res.body.results.reduce((acc, r) => acc + r.votes, 0);
-    expect(votesTotal).toBe(0);
-    expect(res.body.totalVotes).toBe(votesTotal);
-    expect(res.body.results[0]).toEqual(
-      expect.objectContaining({
-        optionId: expect.any(Number),
-        candidateNumber: expect.any(String),
-        label: expect.any(String),
-        votes: 0,
-      })
-    );
+    expect(res.body.resultsHidden).toBe(true);
+    expect(res.body.totalVotes).toBe(0);
+    expect(res.body.results).toBeUndefined();
+    expect(res.body.concentration).toBeUndefined();
   });
 
-  it('un auditor también puede leer los resultados (solo lectura)', async () => {
+  it('un auditor también puede leer el total en vivo (solo lectura)', async () => {
     const res = await request(app)
       .get(`/api/elections/${electionId}/results`)
       .set('Authorization', `Bearer ${auditorToken}`);
     expect(res.status).toBe(200);
-    expect(Array.isArray(res.body.results)).toBe(true);
+    expect(res.body.resultsHidden).toBe(true);
+    expect(res.body.totalVotes).toBe(0);
   });
 });
 
@@ -285,17 +277,16 @@ describe('Estadística: concentración (HHI), participación con IC 95% y anomal
     // borra la elección de prueba) se lleva estos votos con ella.
   });
 
-  it('/results calcula el HHI de concentración (5 votos a A, 10 a B → alta concentración)', async () => {
+  it('/results con la elección activa cuenta los 15 votos, pero no dice cuántos tiene cada opción', async () => {
     const res = await request(app)
       .get(`/api/elections/${electionId}/results`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
-    const totalVotes = res.body.results.reduce((s, r) => s + r.votes, 0);
-    expect(totalVotes).toBe(15);
-    // Reparto real: 33.33%^2 + 66.67%^2 ≈ 5556.
-    expect(res.body.concentration.hhi).toBeGreaterThan(5000);
-    expect(res.body.concentration.hhi).toBeLessThan(6000);
-    expect(res.body.concentration.level).toBe('alta');
+    expect(res.body.totalVotes).toBe(15);
+    expect(res.body.results).toBeUndefined();
+    expect(res.body.concentration).toBeUndefined();
+    // Ni siquiera las etiquetas: el orden en que vinieran ya diría quién va primero.
+    expect(JSON.stringify(res.body)).not.toContain('CITEST Opción');
   });
 
   it('/metrics/operational calcula la tasa de participación con un intervalo de confianza 95% coherente', async () => {
@@ -381,17 +372,15 @@ describe('Estadística avanzada: proyección, momento de definición, integridad
     expect(res.body.interval.highPct).toBeGreaterThanOrEqual(res.body.projectedTurnoutPct);
   });
 
-  it('/metrics/lead-timeline: B lidera (10 contra 5) y no hubo cambios de primer lugar', async () => {
+  it('/metrics/lead-timeline no dice quién va adelante mientras la elección no tiene acta', async () => {
     const res = await request(app)
       .get(`/api/elections/${electionId}/metrics/lead-timeline`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.status).toBe(200);
-    expect(res.body.state).toBe('ok');
-    expect(res.body.totalVotes).toBe(15);
-    expect(res.body.currentLeader.label).toBe('CITEST Opción B');
-    // Los votos sembrados son anteriores a la ventana, así que caen todos
-    // en el primer tramo: un único punto, sin cambios.
-    expect(res.body.leadChanges).toBe(0);
+    expect(res.body.state).toBe('oculto_hasta_certificar');
+    expect(res.body.currentLeader).toBeUndefined();
+    expect(res.body.checkpoints).toBeUndefined();
+    expect(JSON.stringify(res.body)).not.toContain('CITEST Opción');
   });
 
   it('/metrics/integrity: una elección activa todavía no tiene acta', async () => {
@@ -411,6 +400,140 @@ describe('Estadística avanzada: proyección, momento de definición, integridad
     expect(res.body.totals.attempts).toBe(res.body.totals.failures + res.body.totals.successes);
     expect(Array.isArray(res.body.alerts)).toBe(true);
     expect(new Date(res.body.window.to) >= new Date(res.body.window.from)).toBe(true);
+  });
+});
+
+// Con el acta certificada, los resultados se publican completos. El acta se
+// inserta acá directamente (sin pasar por scrutiny-service): solo importa
+// lo que analytics hace con ella. OJO: scrutiny_ledger es APPEND-ONLY, así
+// que esa fila y la elección a la que apunta quedan en la base desechable
+// de la corrida (igual que en las pruebas de scrutiny); el afterAll borra lo
+// que sí se puede (votos y opciones).
+describe('Elección certificada: los votos por opción se publican', () => {
+  const crypto = require('crypto');
+  let closedId;
+  let options;
+  // Otra IP de origen (la app confía en un proxy, ver "trust proxy"): el
+  // archivo completo supera las 60 lecturas por minuto del límite por IP.
+  const get = (path) =>
+    request(app).get(path).set('Authorization', `Bearer ${adminToken}`).set('X-Forwarded-For', '203.0.113.77');
+
+  beforeAll(async () => {
+    const election = await pool.query(
+      `INSERT INTO elections (title, status, scheduled_start, scheduled_end, created_by)
+       VALUES ($1, 'closed', '2020-01-01 07:00:00+00', '2020-01-01 14:00:00+00', NULL) RETURNING id`,
+      // Sin creador: esta elección no se puede borrar (la retiene el acta), y
+      // si apuntara al admin de prueba, el afterAll general no podría borrarlo.
+      [`${RUN_ID}-cerrada`]
+    );
+    closedId = election.rows[0].id;
+    const opts = await pool.query(
+      `INSERT INTO election_options (election_id, label, candidate_number)
+       VALUES ($1, 'CITEST Cerrada A', '1'), ($1, 'CITEST Cerrada B', '2') RETURNING id, label, candidate_number`,
+      [closedId]
+    );
+    options = opts.rows;
+    // Igual que la elección activa: 5 votos a A (uno por hora) y 10 a B al final.
+    for (let h = 8; h <= 12; h++) {
+      await pool.query(
+        `INSERT INTO votes (election_id, option_id, voter_id_hash, polling_place, voting_table, created_at)
+         VALUES ($1, $2, $3, 'Puesto Central', 'Mesa 1', $4)`,
+        [closedId, options[0].id, crypto.randomBytes(32).toString('hex'), `2020-01-01 ${h}:00:00+00`]
+      );
+    }
+    for (let i = 0; i < 10; i++) {
+      await pool.query(
+        `INSERT INTO votes (election_id, option_id, voter_id_hash, polling_place, voting_table, created_at)
+         VALUES ($1, $2, $3, 'Puesto Central', 'Mesa 1', '2020-01-01 13:00:00+00')`,
+        [closedId, options[1].id, crypto.randomBytes(32).toString('hex')]
+      );
+    }
+    const overall = [
+      { optionId: options[1].id, candidateNumber: '2', label: 'CITEST Cerrada B', logo: null, votes: 10 },
+      { optionId: options[0].id, candidateNumber: '1', label: 'CITEST Cerrada A', logo: null, votes: 5 },
+    ];
+    const results = {
+      overall,
+      byTable: [{ pollingPlace: 'Puesto Central', votingTable: 'Mesa 1', totalVotes: 15, results: overall }],
+      winner: { ...overall[0], tie: false, tiedWith: [] },
+    };
+    await pool.query(
+      `INSERT INTO scrutiny_ledger (election_id, total_votes, results, previous_hash, record_hash)
+       VALUES ($1, 15, $2, $3, $4)`,
+      [closedId, JSON.stringify(results), '0'.repeat(64), crypto.randomBytes(32).toString('hex')]
+    );
+  });
+
+  afterAll(async () => {
+    await pool.query('DELETE FROM votes WHERE election_id = $1', [closedId]);
+    await pool.query('DELETE FROM election_options WHERE election_id = $1', [closedId]);
+  });
+
+  it('/results devuelve el acta: votos por opción, ganador y concentración (HHI)', async () => {
+    const res = await get(`/api/elections/${closedId}/results`);
+    expect(res.status).toBe(200);
+    expect(res.body.certified).toBe(true);
+    expect(res.body.resultsHidden).toBeUndefined();
+    expect(res.body.totalVotes).toBe(15);
+    expect(res.body.results.map((r) => r.votes)).toEqual([10, 5]);
+    expect(res.body.winner.label).toBe('CITEST Cerrada B');
+    // Reparto real: 33.33%^2 + 66.67%^2 ≈ 5556.
+    expect(res.body.concentration.hhi).toBeGreaterThan(5000);
+    expect(res.body.concentration.hhi).toBeLessThan(6000);
+    expect(res.body.concentration.level).toBe('alta');
+  });
+
+  it('/metrics/lead-timeline dice quién ganó y cuándo pasó a liderar', async () => {
+    const res = await get(`/api/elections/${closedId}/metrics/lead-timeline`);
+    expect(res.status).toBe(200);
+    expect(res.body.state).toBe('ok');
+    expect(res.body.totalVotes).toBe(15);
+    expect(res.body.currentLeader.label).toBe('CITEST Cerrada B');
+  });
+});
+
+describe('Elección cerrada que el escrutinio todavía no certificó', () => {
+  let pendingId;
+  const get = (path) =>
+    request(app).get(path).set('Authorization', `Bearer ${adminToken}`).set('X-Forwarded-For', '203.0.113.78');
+
+  beforeAll(async () => {
+    const election = await pool.query(
+      `INSERT INTO elections (title, status, scheduled_start, scheduled_end, created_by)
+       VALUES ($1, 'closed', now() - interval '2 hours', now() - interval '1 minute', NULL) RETURNING id`,
+      [`${RUN_ID}-por-certificar`]
+    );
+    pendingId = election.rows[0].id;
+    const opt = await pool.query(
+      `INSERT INTO election_options (election_id, label) VALUES ($1, 'CITEST Por certificar') RETURNING id`,
+      [pendingId]
+    );
+    await pool.query(
+      `INSERT INTO votes (election_id, option_id, voter_id_hash, polling_place, voting_table)
+       VALUES ($1, $2, $3, 'Puesto Central', 'Mesa 1')`,
+      [pendingId, opt.rows[0].id, require('crypto').randomBytes(32).toString('hex')]
+    );
+  });
+
+  afterAll(async () => {
+    // Sin acta, esta elección sí se puede borrar.
+    await pool.query('DELETE FROM votes WHERE election_id = $1', [pendingId]);
+    await pool.query('DELETE FROM election_options WHERE election_id = $1', [pendingId]);
+    await pool.query('DELETE FROM elections WHERE id = $1', [pendingId]);
+  });
+
+  it('/results responde 202 con el total, sin votos por opción', async () => {
+    const res = await get(`/api/elections/${pendingId}/results`);
+    expect(res.status).toBe(202);
+    expect(res.body.resultsHidden).toBe(true);
+    expect(res.body.totalVotes).toBe(1);
+    expect(res.body.results).toBeUndefined();
+  });
+
+  it('/metrics/lead-timeline sigue oculto hasta que haya acta', async () => {
+    const res = await get(`/api/elections/${pendingId}/metrics/lead-timeline`);
+    expect(res.status).toBe(200);
+    expect(res.body.state).toBe('oculto_hasta_certificar');
   });
 });
 

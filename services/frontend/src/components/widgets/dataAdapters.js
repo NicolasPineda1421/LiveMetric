@@ -6,12 +6,27 @@
 //   items: [{ name, value }]             -> BarChartWidget / PieChartWidget
 //   items + series: [{ key, label }]     -> LineChartWidget con varias series
 //   table: { columns: [...], rows: [...], emptyMessage? } -> TableWidget
+//   emptyMessage?: lo que muestran los gráficos cuando no hay items
+
+// Mientras la elección no tiene acta certificada, analytics-service solo
+// publica cuántos votaron (ver PUBLICACIÓN DE RESULTADOS en su app.js).
+export const HIDDEN_RESULTS_NOTE = 'Los votos por opción se publican cuando el escrutinio certifica el acta.';
+
+function hiddenResults(kpi) {
+  return {
+    kpi: { ...kpi, note: HIDDEN_RESULTS_NOTE },
+    items: [],
+    emptyMessage: HIDDEN_RESULTS_NOTE,
+    table: { columns: ['Opción', 'Votos'], rows: [], emptyMessage: HIDDEN_RESULTS_NOTE },
+  };
+}
 
 export function adaptForWidgets(dataSource, raw) {
   if (!raw) return emptyShape(dataSource);
 
   switch (dataSource) {
     case 'results': {
+      if (raw.resultsHidden) return hiddenResults({ label: 'Total de votos', value: raw.totalVotes ?? 0 });
       const items = (raw.results || []).map((r) => ({ name: r.label, value: r.votes }));
       const total = raw.totalVotes ?? items.reduce((s, i) => s + i.value, 0);
       return {
@@ -24,6 +39,7 @@ export function adaptForWidgets(dataSource, raw) {
     // Reutiliza la misma respuesta que "results" (ver fetchDataSource en
     // Widget.jsx); solo cambia qué campo de esa respuesta se muestra.
     case 'concentration': {
+      if (raw.resultsHidden) return hiddenResults({ label: 'Concentración de votos (HHI)', value: 'Al certificar' });
       const c = raw.concentration || { hhi: 0, level: 'sin datos' };
       const items = (raw.results || []).map((r) => ({ name: r.label, value: r.votes }));
       const total = items.reduce((s, i) => s + i.value, 0);
@@ -191,6 +207,9 @@ export function adaptForWidgets(dataSource, raw) {
     }
 
     case 'leadTimeline': {
+      if (raw.state === 'oculto_hasta_certificar') {
+        return hiddenResults({ label: 'Cambios de primer lugar', value: 'Al certificar' });
+      }
       const points = raw.checkpoints || [];
       const moment = momentFormatter(points.map((p) => p.at));
       // Una serie por opción (hasta 8, las de mayor % al final: una por

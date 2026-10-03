@@ -204,9 +204,16 @@ Para crear otros administradores o auditores.
 
 ### 4.6 Resultados
 
-Muestra el conteo de cada elección. Mientras la votación está abierta, los resultados son
-**preliminares y en vivo**. Una vez cerrada, se muestran los **certificados**, encabezados
-por el **indicador de veracidad del acta**, que se comprueba cada vez que se consulta:
+Mientras la votación está abierta, se ve **en vivo solo cuántas personas votaron** (se
+actualiza cada 10 segundos). **No se muestran los votos de cada candidato u opción ni quién va
+ganando**, a nadie, tampoco al administrador: un resultado parcial podría influir en quien
+todavía no votó. El sistema no los entrega antes de tiempo, ni siquiera pidiéndolos
+directamente al servicio.
+
+Cuando la elección cierra y el escrutinio certifica el acta (menos de un minuto después), se
+publican los **resultados certificados**: votos por opción, ganador y acta por mesa,
+encabezados por el **indicador de veracidad del acta**, que se comprueba cada vez que se
+consulta:
 
 | Indicador | Qué significa |
 |---|---|
@@ -217,8 +224,8 @@ por el **indicador de veracidad del acta**, que se comprueba cada vez que se con
 El administrador puede **descargar el acta en PDF** desde aquí; el documento lleva el
 mismo veredicto en su encabezado, comprobado en el momento de generarlo.
 
-![Captura 15: Resultados en vivo de una elección activa](img/15-resultados-vivo.png)
-*Captura 15. Resultados en vivo de una elección activa.*
+![Captura 15: Una elección activa en Resultados: solo el total de personas que votaron, sin votos por opción](img/15-resultados-vivo.png)
+*Captura 15. Una elección activa en Resultados: solo el total de personas que votaron, sin votos por opción.*
 
 ![Captura 16: Resultados de una elección cerrada: el indicador "Acta verificada", el ganador y el conteo certificado](img/16-resultados-certificados.png)
 *Captura 16. Resultados de una elección cerrada: el indicador "Acta verificada", el ganador y el conteo certificado.*
@@ -355,7 +362,7 @@ Resumen del recorrido de punta a punta:
 | 4 | Programar la elección con su ventana horaria | Administrador | Elecciones |
 | 5 | **Apertura automática** al llegar la hora | Sistema | — |
 | 6 | Ingresar y votar | Votantes | Vista de votante |
-| 7 | Seguir los resultados preliminares | Administrador / Auditor | Resultados |
+| 7 | Seguir en vivo cuántas personas votaron | Administrador / Auditor | Resultados |
 | 8 | **Cierre automático** al vencer la hora | Sistema | — |
 | 9 | **Recuento y certificación automáticos** | Sistema | — |
 | 10 | Revisar el indicador de veracidad del acta | Administrador / Auditor | Resultados |
@@ -420,7 +427,7 @@ ancho. Ninguna muestra credenciales: la contraseña aparece oculta y los PIN, di
 | 12 | `12-padron-pines.png` | PINes generados (difuminados) |
 | 13 | `13-padron-lista.png` | Listado del padrón |
 | 14 | `14-usuarios.png` | Creación de usuarios y roles |
-| 15 | `15-resultados-vivo.png` | Resultados preliminares |
+| 15 | `15-resultados-vivo.png` | Total en vivo (sin votos por opción) |
 | 16 | `16-resultados-certificados.png` | Resultados certificados |
 | 17 | `17-reportes.png` | Tablero de reportes |
 | 18 | `18-escrutinio-actas.png` | Acta por mesa (Resultados) |

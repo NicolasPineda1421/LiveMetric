@@ -442,6 +442,13 @@ input, select, textarea {
 
 .empty-state { color: var(--color-text-muted); font-size: 0.9rem; padding: 1.2rem 0; text-align: center; }
 
+/* Total en vivo de Resultados: sin acta, solo cuántos votaron */
+.live-total { margin-top: 0.25rem; }
+.live-total-status { color: var(--color-text-muted); font-size: 0.85rem; }
+.live-total-value { font-family: var(--font-serif); font-size: 2.6rem; color: var(--color-accent); line-height: 1.1; margin-top: 0.5rem; }
+.live-total-label { color: var(--color-text-muted); font-size: 0.9rem; }
+.live-total-note { margin-top: 0.8rem; font-size: 0.82rem; color: var(--color-text-muted); }
+
 /* ---------- Vista de votante ---------- */
 
 .ballot-list { display: grid; gap: 1.25rem; }

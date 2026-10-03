@@ -124,6 +124,26 @@ function detectAnomalies(points) {
     .filter((p) => Math.abs(p.zScore) > 2);
 }
 
+/* ============================================================
+ * PUBLICACIÓN DE RESULTADOS — mientras la elección no tiene acta
+ * certificada, ninguna ruta dice cuántos votos lleva cada opción, ni nada
+ * que se derive de eso (el orden, la concentración, quién va adelante): solo
+ * cuántos votaron. Un resultado parcial puede influir en quien todavía no
+ * votó, y nadie, tampoco el administrador, debe conocerlo antes del cierre.
+ * Se aplica acá y no solo en el frontend, para que tampoco se pueda pedir
+ * directo al API. Al certificarse, se publica el acta completa.
+ * ============================================================ */
+
+async function countVotes(electionId) {
+  const result = await pool.query(`SELECT COUNT(*)::int AS n FROM votes WHERE election_id = $1`, [electionId]);
+  return result.rows[0].n;
+}
+
+async function isCertified(electionId) {
+  const result = await pool.query(`SELECT 1 FROM scrutiny_ledger WHERE election_id = $1`, [electionId]);
+  return result.rows.length > 0;
+}
+
 app.get('/api/elections/:id/results', [param('id').isInt({ min: 1 }).toInt()], asyncRoute('/api/elections/:id/results', async (req, res) => {
   if (!validateOr400(req, res, 'id de elección inválido')) return;
 
@@ -149,6 +169,9 @@ app.get('/api/elections/:id/results', [param('id').isInt({ min: 1 }).toInt()], a
       return res.status(202).json({
         electionId: req.params.id,
         status,
+        certified: false,
+        resultsHidden: true,
+        totalVotes: await countVotes(req.params.id),
         message: 'La elección cerró pero aún no ha sido certificada por el módulo de escrutinio',
       });
     }
@@ -171,36 +194,16 @@ app.get('/api/elections/:id/results', [param('id').isInt({ min: 1 }).toInt()], a
     });
   }
 
-  // Elección "scheduled" o "active": resultados en vivo, recalculados en
-  // cada consulta. Query parametrizada con JOIN + agregación; nunca se
-  // interpola el id del usuario.
-  const result = await pool.query(
-    `SELECT po.id AS option_id, po.label, po.candidate_number, po.logo,
-            COUNT(v.id)::int AS votes
-     FROM election_options po
-     LEFT JOIN votes v ON v.option_id = po.id
-     WHERE po.election_id = $1
-     GROUP BY po.id, po.label, po.candidate_number, po.logo
-     ORDER BY votes DESC`,
-    [req.params.id]
-  );
+  // Elección "scheduled" o "active": en vivo solo se publica cuántos
+  // votaron. Ver PUBLICACIÓN DE RESULTADOS más arriba.
   return res.status(200).json({
     electionId: req.params.id,
     status,
     certified: false,
+    resultsHidden: true,
     scheduledStart: scheduled_start,
     scheduledEnd: scheduled_end,
-    // Igual que la respuesta certificada, para que quien consuma el API no
-    // tenga que distinguir los dos casos para saber el total.
-    totalVotes: result.rows.reduce((sum, r) => sum + r.votes, 0),
-    results: result.rows.map((r) => ({
-      optionId: r.option_id,
-      candidateNumber: r.candidate_number,
-      label: r.label,
-      logo: r.logo,
-      votes: r.votes,
-    })),
-    concentration: computeConcentration(result.rows),
+    totalVotes: await countVotes(req.params.id),
   });
 }));
 
@@ -447,7 +450,9 @@ app.get(
 );
 
 // Momento de definición: cuántas veces cambió el primer lugar y desde
-// cuándo lidera el que va primero. Ver leadTimeline.
+// cuándo lidera el que va primero. Ver leadTimeline. Dice quién va
+// adelante, así que solo se calcula con el acta certificada (ver
+// PUBLICACIÓN DE RESULTADOS).
 app.get(
   '/api/elections/:id/metrics/lead-timeline',
   [param('id').isInt({ min: 1 }).toInt()],
@@ -455,6 +460,9 @@ app.get(
     if (!validateOr400(req, res, 'id de elección inválido')) return;
     const election = await findElectionOr404(res, req.params.id);
     if (!election) return;
+    if (!(await isCertified(req.params.id))) {
+      return res.status(200).json({ electionId: req.params.id, status: election.status, state: 'oculto_hasta_certificar' });
+    }
 
     const [options, counts] = await Promise.all([
       pool.query(

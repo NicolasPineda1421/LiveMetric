@@ -77,7 +77,7 @@ Estilo arquitectónico resumido:
 
 ### 3.4 Microservicio C — Analytics
 
-**Responsabilidad:** exclusivamente **lectura** de resultados — en vivo si la elección sigue activa, o el acta ya certificada si cerró.
+**Responsabilidad:** exclusivamente **lectura** de resultados. Mientras la elección no tiene acta, solo publica cuántos votaron: los votos por opción, y todo lo que se deriva de ellos (orden, concentración, quién va adelante), no salen del servicio hasta que el escrutinio certifica el acta, para que un resultado parcial no influya en quien todavía no votó. Con el acta, sirve el acta certificada.
 
 **Por qué es un servicio separado de Voting:** separa el camino de escritura (votar) del camino de lectura (consultar resultados), que tienen perfiles de carga y de seguridad distintos — Analytics nunca necesita aceptar un voto, así que no expone esa superficie de ataque.
 
@@ -112,7 +112,7 @@ graph TB
     subgraph Backend["Backend — red app-net"]
         AUTH["Auth<br/>(A)<br/>login dual · identidad · auditoría"]
         VOTING["Voting<br/>(B)<br/>votación · plantillas · elecciones"]
-        ANALYTICS["Analytics<br/>(C)<br/>resultados en vivo / certificados"]
+        ANALYTICS["Analytics<br/>(C)<br/>total en vivo / resultados certificados"]
         SCRUTINY["Scrutiny<br/>(D)<br/>recuento independiente · hash chain · acta PDF"]
         SCHEDULER["Scheduler<br/>(worker, node-cron)<br/>sin puerto público"]
     end
@@ -248,7 +248,7 @@ graph LR
         UC2(["Crear plantillas<br/>(genéricas / presidenciales)"])
         UC3(["Programar elección"])
         UC4(["Detener elección"])
-        UC5(["Consultar resultados<br/>en vivo / certificados<br/>con el sello de veracidad"])
+        UC5(["Consultar el total en vivo<br/>y los resultados certificados<br/>con el sello de veracidad"])
         UC6(["Descargar Acta<br/>de Escrutinio (PDF)"])
         UC7(["Verificar las actas<br/>(hash, cadena y firma)"])
         UC8(["Crear administradores<br/>y auditores"])

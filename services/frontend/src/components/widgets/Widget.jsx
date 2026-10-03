@@ -44,11 +44,11 @@ function renderByType(type, shaped, printMode) {
     case 'kpi':
       return <KpiCard kpi={shaped.kpi} />;
     case 'bar':
-      return <BarChartWidget items={shaped.items} printMode={printMode} />;
+      return <BarChartWidget items={shaped.items} printMode={printMode} emptyMessage={shaped.emptyMessage} />;
     case 'line':
-      return <LineChartWidget items={shaped.items} series={shaped.series} unit={shaped.unit} printMode={printMode} />;
+      return <LineChartWidget items={shaped.items} series={shaped.series} unit={shaped.unit} printMode={printMode} emptyMessage={shaped.emptyMessage} />;
     case 'pie':
-      return <PieChartWidget items={shaped.items} printMode={printMode} />;
+      return <PieChartWidget items={shaped.items} printMode={printMode} emptyMessage={shaped.emptyMessage} />;
     case 'table':
       return <TableWidget table={shaped.table} />;
     default:

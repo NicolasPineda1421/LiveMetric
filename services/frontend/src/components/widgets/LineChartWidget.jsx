@@ -8,9 +8,9 @@ import { SEQUENTIAL_ACCENT, MUTED_INK, GRIDLINE, PRINT_INK, PRINT_MUTED_INK, PRI
 // identidad por opción), salvo las marcadas color: 'accent', que son la
 // misma magnitud (ej. participación real vs. proyectada: mismo color, la
 // proyección punteada).
-export default function LineChartWidget({ items, series, unit = '', printMode }) {
+export default function LineChartWidget({ items, series, unit = '', printMode, emptyMessage }) {
   if (!items || items.length === 0) {
-    return <div className="widget-empty">Sin datos para mostrar.</div>;
+    return <div className="widget-empty">{emptyMessage || 'Sin datos para mostrar.'}</div>;
   }
   const gridline = printMode ? PRINT_GRIDLINE : GRIDLINE;
   const tickStyle = { fill: printMode ? PRINT_MUTED_INK : MUTED_INK, fontSize: 11 };

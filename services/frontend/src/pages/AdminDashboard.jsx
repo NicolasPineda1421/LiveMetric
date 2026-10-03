@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
+import { HIDDEN_RESULTS_NOTE } from '../components/widgets/dataAdapters.js';
 import ReportsTab from './ReportsTab.jsx';
 
 const TABS = [
@@ -459,6 +460,15 @@ function ActaSeal({ integrity }) {
   );
 }
 
+// Cada cuánto se vuelve a pedir el total mientras la elección no tiene acta.
+export const LIVE_REFRESH_MS = 10000;
+
+const LIVE_STATUS = {
+  scheduled: 'Todavía no empieza',
+  active: 'En vivo',
+  closed: 'Cerrada: el escrutinio la certifica en menos de un minuto',
+};
+
 export function ResultsTab({ session }) {
   const [elections, setElections] = useState([]);
   const [electionId, setElectionId] = useState('');
@@ -466,13 +476,18 @@ export function ResultsTab({ session }) {
   const [integrity, setIntegrity] = useState(null);
   const [error, setError] = useState('');
   const [downloading, setDownloading] = useState(false);
+  // La elección elegida ahora: una respuesta que llega después de cambiar
+  // de elección (o un refresco atrasado) no debe pisar la de la nueva.
+  const selected = useRef('');
 
   useEffect(() => { api.listAllElections(session.token).then(setElections).catch(() => {}); }, [session.token]);
 
-  async function fetchResults(id) {
-    setError(''); setResult(null); setIntegrity(null);
+  async function fetchResults(id, { refresh = false } = {}) {
+    if (!refresh) { setError(''); setResult(null); setIntegrity(null); }
     try {
       const data = await api.getResults(session.token, id);
+      if (selected.current !== id) return;
+      setError('');
       setResult(data);
       if (data.certified) {
         // "electionId" en el estado: si se cambia de elección antes de que
@@ -483,8 +498,24 @@ export function ResultsTab({ session }) {
           .catch((err) => setIntegrity((prev) => (prev?.electionId === id ? { electionId: id, error: err.message } : prev)));
       }
     } catch (err) {
-      setError(err.message);
+      if (selected.current === id) setError(err.message);
     }
+  }
+
+  // Mientras no hay acta, el total se actualiza solo. Cuando el escrutinio
+  // certifica, la consulta siguiente ya trae el acta y el refresco se detiene.
+  const waitingForActa = Boolean(result && !result.certified);
+  useEffect(() => {
+    if (!electionId || !waitingForActa) return undefined;
+    const timer = setInterval(() => fetchResults(electionId, { refresh: true }), LIVE_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [electionId, waitingForActa, session.token]);
+
+  function selectElection(id) {
+    selected.current = id;
+    setElectionId(id);
+    if (id) fetchResults(id);
+    else setResult(null);
   }
 
   async function downloadActa() {
@@ -504,14 +535,15 @@ export function ResultsTab({ session }) {
     <div>
       <h2 className="section-title">Resultados</h2>
       <p className="section-desc">
-        En vivo mientras la elección está activa; certificados una vez cerrada, con un acta firmada digitalmente cuya
-        veracidad se comprueba cada vez que se consulta.
+        Mientras la elección está abierta, en vivo solo se ve cuántas personas votaron: los votos por candidato u opción
+        se publican al cierre, cuando el escrutinio certifica el acta. El acta va firmada digitalmente y su veracidad se
+        comprueba cada vez que se consulta.
       </p>
 
       <div className="panel">
         <div className="field-dark">
           <label>Elección</label>
-          <select value={electionId} onChange={(e) => { setElectionId(e.target.value); if (e.target.value) fetchResults(e.target.value); }}>
+          <select value={electionId} onChange={(e) => selectElection(e.target.value)}>
             <option value="">Selecciona una elección…</option>
             {elections.map((p) => <option key={p.id} value={p.id}>{p.title} ({p.status})</option>)}
           </select>
@@ -524,7 +556,15 @@ export function ResultsTab({ session }) {
             {result.certified ? (
               <ActaSeal integrity={integrity?.electionId === electionId ? integrity : null} />
             ) : (
-              <span><span className="live-dot" />En vivo</span>
+              <div className="live-total">
+                <div className="live-total-status">
+                  {result.status === 'active' && <span className="live-dot" />}
+                  {LIVE_STATUS[result.status] || 'En vivo'}
+                </div>
+                <div className="live-total-value">{result.totalVotes ?? 0}</div>
+                <div className="live-total-label">{result.totalVotes === 1 ? 'persona votó' : 'personas votaron'}</div>
+                <div className="live-total-note">{HIDDEN_RESULTS_NOTE}</div>
+              </div>
             )}
 
             {result.certified && session.role === 'admin' && (
@@ -555,20 +595,22 @@ export function ResultsTab({ session }) {
               </div>
             )}
 
-            <div className="tally">
-              {(result.results || []).map((r) => (
-                <div className="tally-row" key={r.optionId || r.option_id}>
-                  <span className="tally-label">
-                    {r.candidateNumber && <span className="candidate-number-chip" style={{ marginRight: '0.4rem' }}>{r.candidateNumber}</span>}
-                    {r.label}
-                  </span>
-                  <span className="tally-votes">{r.votes}</span>
-                  <div className="tally-bar-track">
-                    <div className="tally-bar-fill" style={{ width: `${(r.votes / maxVotes) * 100}%` }} />
+            {result.certified && (
+              <div className="tally">
+                {(result.results || []).map((r) => (
+                  <div className="tally-row" key={r.optionId || r.option_id}>
+                    <span className="tally-label">
+                      {r.candidateNumber && <span className="candidate-number-chip" style={{ marginRight: '0.4rem' }}>{r.candidateNumber}</span>}
+                      {r.label}
+                    </span>
+                    <span className="tally-votes">{r.votes}</span>
+                    <div className="tally-bar-track">
+                      <div className="tally-bar-fill" style={{ width: `${(r.votes / maxVotes) * 100}%` }} />
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
 
             {result.certified && result.byTable && result.byTable.length > 0 && (
               <div style={{ marginTop: '1.25rem' }}>

@@ -44,6 +44,13 @@ it('una tabla vacía muestra el mensaje de la fuente', async () => {
   expect(await screen.findByText(/Sin alertas: ningún patrón de ingresos fallidos/)).toBeInTheDocument();
 });
 
+it('con la elección sin acta, el KPI de resultados muestra solo el total y cuándo se publica el resto', async () => {
+  api.getResults.mockResolvedValue({ resultsHidden: true, totalVotes: 42 });
+  render(<Widget session={SESION} electionId="3" config={widget()} />);
+  expect(await screen.findByText('42')).toBeInTheDocument();
+  expect(screen.getByText(/se publican cuando el escrutinio certifica el acta/)).toBeInTheDocument();
+});
+
 it('cada fuente consulta su endpoint, con sus parámetros', async () => {
   const casos = [
     ['timeseries', { interval: 'day' }, api.getTimeseries, ['jwt-auditor', '3', 'day']],

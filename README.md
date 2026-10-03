@@ -15,6 +15,7 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 - **Elecciones programadas**: plantillas genéricas o presidenciales (con candidatos, número y foto) que se abren y cierran solas según su horario, o se detienen a mano.
 - **Voto único por identidad**: el doble voto se impide por la identidad del votante, no por su navegador; el padrón se guarda cifrado.
 - **Escrutinio independiente**: al cerrar, un servicio aparte recuenta los votos, consolida por mesa, determina el ganador, encadena el acta con hashes SHA-256 y la **firma digitalmente** (Ed25519); también en PDF.
+- **Sin resultados parciales**: mientras la elección está abierta, en vivo solo se ve cuántas personas votaron. Los votos por candidato u opción se publican cuando el escrutinio certifica el acta; antes no los entrega el sistema, a nadie.
 - **Indicador de veracidad del acta**: cada vez que se consulta un resultado certificado, se comprueba su firma, su hash y los votos guardados, y se muestra si el acta está **verificada**, **alterada** o **sin firma**, en el panel y en el PDF.
 - **Reportes con estadística avanzada**: tableros configurables con proyección de participación, momento de definición del resultado, verificación de integridad del acta y detección de accesos sospechosos.
 - **Auditoría**: cada intento de ingreso, exitoso o fallido, queda en un registro que no se puede modificar. Roles de administrador, auditor (solo lectura) y votante.

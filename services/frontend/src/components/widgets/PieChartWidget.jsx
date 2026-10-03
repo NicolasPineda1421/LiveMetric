@@ -2,10 +2,10 @@ import React from 'react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 import { colorAt, foldToOther, MUTED_INK, PRINT_MUTED_INK } from './palette.js';
 
-export default function PieChartWidget({ items, printMode }) {
+export default function PieChartWidget({ items, printMode, emptyMessage }) {
   const total = (items || []).reduce((sum, i) => sum + (i.value || 0), 0);
   if (!items || items.length === 0 || total === 0) {
-    return <div className="widget-empty">Sin datos para mostrar.</div>;
+    return <div className="widget-empty">{emptyMessage || 'Sin datos para mostrar.'}</div>;
   }
   // Cada porción es una identidad distinta (candidato, puesto, mesa): aquí sí
   // corresponde la paleta categórica, con leyenda porque el color es la

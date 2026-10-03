@@ -39,7 +39,7 @@ Los puertos 3001–3004 se publican solo en `127.0.0.1` (para probar las APIs de
 | **Frontend** | SPA para administradores, auditores y votantes; proxy reverso hacia los 4 microservicios | React 18 + Vite, Recharts, servido por nginx | nginx corre entero sin root (puerto 8080 dentro del contenedor) y envía una Content-Security-Policy estricta y las cabeceras de aislamiento del navegador (`cabeceras-seguridad.conf`). La sesión (JWT) vive solo en memoria: se pierde al recargar, sin dejar tokens en equipos compartidos |
 | **Microservicio A — Auth** | Login dual (admin y votante), padrón electoral, usuarios, auditoría | Node.js 20 / Express | `bcrypt` para contraseñas y PIN, hash SHA-256 de la cédula, padrón cifrado en reposo (AES-256-GCM), JWT de votante de vida corta, rate limiting, log de auditoría append-only |
 | **Microservicio B — Voting** | Votación **+** administración de plantillas (genéricas o **presidenciales** con candidatos) y elecciones, incluido detenerlas manualmente | Node.js 20 / Express | Exige JWT de **votante** para votar; el anti-doble-voto se ancla a la identidad (`voter_id_hash`), no a IP/navegador; ventana de tiempo verificada en la propia query |
-| **Microservicio C — Analytics** | Resultados (en vivo o certificados), métricas y estadística avanzada de los reportes, tableros configurables | Node.js 20 / Express | Solo lectura para admin/auditor; en elecciones cerradas sirve el acta certificada, nunca un recálculo. Verifica por su cuenta la integridad de las actas |
+| **Microservicio C — Analytics** | Total de votos en vivo y resultados certificados, métricas y estadística avanzada de los reportes, tableros configurables | Node.js 20 / Express | Solo lectura para admin/auditor; en elecciones cerradas sirve el acta certificada, nunca un recálculo. Verifica por su cuenta la integridad de las actas |
 | **Microservicio D — Scrutiny** | Recuento **independiente** desde los votos, consolidación por **mesa**, **ganador**, y certificación con cadena de hashes SHA-256 y **firma digital Ed25519**; acta en PDF | Node.js 20 / Express | Es el único con la clave privada que firma las actas (`ACTA_SIGNING_KEY`). `/internal/certify` solo acepta un token de servicio (`X-Internal-Token`, comparación *timing-safe*), nunca un JWT de usuario |
 | **Worker — Scheduler** | Activa/cierra elecciones según su horario y dispara la certificación | Node.js 20 + `node-cron` | Sin puerto publicado; solo habla con Scrutiny dentro de `app-net` |
 | **PostgreSQL** (`postgres`) | Persistencia, incluidos el libro de escrutinio y el log de auditoría | PostgreSQL 16 (`postgres:16-alpine`), volumen `db-data` | Solo en la red interna `db-net`, sin puerto en la PC; sistema de archivos de solo lectura salvo sus datos. Triggers que bloquean `UPDATE`/`DELETE` sobre `scrutiny_ledger` y `audit_log` |
@@ -95,13 +95,15 @@ Tampoco hay credenciales de la aplicación en el repositorio: `db/init.sql` no c
      ni borrable)
 
 7) Analytics, al pedir resultados:
-   - si sigue "active"  → conteo en vivo (recalculado siempre)
-   - si ya está "closed" → el acta CERTIFICADA de Scrutiny, nunca un recálculo
+   - mientras no hay acta → solo el TOTAL de votos, en vivo; nunca los votos
+     por opción ni quién va adelante (tampoco al admin ni pidiéndolo al API)
+   - con el acta certificada → el acta de Scrutiny, nunca un recálculo
      propio, con su indicador de veracidad: Analytics verifica por su cuenta la
      firma (con la clave PÚBLICA), la cadena y el recuento → verificada /
      sin firma / alterada
-   - en Reportes: proyección de participación, momento de definición,
-     integridad del acta (firma + cadena + recuento) y accesos sospechosos
+   - en Reportes: proyección de participación, momento de definición (solo
+     con el acta), integridad del acta (firma + cadena + recuento) y accesos
+     sospechosos
 
 8) GET /verify en Scrutiny verifica acta por acta toda la cadena y cada firma,
    el PDF del acta lleva ese veredicto en el encabezado, y GET /admin/audit-log
