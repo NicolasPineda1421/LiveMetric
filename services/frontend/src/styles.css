@@ -236,8 +236,12 @@ input, select, textarea {
 .link-button.volver { display: block; margin: 1rem auto 0; color: #6b6350; }
 .jurado-pasos { padding-left: 1.2rem; margin: 0; line-height: 1.6; color: var(--color-text-muted); }
 .jurado-pasos li { margin-bottom: 0.35rem; }
-.acciones-padron { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.acciones-padron .btn { white-space: nowrap; }
+/* Acciones de una fila (Padrón, Usuarios): siempre una al lado de la otra,
+   compactas. Si no entran, la tabla se desplaza hacia el costado
+   (.tabla-desplazable) en lugar de apilarlas. */
+.acciones-padron { display: flex; flex-wrap: nowrap; gap: 0.4rem; align-items: center; }
+.acciones-padron .btn { white-space: nowrap; padding: 0.35rem 0.7rem; font-size: 0.8rem; }
+.tabla-desplazable { overflow-x: auto; }
 .editar-mesa { min-width: 280px; }
 
 /* Padrón: una fila del formulario por votante, y los filtros del listado */

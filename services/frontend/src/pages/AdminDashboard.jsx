@@ -887,56 +887,58 @@ function UsersTab({ session }) {
 
       <div className="panel">
         <h3>Usuarios ({users.length})</h3>
-        <table className="table">
-          <thead><tr><th>Usuario</th><th>Rol</th><th>Puesto y mesa</th><th>Autenticador</th><th></th></tr></thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td>{u.username}</td>
-                <td>{ownValue(ROLE_LABEL, u.role) || u.role}</td>
-                <td>
-                  {u.role !== 'jurado' ? '—' : editing?.id === u.id ? (
-                    <div className="editar-mesa">
-                      <LugarJuradoFields
-                        places={places || []}
-                        pollingPlace={editing.pollingPlace}
-                        votingTable={editing.votingTable}
-                        onChange={(p, m) => setEditing({ ...editing, pollingPlace: p, votingTable: m })}
-                      />
-                      <div className="acciones-padron">
-                        <button className="btn btn-gold" disabled={!editing.pollingPlace} onClick={saveMesa}>Guardar</button>
-                        <button className="btn btn-outline" onClick={() => setEditing(null)}>Cancelar</button>
+        <div className="tabla-desplazable">
+          <table className="table">
+            <thead><tr><th>Usuario</th><th>Rol</th><th>Puesto y mesa</th><th>Autenticador</th><th></th></tr></thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id}>
+                  <td>{u.username}</td>
+                  <td>{ownValue(ROLE_LABEL, u.role) || u.role}</td>
+                  <td>
+                    {u.role !== 'jurado' ? '—' : editing?.id === u.id ? (
+                      <div className="editar-mesa">
+                        <LugarJuradoFields
+                          places={places || []}
+                          pollingPlace={editing.pollingPlace}
+                          votingTable={editing.votingTable}
+                          onChange={(p, m) => setEditing({ ...editing, pollingPlace: p, votingTable: m })}
+                        />
+                        <div className="acciones-padron">
+                          <button className="btn btn-gold" disabled={!editing.pollingPlace} onClick={saveMesa}>Guardar</button>
+                          <button className="btn btn-outline" onClick={() => setEditing(null)}>Cancelar</button>
+                        </div>
                       </div>
-                    </div>
-                  ) : lugarJurado(u.polling_place, u.voting_table)}
-                </td>
-                <td>{u.role !== 'jurado' ? '—' : u.has_totp ? 'Registrado' : 'Pendiente (primer ingreso)'}</td>
-                <td>
-                  {u.role === 'jurado' && (
-                    <div className="acciones-padron">
-                      {editing?.id !== u.id && !sinPadron && (
-                        <button
-                          className="btn btn-outline"
-                          onClick={() => {
-                            // Si su puesto está en el padrón, se parte de él (y de su mesa, si existe).
-                            const puesto = (places || []).find((p) => p.pollingPlace === u.polling_place);
-                            const mesa = puesto?.votingTables.includes(u.voting_table) ? u.voting_table : '';
-                            setEditing({ id: u.id, username: u.username, pollingPlace: puesto ? u.polling_place : '', votingTable: mesa });
-                          }}
-                        >
-                          Cambiar mesa
-                        </button>
-                      )}
-                      {u.has_totp && (
-                        <button className="btn btn-outline" onClick={() => resetTotp(u)}>Restablecer autenticador</button>
-                      )}
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                    ) : lugarJurado(u.polling_place, u.voting_table)}
+                  </td>
+                  <td>{u.role !== 'jurado' ? '—' : u.has_totp ? 'Registrado' : 'Pendiente (primer ingreso)'}</td>
+                  <td>
+                    {u.role === 'jurado' && (
+                      <div className="acciones-padron">
+                        {editing?.id !== u.id && !sinPadron && (
+                          <button
+                            className="btn btn-outline"
+                            onClick={() => {
+                              // Si su puesto está en el padrón, se parte de él (y de su mesa, si existe).
+                              const puesto = (places || []).find((p) => p.pollingPlace === u.polling_place);
+                              const mesa = puesto?.votingTables.includes(u.voting_table) ? u.voting_table : '';
+                              setEditing({ id: u.id, username: u.username, pollingPlace: puesto ? u.polling_place : '', votingTable: mesa });
+                            }}
+                          >
+                            Cambiar mesa
+                          </button>
+                        )}
+                        {u.has_totp && (
+                          <button className="btn btn-outline" onClick={() => resetTotp(u)}>Restablecer autenticador</button>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -1311,45 +1313,47 @@ function VotersTab({ session }) {
           <div className="empty-state">{hayFiltros ? 'Ningún votante coincide con los filtros.' : 'Sin votantes cargados todavía.'}</div>
         ) : (
           <>
-            <table className="table">
-              <thead><tr><th>Cédula</th><th>Nombre</th><th>Puesto</th><th>Mesa</th><th>PIN</th><th>Autenticador</th><th>Voto asistido</th><th></th></tr></thead>
-              <tbody>
-                {voters.map((v) => (
-                  <tr key={v.id}>
-                    <td className="mono sin-corte">{v.cedula}</td>
-                    <td>{v.full_name}</td>
-                    <td>{v.polling_place}</td>
-                    <td>{v.voting_table}</td>
-                    <td>{pinStatus(v, Date.now())}</td>
-                    <td>{v.assisted ? 'No lo usa' : v.has_totp ? 'Registrado' : 'Pendiente'}</td>
-                    <td>
-                      <input
-                        type="checkbox"
-                        aria-label={`Voto asistido de ${v.full_name}`}
-                        checked={v.assisted}
-                        disabled={savingId === v.id}
-                        onChange={(e) => setAssisted(v, e.target.checked)}
-                      />
-                    </td>
-                    <td>
-                      <div className="acciones-padron">
-                        <button className="btn btn-outline" disabled={resettingId === v.id} onClick={() => resetPin(v.id)}>
-                          {resettingId === v.id ? 'Generando…' : v.has_pin ? 'Regenerar PIN' : 'Generar PIN'}
-                        </button>
-                        {v.has_totp && !v.assisted && (
-                          <button className="btn btn-outline" disabled={savingId === v.id} onClick={() => resetTotp(v)}>
-                            Restablecer autenticador
+            <div className="tabla-desplazable">
+              <table className="table">
+                <thead><tr><th>Cédula</th><th>Nombre</th><th>Puesto</th><th>Mesa</th><th>PIN</th><th>Autenticador</th><th>Voto asistido</th><th></th></tr></thead>
+                <tbody>
+                  {voters.map((v) => (
+                    <tr key={v.id}>
+                      <td className="mono sin-corte">{v.cedula}</td>
+                      <td>{v.full_name}</td>
+                      <td>{v.polling_place}</td>
+                      <td>{v.voting_table}</td>
+                      <td>{pinStatus(v, Date.now())}</td>
+                      <td>{v.assisted ? 'No lo usa' : v.has_totp ? 'Registrado' : 'Pendiente'}</td>
+                      <td>
+                        <input
+                          type="checkbox"
+                          aria-label={`Voto asistido de ${v.full_name}`}
+                          checked={v.assisted}
+                          disabled={savingId === v.id}
+                          onChange={(e) => setAssisted(v, e.target.checked)}
+                        />
+                      </td>
+                      <td>
+                        <div className="acciones-padron">
+                          <button className="btn btn-outline" disabled={resettingId === v.id} onClick={() => resetPin(v.id)}>
+                            {resettingId === v.id ? 'Generando…' : v.has_pin ? 'Regenerar PIN' : 'Generar PIN'}
                           </button>
-                        )}
-                        <button className="btn btn-danger-outline" disabled={savingId === v.id} onClick={() => remove(v)}>
-                          Eliminar
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          {v.has_totp && !v.assisted && (
+                            <button className="btn btn-outline" disabled={savingId === v.id} onClick={() => resetTotp(v)}>
+                              Restablecer autenticador
+                            </button>
+                          )}
+                          <button className="btn btn-danger-outline" disabled={savingId === v.id} onClick={() => remove(v)}>
+                            Eliminar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             {total > VOTERS_PAGE_SIZE && (
               <div className="pagination">
                 <button className="btn btn-outline" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
