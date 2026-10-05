@@ -43,6 +43,8 @@
 #   ./scripts/contenedor.sh estado                  estado de cada contenedor de adentro
 #   ./scripts/contenedor.sh logs [servicio]         logs en vivo del stack de adentro (también: logs falco, logs grafana...)
 #   ./scripts/contenedor.sh shell                   terminal dentro del contenedor global
+#   ./scripts/contenedor.sh admin [usuario]         cambia la contraseña de una cuenta del panel (sin usuario,
+#                                                   pregunta cuál; si no hay administrador, crea el primero)
 #   ./scripts/contenedor.sh detener                 apaga el contenedor global y todo lo de adentro
 #   ./scripts/contenedor.sh borrar                  ademas borra su imagen y su volumen (con la BASE DE DATOS)
 #
@@ -360,11 +362,11 @@ iniciar() {
     "  ./scripts/contenedor.sh estado    estado de cada microservicio" \
     "  ./scripts/contenedor.sh logs      logs en vivo (o: logs auth-service)" \
     "  ./scripts/contenedor.sh shell     terminal adentro" \
+    "  ./scripts/contenedor.sh admin     cambiar la contraseña del administrador" \
     "  ./scripts/contenedor.sh detener   apagar todo"
   if $sin_admin; then
     banner "$C_AMARILLO" "⚠ No se creó el administrador: sin él no se puede entrar al panel." \
-      "  Créalo con una contraseña segura:" \
-      "  docker exec -it $NOMBRE docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay"
+      "  Créalo con una contraseña segura:  ./scripts/contenedor.sh admin"
   fi
 }
 
@@ -417,7 +419,7 @@ borrar() {
 
 COMANDO="iniciar"
 case "${1:-}" in
-  iniciar|estado|logs|shell|detener|borrar) COMANDO="$1"; shift ;;
+  iniciar|estado|logs|shell|admin|detener|borrar) COMANDO="$1"; shift ;;
   -h|--help) uso; exit 0 ;;
 esac
 
@@ -445,6 +447,17 @@ case "$COMANDO" in
     requiere_docker
     requiere_corriendo
     docker exec "${ARGS_TTY[@]}" "$NOMBRE" bash
+    ;;
+  admin)
+    # Cambiar la contraseña de una cuenta (o crear el primer administrador):
+    # services/auth/src/scripts/cambiarContrasena.js, adentro.
+    requiere_docker
+    requiere_corriendo
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+      falla "Necesita una terminal: pide la contraseña sin mostrarla."
+      exit 1
+    fi
+    docker exec -it "$NOMBRE" docker compose exec auth-service node src/scripts/cambiarContrasena.js "$@"
     ;;
   detener) detener ;;
   borrar) borrar ;;

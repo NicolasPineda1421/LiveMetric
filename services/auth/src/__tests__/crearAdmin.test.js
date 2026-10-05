@@ -94,3 +94,33 @@ describe('cambiarContrasena.js', () => {
     expect(await hashDe()).toBe(antes);
   });
 });
+
+describe('cambiarContrasena.js sin usuario (./scripts/contenedor.sh admin)', () => {
+  it('muestra las cuentas, pregunta cuál (vuelve a preguntar si no existe) y cambia esa', async () => {
+    const usuario = `${RUN_ID}_f`;
+    await pool.query("INSERT INTO admins (username, password_hash, role) VALUES ($1, 'x', 'admin')", [usuario]);
+    const { code, salida } = await cambiarContrasena([], [`${RUN_ID}_nadie`, usuario, FUERTE, FUERTE]);
+    expect(code).toBe(0);
+    expect(salida).toMatch('Cuentas del panel:');
+    expect(salida).toMatch(`${usuario} (administrador)`);
+    expect(salida).toMatch(`No hay ninguna cuenta "${RUN_ID}_nadie"`);
+    expect(salida).toMatch(`Listo: se cambió la contraseña de "${usuario}"`);
+    const { rows } = await pool.query('SELECT password_hash FROM admins WHERE username = $1', [usuario]);
+    expect(await bcrypt.compare(FUERTE, rows[0].password_hash)).toBe(true);
+  });
+
+  it('si todavía no hay ningún administrador, crea el primero', async () => {
+    // Los administradores de esta base pasan a auditor durante la prueba.
+    const { rows: apartados } = await pool.query("UPDATE admins SET role = 'auditor' WHERE role = 'admin' RETURNING id");
+    try {
+      const usuario = `${RUN_ID}_primero`;
+      const { code, salida } = await cambiarContrasena([], [usuario, FUERTE, FUERTE]);
+      expect(code).toBe(0);
+      expect(salida).toMatch('Esta instalación todavía no tiene ningún administrador: se crea el primero.');
+      expect(salida).toMatch(`Listo: se creó el administrador "${usuario}"`);
+      expect(await existe(usuario)).toBe(true);
+    } finally {
+      await pool.query("UPDATE admins SET role = 'admin' WHERE id = ANY($1)", [apartados.map((r) => r.id)]);
+    }
+  });
+});

@@ -39,9 +39,10 @@ Si lo saltaste, o levantaste el stack con `docker compose` directo:
 ```bash
 docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay               # el primero
 docker compose exec auth-service node src/scripts/crearAdmin.js <usuario> auditor         # uno de solo lectura
+docker compose exec auth-service node src/scripts/cambiarContrasena.js [usuario]          # cambiar una contraseña
 ```
 
-Con el contenedor global, primero entra con `./scripts/contenedor.sh shell` y corre ahí el mismo comando.
+Con el contenedor global, `./scripts/contenedor.sh admin` (o `scripts\contenedor.bat admin`) cambia la contraseña de una cuenta: muestra las cuentas y pregunta cuál (si hay un solo administrador, lo propone), o va directo con `./scripts/contenedor.sh admin <usuario>`. Si todavía no hay ningún administrador, crea el primero. Para los otros comandos, entra con `./scripts/contenedor.sh shell` y córrelos ahí.
 
 ## 1. `start.sh` / `start.bat` (recomendada)
 
@@ -67,6 +68,7 @@ Al final muestra la URL en esta PC y la URL para el resto de la red local. Con `
 ./scripts/contenedor.sh estado      # estado de cada microservicio
 ./scripts/contenedor.sh logs        # logs en vivo (o: logs auth-service, logs grafana, logs falco)
 ./scripts/contenedor.sh shell       # terminal dentro del contenedor global
+./scripts/contenedor.sh admin       # cambiar la contraseña del administrador (o de otra cuenta; si no hay, crea el primero)
 ./scripts/contenedor.sh detener     # apaga el contenedor global y todo lo de adentro
 ./scripts/contenedor.sh borrar      # además borra su imagen y la caché
 ```
@@ -217,7 +219,7 @@ Lo primero, casi siempre: `docker compose ps` (qué contenedor no está sano) y 
 | El votante recibe "Tu PIN venció" | El PIN pasó su fecha de vencimiento (se elige al generarlo) | En **Padrón**, **Regenerar PIN**, con un vencimiento que cubra la elección (el campo propone el cierre de la última programada) |
 | Un votante recibe "Cédula o PIN incorrectos" con los datos correctos | Su cédula no tiene PIN (en **Padrón** figura "Sin asignar"), o el PIN se regeneró | Genera el PIN desde **Padrón** y entrégaselo. El mensaje es el mismo en todos los casos a propósito |
 | "Demasiados intentos. Intenta de nuevo más tarde." al ingresar como votante | Desde ese equipo (esa IP) hubo 8 intentos fallidos en 15 minutos: el sistema lo toma como alguien adivinando PINs y bloquea la IP, también para los PIN correctos. Los ingresos correctos no cuentan, así que un puesto con un solo equipo puede atender a todos sus votantes | Esperar a que pasen los 15 minutos. Si fue un error de digitación repetido, revisar con el votante su cédula y su PIN (o regenerarlo en **Padrón**); si no, revisar el reporte de **Accesos sospechosos** |
-| No hay ningún administrador, o se perdió la contraseña del único | La base es nueva, el script no lo pudo crear (el arranque lo avisa al final) o no hay recuperación de contraseña | `docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay` si no hay ninguno; `cambiarContrasena.js <usuario>` para darle una contraseña nueva a uno que existe. Desde ese, se administra el resto en **Usuarios** |
+| No hay ningún administrador, o se perdió la contraseña del único | La base es nueva, el script no lo pudo crear (el arranque lo avisa al final) o no hay recuperación de contraseña | `docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay` si no hay ninguno; `cambiarContrasena.js <usuario>` para darle una contraseña nueva a uno que existe (con el contenedor global, las dos cosas con `./scripts/contenedor.sh admin`). Desde ese, se administra el resto en **Usuarios** |
 | "La contraseña no es segura" al crear el administrador o un usuario | La contraseña es corta, tiene pocos tipos de caracteres, es común (o una palabra común con números), tiene una secuencia o contiene el usuario | Usa una más larga y variada, o una frase de 16 caracteres o más (por ejemplo, cuatro palabras con guiones). El mensaje dice qué falló |
 | En **Resultados**, un acta aparece como "Sin firma digital" o "Alterada" | "Sin firma": se certificó antes de que existiera la firma digital. "Alterada": algo en ella no coincide (el indicador dice qué) | Ver el [Manual de usuario](manual-usuario.md#46-resultados) y el [Manual de seguridad](manual-seguridad.md). Un acta alterada no debe usarse como oficial |
 | El stack de monitoreo no arranca: `Define GRAFANA_ADMIN_PASSWORD en el .env` | Compose busca el `.env` en `monitoring/` si no se le indica otro | `docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml up -d`, desde la raíz del repo. En un `.env` anterior, `generar-env.js` agrega la contraseña |

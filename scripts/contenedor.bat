@@ -21,6 +21,8 @@ REM   scripts\contenedor.bat [iniciar] [--detalle]   construye, analiza y levant
 REM   scripts\contenedor.bat estado                  estado de cada contenedor de adentro
 REM   scripts\contenedor.bat logs [servicio]         logs en vivo del stack de adentro (tambien: logs grafana, logs loki...)
 REM   scripts\contenedor.bat shell                   terminal dentro del contenedor global
+REM   scripts\contenedor.bat admin [usuario]         cambia la contrasena de una cuenta del panel (sin usuario,
+REM                                                 pregunta cual; si no hay administrador, crea el primero)
 REM   scripts\contenedor.bat detener                 apaga el contenedor global y todo lo de adentro
 REM   scripts\contenedor.bat borrar                  ademas borra su imagen y su volumen (con la BASE DE DATOS)
 REM
@@ -72,6 +74,7 @@ if /i "%COMANDO%"=="iniciar" goto :iniciar
 if /i "%COMANDO%"=="estado" goto :estado
 if /i "%COMANDO%"=="logs" goto :logs
 if /i "%COMANDO%"=="shell" goto :shell
+if /i "%COMANDO%"=="admin" goto :admin
 if /i "%COMANDO%"=="detener" goto :detener
 if /i "%COMANDO%"=="borrar" goto :borrar
 echo Opcion desconocida: %COMANDO% ^(ver el comentario al principio de este archivo^) 1>&2
@@ -320,6 +323,7 @@ echo.
 echo %VERDE%    scripts\contenedor.bat estado    estado de cada microservicio%RESET%
 echo %VERDE%    scripts\contenedor.bat logs      logs en vivo, o: logs auth-service%RESET%
 echo %VERDE%    scripts\contenedor.bat shell     terminal adentro%RESET%
+echo %VERDE%    scripts\contenedor.bat admin     cambiar la contrasena del administrador%RESET%
 echo %VERDE%    scripts\contenedor.bat detener   apagar todo%RESET%
 echo %VERDE%%RAYA%%RESET%
 if defined IP_LAN call :info "Si otra PC no llega, permiti el puerto %PUERTO% TCP en el Firewall de Windows, ver docs\instalacion-y-despliegue.md."
@@ -327,8 +331,7 @@ if "%SIN_ADMIN%"=="1" (
   echo.
   echo %AMARILLO%%RAYA%%RESET%
   echo %AMARILLO%%NEGRITA%  ATENCION - No se creo el administrador: sin el no se puede entrar al panel.%RESET%
-  echo %AMARILLO%    Crealo con una contrasena segura:%RESET%
-  echo %AMARILLO%    docker exec -it %NOMBRE% docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay%RESET%
+  echo %AMARILLO%    Crealo con una contrasena segura:  scripts\contenedor.bat admin%RESET%
   echo %AMARILLO%%RAYA%%RESET%
 )
 call :restaurar_consola
@@ -372,6 +375,14 @@ exit /b %errorlevel%
 call :requiere_corriendo
 if errorlevel 1 exit /b 1
 docker exec -it %NOMBRE% bash
+exit /b %errorlevel%
+
+REM Cambiar la contrasena de una cuenta (o crear el primer administrador):
+REM services\auth\src\scripts\cambiarContrasena.js, adentro. %2 es el usuario (opcional).
+:admin
+call :requiere_corriendo
+if errorlevel 1 exit /b 1
+docker exec -it %NOMBRE% docker compose exec auth-service node src/scripts/cambiarContrasena.js %2
 exit /b %errorlevel%
 
 :detener
