@@ -1,6 +1,6 @@
-// El ingreso de votantes solo se permite con una votación abierta, o que
-// abre dentro de una hora (ver VIGENCIA DEL PIN en app.js). Las pruebas que
-// hacen ingresar votantes abren una con esto y la borran al terminar.
+// Elecciones a medida para las pruebas de auth (por ejemplo, la fecha que se
+// propone para el vencimiento del PIN es el cierre de la última elección
+// programada): se abren con esto y se borran al terminar.
 const pool = require('../db');
 
 async function abrirVotacion(titulo, { desdeMin = -60, hastaMin = 120, status = 'active' } = {}) {

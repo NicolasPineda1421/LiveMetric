@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS voters (
     voting_table      TEXT NOT NULL,
     is_active         BOOLEAN NOT NULL DEFAULT true,
     access_code_hash  TEXT,                          -- bcrypt del PIN; NULL hasta que un admin lo genere
-    access_code_expires_at TIMESTAMPTZ,              -- vencimiento del PIN (migración 007); NULL solo en PIN anteriores
+    access_code_expires_at TIMESTAMPTZ,              -- vencimiento del PIN (migraciones 007 y 008); NULL solo sin PIN
     -- Segundo factor (migración 006): el autenticador TOTP que el votante
     -- registra en su primer ingreso, o el voto asistido, en el que lo
     -- reemplaza la autorización del jurado de su mesa.

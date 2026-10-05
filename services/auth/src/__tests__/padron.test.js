@@ -7,7 +7,6 @@ const request = require('supertest');
 const app = require('../app');
 const pool = require('../db');
 const { encryptField } = require('../voterCrypto');
-const { abrirVotacion, cerrarVotacion } = require('./votacion');
 
 const RUN_ID = `CITEST_PAD_${Date.now()}`;
 const sufijo = Date.now().toString().slice(-7);
@@ -180,27 +179,22 @@ describe('Sugerencias del buscador (autocompletar)', () => {
 
 describe('Eliminar', () => {
   it('elimina al votante, queda en la auditoría sin la cédula, y ya no puede ingresar', async () => {
-    const votacion = await abrirVotacion(`${RUN_ID}-votacion`);
-    try {
-      const pin = (await agregar([{ cedula: ced(6), fullName: 'Votante Eliminado', pollingPlace: PUESTO, votingTable: 'Mesa 1' }])).body.accessCodes[0].pin;
-      const { id } = (await listar({ q: 'eliminado' })).body.voters[0];
-      const res = await conAdmin('delete', `/admin/voters/${id}`);
-      expect(res.status).toBe(204);
-      expect((await listar({ q: 'eliminado' })).body.total).toBe(0);
+    const pin = (await agregar([{ cedula: ced(6), fullName: 'Votante Eliminado', pollingPlace: PUESTO, votingTable: 'Mesa 1' }])).body.accessCodes[0].pin;
+    const { id } = (await listar({ q: 'eliminado' })).body.voters[0];
+    const res = await conAdmin('delete', `/admin/voters/${id}`);
+    expect(res.status).toBe(204);
+    expect((await listar({ q: 'eliminado' })).body.total).toBe(0);
 
-      const { rows } = await pool.query(
-        `SELECT actor_ref, metadata FROM audit_log WHERE event_type = 'VOTER_DELETED' ORDER BY id DESC LIMIT 1`
-      );
-      expect(rows[0].actor_ref).toBe(ADMIN.username);
-      expect(rows[0].metadata).toMatchObject({ voterId: id, voterIdHash: expect.stringMatching(/^[0-9a-f]{64}$/) });
-      expect(JSON.stringify(rows[0].metadata)).not.toContain(ced(6));
+    const { rows } = await pool.query(
+      `SELECT actor_ref, metadata FROM audit_log WHERE event_type = 'VOTER_DELETED' ORDER BY id DESC LIMIT 1`
+    );
+    expect(rows[0].actor_ref).toBe(ADMIN.username);
+    expect(rows[0].metadata).toMatchObject({ voterId: id, voterIdHash: expect.stringMatching(/^[0-9a-f]{64}$/) });
+    expect(JSON.stringify(rows[0].metadata)).not.toContain(ced(6));
 
-      const ingreso = await request(app).post('/login/voter').set('X-Forwarded-For', '203.0.113.250').send({ cedula: ced(6), pin });
-      expect(ingreso.status).toBe(401);
-      expect((await conAdmin('delete', `/admin/voters/${id}`)).status).toBe(404);
-    } finally {
-      await cerrarVotacion(votacion);
-    }
+    const ingreso = await request(app).post('/login/voter').set('X-Forwarded-For', '203.0.113.250').send({ cedula: ced(6), pin });
+    expect(ingreso.status).toBe(401);
+    expect((await conAdmin('delete', `/admin/voters/${id}`)).status).toBe(404);
   });
 
   it('solo el administrador puede eliminar', async () => {

@@ -71,7 +71,7 @@ Tampoco hay credenciales de la aplicación en el repositorio: `db/init.sql` no c
 1) Admin hace login       → POST /login/admin (Auth)         → JWT rol "admin", ~1h
    Votante hace login     → POST /login/voter (Auth)         → desafío (5 min, sin rol)
                           → POST /login/voter/codigo         → JWT rol "voter", ~10min
-   (solo durante la votación, desde una hora antes de que abra, y con el PIN sin vencer;
+   (con el PIN sin vencer, haya o no una votación abierta;
     cédula + PIN, y después el código de su app autenticadora; la primera vez,
     /login/voter/registro registra la app con un QR; si vota asistido,
     /login/voter/asistido con el usuario y el código del jurado de su mesa.

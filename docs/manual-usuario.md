@@ -144,12 +144,12 @@ números de cédula.
 ![Captura 04: Un intento fallido: el mensaje es el mismo si la cédula no existe o si el PIN es incorrecto](img/04-login-fallido.png)
 *Captura 04. Un intento fallido: el mensaje es el mismo si la cédula no existe o si el PIN es incorrecto.*
 
-**El PIN solo sirve durante la votación.** Se puede usar desde **una hora antes** de que
-abra la elección (para registrar el autenticador con calma) y hasta que cierra. Fuera de
-ese horario, el sistema responde *"No hay una votación abierta en este momento"*, con
-cualquier PIN. Además, cada PIN tiene **fecha de vencimiento**: si ya venció, el sistema
-lo dice (*"Tu PIN venció"*) y hay que pedir uno nuevo al encargado del puesto. Ese aviso
-aparece solo con el PIN correcto, así que no le da pistas a quien prueba PIN al azar.
+**El PIN tiene fecha de vencimiento.** Hasta esa fecha se puede ingresar haya o no una
+votación abierta: por ejemplo, para registrar el autenticador antes del día de la
+elección. Votar, en cambio, solo se puede dentro del horario de la elección. Si el PIN ya
+venció, el sistema lo dice (*"Tu PIN venció"*) y hay que pedir uno nuevo al encargado del
+puesto. Ese aviso aparece solo con el PIN correcto, así que no le da pistas a quien prueba
+PIN al azar.
 
 **La sesión del votante dura 10 minutos.** Es tiempo suficiente para votar, y limita el
 riesgo si alguien deja la sesión abierta en un equipo compartido. Además, recargar la
@@ -253,8 +253,8 @@ eso conviene **programar la elección antes de generar los PIN**. Se puede elegi
 fecha, de hasta 90 días. La misma fecha se usa al generar o regenerar el PIN de un votante
 desde el listado.
 
-Aunque el PIN no haya vencido, solo sirve durante la votación: desde una hora antes de que
-abra la elección y hasta que cierra (o hasta que se detiene).
+Hasta esa fecha, el PIN sirve haya o no una votación abierta; votar solo se puede dentro
+del horario de la elección.
 
 > ⚠️ **Importante:** el PIN se muestra **una sola vez**, en el momento de generarlo.
 > Después el sistema solo guarda una versión cifrada que no se puede revertir. Guarde o
@@ -263,8 +263,8 @@ abra la elección y hasta que cierra (o hasta que se detiene).
 
 Si un votante pierde su PIN, o se le venció, el administrador se lo regenera desde el
 listado del padrón. La columna **PIN** dice hasta cuándo vale cada uno, si ya está
-*Vencido* o si es *Sin vencimiento* (generado antes de que existiera el vencimiento: sirve
-solo durante la votación, y conviene regenerarlo).
+*Vencido*. (Los generados antes de que existiera el vencimiento recibieron uno al
+actualizar: el cierre de la última elección programada, o 24 horas.)
 
 **Autenticador y voto asistido.** El listado muestra, para cada votante:
 
@@ -544,10 +544,6 @@ No. Una vez confirmado, el voto es definitivo.
 
 **Perdí mi PIN, ¿qué hago?**
 Pídale al administrador que le genere uno nuevo desde la pestaña Padrón.
-
-**Me salió "No hay una votación abierta en este momento".**
-El PIN solo sirve durante la votación: desde una hora antes de que abra la elección y
-hasta que cierra. Vuelva dentro de ese horario.
 
 **Me salió "Tu PIN venció".**
 Cada PIN tiene fecha de vencimiento. Pida uno nuevo al encargado del puesto.

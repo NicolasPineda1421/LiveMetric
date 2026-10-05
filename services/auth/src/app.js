@@ -94,43 +94,26 @@ function generateAccessCode() {
 }
 
 /* ============================================================
- * VIGENCIA DEL PIN (migración 007)
+ * VIGENCIA DEL PIN (migraciones 007 y 008)
  * ============================================================
  *
- * El PIN que entrega el administrador sirve solo si se cumplen las dos:
- *   - no venció: vence en la fecha que se elige al generarlo (por defecto,
- *     el cierre de la última elección programada), nunca a más de 90 días;
- *   - hay una votación abierta, o abre dentro de una hora (el margen para
- *     registrar el autenticador con calma, antes de la apertura).
- * Así un PIN filtrado no sirve fuera de la votación, y uno viejo no sirve
- * en elecciones futuras. Las dos se comprueban en el primer paso del
- * ingreso y otra vez en el segundo.
+ * El PIN que entrega el administrador vence en la fecha que se elige al
+ * generarlo (por defecto, el cierre de la última elección programada, o 24
+ * horas si no hay ninguna), nunca a más de 90 días. Hasta entonces sirve
+ * haya o no una votación abierta: el votante puede, por ejemplo, registrar
+ * su autenticador antes del día de la elección. Votar sí se puede solo
+ * dentro del horario de la elección (eso lo controla voting-service). Así un
+ * PIN viejo no sirve en elecciones futuras. Se comprueba en el primer paso
+ * del ingreso y otra vez en el segundo.
  */
-const VENTANA_PREVIA_MINUTOS = 60;
 const PIN_VIGENCIA_MAXIMA_DIAS = 90;
 const PIN_VIGENCIA_SIN_ELECCION_HORAS = 24;
 const HORA_MS = 60 * 60 * 1000;
 
-const OUTSIDE_VOTING = {
-  error: 'No hay una votación abierta en este momento. El ingreso se habilita una hora antes de que abra la elección.',
-};
 const PIN_EXPIRED = { error: 'Tu PIN venció. Pide uno nuevo al encargado de tu puesto de votación.' };
 const PIN_EXPIRY_INVALID = {
   error: `El vencimiento del PIN debe ser una fecha futura, de no más de ${PIN_VIGENCIA_MAXIMA_DIAS} días.`,
 };
-
-// ¿Hay una elección abierta, o que abre dentro del margen? Una detenida a
-// mano queda "closed" y ya no cuenta, aunque su horario no haya terminado.
-async function votingWindowOpen() {
-  const result = await pool.query(
-    `SELECT 1 FROM elections
-      WHERE status IN ('scheduled', 'active')
-        AND now() BETWEEN scheduled_start - make_interval(mins => $1) AND scheduled_end
-      LIMIT 1`,
-    [VENTANA_PREVIA_MINUTOS]
-  );
-  return result.rows.length === 1;
-}
 
 // La fecha que se propone al generar PIN: el cierre de la última elección
 // programada o abierta, para que el PIN sirva en ellas y venza al terminar.
@@ -423,12 +406,6 @@ app.post(
     const genericError = { error: 'Cédula o PIN incorrectos' };
 
     try {
-      // Fuera de la votación no se mira ni la cédula: el mensaje es el mismo
-      // para todos (si hay una elección abierta es información pública).
-      if (!(await votingWindowOpen())) {
-        return rejectVoter(req, res, voterIdHash, 'fuera_de_votacion', 403, OUTSIDE_VOTING);
-      }
-
       const result = await pool.query(
         `SELECT id, is_active, assisted, totp_secret, access_code_hash,
                 (access_code_expires_at IS NOT NULL AND access_code_expires_at <= now()) AS pin_expired
@@ -512,12 +489,11 @@ async function voterFromChallenge(payload) {
   return voter && voter.is_active ? voter : null;
 }
 
-// El desafío dura 5 minutos: en el segundo paso se vuelve a comprobar la
-// vigencia, por si en el medio venció el PIN o cerró la votación. Devuelve
-// la respuesta de rechazo, o null si puede seguir.
-async function rejectIfOutsideAccess(req, res, voter, voterIdHash) {
+// El desafío dura 5 minutos: en el segundo paso se vuelve a comprobar que el
+// PIN no haya vencido en el medio. Devuelve la respuesta de rechazo, o null
+// si puede seguir.
+async function rejectIfPinExpired(req, res, voter, voterIdHash) {
   if (voter.pin_expired) return rejectVoter(req, res, voterIdHash, 'pin_vencido', 403, PIN_EXPIRED);
-  if (!(await votingWindowOpen())) return rejectVoter(req, res, voterIdHash, 'fuera_de_votacion', 403, OUTSIDE_VOTING);
   return null;
 }
 
@@ -563,7 +539,7 @@ app.post('/login/voter/codigo', voterLoginLimiter, codeRules, async (req, res) =
   try {
     const voter = await voterFromChallenge(payload);
     if (!voter || voter.assisted || !voter.totp_secret) return res.status(401).json(CHALLENGE_EXPIRED);
-    const blocked = await rejectIfOutsideAccess(req, res, voter, payload.vh);
+    const blocked = await rejectIfPinExpired(req, res, voter, payload.vh);
     if (blocked) return blocked;
     const step = totp.verify(decryptField(voter.totp_secret), req.body.code, { lastStep: voter.totp_last_step });
     if (step === null || !(await consumeVoterStep(voter.id, step))) {
@@ -587,7 +563,7 @@ app.post('/login/voter/registro', voterLoginLimiter, codeRules, async (req, res)
   try {
     const voter = await voterFromChallenge(payload);
     if (!voter || voter.assisted) return res.status(401).json(CHALLENGE_EXPIRED);
-    const blocked = await rejectIfOutsideAccess(req, res, voter, payload.vh);
+    const blocked = await rejectIfPinExpired(req, res, voter, payload.vh);
     if (blocked) return blocked;
     const secret = decryptField(payload.s);
     const step = totp.verify(secret, req.body.code);
@@ -633,7 +609,7 @@ app.post(
     try {
       const voter = await voterFromChallenge(payload);
       if (!voter || !voter.assisted) return res.status(401).json(CHALLENGE_EXPIRED);
-      const blocked = await rejectIfOutsideAccess(req, res, voter, payload.vh);
+      const blocked = await rejectIfPinExpired(req, res, voter, payload.vh);
       if (blocked) return blocked;
 
       const result = await pool.query(
@@ -1090,7 +1066,7 @@ app.get(
         total: filtered.length,
         registered: result.rows.length,
         voters,
-        pinExpiry: { suggested, electionTitle, maxDays: PIN_VIGENCIA_MAXIMA_DIAS, windowMinutesBefore: VENTANA_PREVIA_MINUTOS },
+        pinExpiry: { suggested, electionTitle, maxDays: PIN_VIGENCIA_MAXIMA_DIAS },
       });
     } catch (err) {
       console.error('Error en GET /admin/voters:', err.message);

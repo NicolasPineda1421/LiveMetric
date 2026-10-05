@@ -150,9 +150,9 @@ export default function LoginScreen({ onLogin }) {
                 <label htmlFor="voter-pin">PIN de acceso</label>
                 <input id="voter-pin" type="password" value={pin} onChange={(e) => setPin(e.target.value)} required inputMode="numeric" autoComplete="off" maxLength={10} />
                 <div className="field-hint">
-                  El PIN te lo entrega el encargado de tu puesto de votación y solo sirve durante la votación (desde
-                  una hora antes de que abra). Después te pediremos el código de tu autenticador o, si votas
-                  asistido, la autorización del jurado de tu mesa.
+                  El PIN te lo entrega el encargado de tu puesto de votación y sirve hasta la fecha en que vence.
+                  Después te pediremos el código de tu autenticador o, si votas asistido, la autorización del jurado
+                  de tu mesa.
                 </div>
               </div>
               <button className="btn btn-primary" disabled={loading}>{loading ? 'Verificando…' : 'Ingresar a votar'}</button>

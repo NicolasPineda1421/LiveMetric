@@ -1160,8 +1160,9 @@ function VotersTab({ session }) {
         un votante no se editan: si algo está mal, se elimina y se vuelve a agregar.
       </p>
       <p className="section-desc">
-        <strong>Vigencia del PIN:</strong> cada PIN vence en la fecha que elijas al generarlo y, además, solo sirve
-        mientras hay una votación abierta o desde una hora antes de que abra. Fuera de eso, nadie entra con él.
+        <strong>Vigencia del PIN:</strong> cada PIN vence en la fecha que elijas al generarlo y, hasta entonces,
+        sirve haya o no una votación abierta (por ejemplo, para registrar el autenticador antes del día de la
+        elección). Votar, en cambio, solo se puede dentro del horario de la elección.
       </p>
 
       <div className="panel">

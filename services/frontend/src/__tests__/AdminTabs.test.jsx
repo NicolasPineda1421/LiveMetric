@@ -428,7 +428,7 @@ describe('Padrón', () => {
 describe('Padrón: vencimiento del PIN', () => {
   // Dentro de los 90 días que admite el campo (el servidor nunca sugiere más).
   const CIERRE = new Date(Math.ceil((Date.now() + 10 * 24 * 3600 * 1000) / 60000) * 60000);
-  const sugerencia = (titulo = 'Consulta 2030') => ({ suggested: CIERRE.toISOString(), electionTitle: titulo, maxDays: 90, windowMinutesBefore: 60 });
+  const sugerencia = (titulo = 'Consulta 2030') => ({ suggested: CIERRE.toISOString(), electionTitle: titulo, maxDays: 90 });
   const votante = (cambios) => ({ id: 7, cedula: '1000000010', full_name: 'Ana Gómez', polling_place: 'P', voting_table: 'M', is_active: true, has_pin: true, has_totp: false, assisted: false, ...cambios });
   const campoVencimiento = () => campo('Vencimiento de los PIN que se generen');
 
