@@ -323,7 +323,7 @@ graph LR
 Los dos DFD son el modelo de amenazas de OWASP Threat Dragon
 ([`threat-model/livemetric.threatdragon.json`](threat-model/livemetric.threatdragon.json)),
 exportados desde la propia herramienta: los mismos diagramas sobre los que se
-analizaron las 19 amenazas STRIDE de
+analizaron las 22 amenazas STRIDE de
 [`threat-model/STRIDE-analysis.md`](threat-model/STRIDE-analysis.md). Las líneas
 punteadas son fronteras de confianza, y el flujo en rojo, el que tiene una amenaza
 abierta (el repudio del voto, aceptado por diseño para preservar el anonimato).

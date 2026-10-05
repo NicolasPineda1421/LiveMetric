@@ -213,3 +213,56 @@ describe('Límites de las operaciones de administración', () => {
     expect(eliminar.status).toBe(204);
   });
 });
+
+describe('Carga desde un archivo, en lotes', () => {
+  const PUESTO_LOTE = `${PUESTO} Lote`;
+  const cedLote = (n) => `LOTE${n}-${sufijo}`;
+  // 45 votantes con nombres largos: el pedido pasa de 10 kB, el límite del
+  // resto de las rutas. El puesto, la mitad escrito de otra forma.
+  const lote = Array.from({ length: 45 }, (_, i) => ({
+    cedula: cedLote(i),
+    fullName: `Persona Importada ${i} ${'x'.repeat(150)}`,
+    pollingPlace: i < 20 ? PUESTO_LOTE : PUESTO_LOTE.toUpperCase(),
+    votingTable: i < 20 ? 'Mesa 1' : '1',
+    ...(i === 0 ? { assisted: true } : {}),
+  }));
+
+  afterAll(async () => {
+    await pool.query('DELETE FROM voters WHERE cedula = ANY($1)', [lote.map((v) => encryptField(v.cedula))]);
+  });
+
+  it('un lote de más de 10 kB entra, con el voto asistido, y un puesto nuevo queda escrito de una sola forma', async () => {
+    expect(JSON.stringify({ voters: lote }).length).toBeGreaterThan(10 * 1024);
+    const res = await agregar(lote, { origen: 'archivo' });
+    expect(res.status).toBe(201);
+    expect(res.body.inserted).toBe(45);
+    expect(res.body.accessCodes[44]).toMatchObject({ cedula: cedLote(44), pollingPlace: PUESTO_LOTE, votingTable: 'Mesa 1' });
+
+    const lista = await listar({ pollingPlace: PUESTO_LOTE });
+    expect(lista.body.total).toBe(45);
+    expect(new Set(lista.body.voters.map((v) => `${v.polling_place}|${v.voting_table}`))).toEqual(new Set([`${PUESTO_LOTE}|Mesa 1`]));
+    expect((await listar({ pollingPlace: PUESTO_LOTE, assisted: 'true' })).body.voters.map((v) => v.cedula)).toEqual([cedLote(0)]);
+
+    const { rows } = await pool.query(`SELECT metadata FROM audit_log WHERE event_type = 'VOTERS_ADDED' ORDER BY id DESC LIMIT 1`);
+    expect(rows[0].metadata).toMatchObject({ inserted: 45, duplicates: 0, assisted: 1, via: 'archivo' });
+  }, 60000);
+
+  it('volver a cargar el mismo archivo no cambia nada: todos se informan como repetidos', async () => {
+    const res = await agregar([{ ...lote[1], fullName: 'Otro Nombre' }, lote[2]], { origen: 'archivo' });
+    expect(res.body).toMatchObject({ inserted: 0, duplicates: [cedLote(1), cedLote(2)] });
+    expect((await listar({ pollingPlace: PUESTO_LOTE, q: cedLote(1) })).body.voters[0].full_name).toBe(lote[1].fullName);
+  });
+
+  it('sin sesión no se lee el cuerpo grande, y las demás rutas siguen con el límite de 10 kB', async () => {
+    expect((await request(app).post('/admin/voters').send({ voters: lote })).status).toBe(401);
+    expect((await request(app).post('/admin/voters/bulk').send({ voters: lote })).status).toBe(401);
+    expect((await request(app).post('/login/admin').set('X-Forwarded-For', '198.18.1.1').send({ username: 'x', password: 'y'.repeat(11 * 1024) })).status).toBe(413);
+  });
+
+  it('el voto asistido es sí o no, y el origen, formulario o archivo', async () => {
+    const asistido = await agregar([{ ...lote[0], cedula: cedLote(99), assisted: 'si' }]);
+    expect(asistido.status).toBe(400);
+    expect(asistido.body.error).toBe('Votante 1: el voto asistido debe ser sí o no.');
+    expect((await agregar([lote[0]], { origen: 'correo' })).status).toBe(400);
+  });
+});

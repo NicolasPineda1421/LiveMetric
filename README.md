@@ -14,6 +14,7 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 
 - **Elecciones programadas**: plantillas genéricas o presidenciales (con candidatos, número y foto) que se abren y cierran solas según su horario, o se detienen a mano.
 - **Voto único por identidad**: el doble voto se impide por la identidad del votante, no por su navegador; el padrón se guarda cifrado.
+- **Padrón de miles de votantes**: se carga uno por uno o, de una vez, desde un archivo CSV o las celdas copiadas de Excel, con una revisión de cada fila antes de cargar y la lista de PIN para descargar.
 - **Doble factor para votar**: además de su PIN, el votante entra con el código de su app autenticadora (Microsoft o Google Authenticator), que registra en su primer ingreso escaneando un QR. Quien no puede usar una app vota asistido: lo autoriza el jurado de su mesa, que coteja su cédula en persona y escribe el código de su propio autenticador. El PIN vence en la fecha que elige el administrador; votar solo se puede dentro del horario de la elección.
 - **Escrutinio independiente**: al cerrar, un servicio aparte recuenta los votos, consolida por mesa, determina el ganador, encadena el acta con hashes SHA-256 y la **firma digitalmente** (Ed25519); también en PDF.
 - **Sin resultados parciales**: mientras la elección está abierta, en vivo solo se ve cuántas personas votaron. Los votos por candidato u opción se publican cuando el escrutinio certifica el acta; antes no los entrega el sistema, a nadie.

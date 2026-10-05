@@ -1634,6 +1634,45 @@
                   "new": false,
                   "number": 19,
                   "score": ""
+                },
+                {
+                  "id": "fe6fba99-e916-5c01-9848-469ae7eb1650",
+                  "title": "Inyección de CSV en la lista de PIN",
+                  "status": "Mitigated",
+                  "severity": "Medium",
+                  "type": "Information Disclosure",
+                  "description": "Un nombre del archivo del padrón trae una fórmula (=HYPERLINK(…), =WEBSERVICE(…)) que, al abrir en Excel la lista de PIN descargada, manda su contenido afuera o ejecuta algo en la PC del administrador.",
+                  "mitigation": "Las listas que arma el panel (la de PIN y la plantilla, services/frontend/src/utils/padronArchivo.js) anteponen un apóstrofo a toda celda que empieza con =, +, -, @ o un tabulador: Excel la muestra como texto. El archivo se lee en el navegador, y al servicio solo llegan los campos ya validados, con las mismas reglas que el formulario.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 20,
+                  "score": ""
+                },
+                {
+                  "id": "b0ac83f7-cd4a-5b90-a154-74e2d1657864",
+                  "title": "La lista de PIN descargada queda en la PC del administrador",
+                  "status": "Mitigated",
+                  "severity": "Medium",
+                  "type": "Information Disclosure",
+                  "description": "Después de una carga masiva, el administrador descarga la lista de PIN; queda en su PC (en Descargas, en una carpeta compartida, en un correo) y otro la usa.",
+                  "mitigation": "El PIN solo no abre la sesión: hace falta además el código del autenticador del votante o la autorización del jurado de su mesa (16 a 18), y vence en la fecha elegida (por defecto, al cierre de la elección). El panel avisa que el archivo es una credencial y que se borre después de entregar los PIN. Residual: guardarlo y borrarlo depende del administrador.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 21,
+                  "score": ""
+                },
+                {
+                  "id": "25fd6dfe-db7e-5375-916c-27b5443bd7f7",
+                  "title": "Cuerpos grandes en las rutas que agregan votantes",
+                  "status": "Mitigated",
+                  "severity": "Low",
+                  "type": "Denial of Service",
+                  "description": "Mandar cuerpos grandes a las rutas que agregan votantes para agotar la memoria o la CPU del servicio de autenticación.",
+                  "mitigation": "Todas las rutas leen a lo sumo 10 kB, salvo POST /admin/voters y /admin/voters/bulk, que aceptan 256 kB (hasta 200 votantes) y lo leen después de comprobar la sesión de administrador (services/auth/src/app.js), con el límite de 20 operaciones por minuto. Cada pedido genera a lo sumo 200 PIN con bcrypt.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 22,
+                  "score": ""
                 }
               ],
               "protocol": "HTTP",

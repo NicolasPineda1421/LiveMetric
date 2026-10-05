@@ -69,4 +69,25 @@ function ubicarEnPadron(lugares, pollingPlace, votingTable) {
   return { pollingPlace: puesto.pollingPlace, votingTable: mesa };
 }
 
-module.exports = { normalizarPuesto, normalizarMesa, mismoPuesto, mismaMesa, juradoCubre, lugaresDelPadron, ubicarEnPadron };
+// Puesto y mesa de un votante nuevo, tal como ya figuran en el padrón si
+// están escritos de otra forma ("puesto central", "1"). Si son nuevos, se
+// anotan en "lugares" (la lista de lugaresDelPadron, que cambia): así los
+// siguientes votantes del mismo pedido quedan en ese puesto y esa mesa
+// aunque los escriban distinto.
+function lugarCanonico(lugares, pollingPlace, votingTable) {
+  let puesto = lugares.find((p) => mismoPuesto(p.pollingPlace, pollingPlace));
+  if (!puesto) {
+    puesto = { pollingPlace, votingTables: [] };
+    lugares.push(puesto);
+  }
+  let mesa = puesto.votingTables.find((m) => mismaMesa(m, votingTable));
+  if (!mesa) {
+    mesa = votingTable;
+    puesto.votingTables.push(mesa);
+  }
+  return { pollingPlace: puesto.pollingPlace, votingTable: mesa };
+}
+
+module.exports = {
+  normalizarPuesto, normalizarMesa, mismoPuesto, mismaMesa, juradoCubre, lugaresDelPadron, ubicarEnPadron, lugarCanonico,
+};

@@ -273,6 +273,34 @@ input, select, textarea {
 .sugerencias mark { background: none; color: var(--color-accent); font-weight: 700; }
 .sugerencias .sin-sugerencias { padding: 0.45rem 0.8rem; color: var(--color-text-muted); font-size: 0.82rem; }
 .resumen-filtros { display: flex; gap: 1rem; align-items: center; color: var(--color-text-muted); font-size: 0.85rem; margin: 0 0 0.6rem; }
+
+/* Agregar votantes: uno por uno o varios desde un archivo (CargaPadron.jsx). */
+.modo-alta { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0 0 1rem; }
+.carga-ayuda { margin: 0 0 0.9rem; }
+.carga-opciones { display: grid; grid-template-columns: 1fr 1.4fr; gap: 0 1rem; align-items: start; }
+.zona-archivo { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.3rem; min-height: 9.5rem; padding: 1rem; margin-bottom: 0.9rem; text-align: center; border: 1px dashed var(--color-border); border-radius: var(--radius); background: var(--color-panel-raised); cursor: pointer; }
+.zona-archivo:hover, .zona-archivo.arrastrando, .zona-archivo:focus-within { border-color: var(--color-accent); }
+.zona-archivo input[type='file'] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.zona-titulo { color: var(--color-accent); font-weight: 600; }
+.pegar-celdas textarea { font-family: var(--font-mono); font-size: 0.8rem; resize: vertical; }
+.pegar-celdas .btn { margin-top: 0.5rem; }
+.carga-origen { font-size: 0.85rem; color: var(--color-text-muted); margin: 0 0 0.7rem; overflow-wrap: anywhere; }
+.carga-origen strong { color: var(--color-text); }
+.conteo-carga { list-style: none; padding: 0; margin: 0 0 1rem; display: grid; gap: 0.35rem; font-size: 0.9rem; }
+.conteo-carga li { padding-left: 0.7rem; border-left: 3px solid var(--color-border); }
+.conteo-carga .conteo-ok { border-left-color: var(--color-success); }
+.conteo-carga .conteo-mal { border-left-color: var(--color-danger); }
+.detalle-carga { margin: 0 0 1rem; }
+.detalle-carga summary { cursor: pointer; font-size: 0.85rem; color: var(--color-text-muted); margin-bottom: 0.5rem; }
+.subtitulo-carga { font-size: 0.85rem; font-weight: 600; color: var(--color-text-muted); margin: 0.2rem 0 0.5rem; }
+.acciones-carga { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+.avance-carga progress { width: 100%; height: 0.8rem; accent-color: var(--color-accent); }
+.avance-carga p { margin: 0.4rem 0 0.5rem; }
+.lista-cedulas { font-size: 0.8rem; overflow-wrap: anywhere; }
+.descarga-pines { display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.8rem; }
+@media (max-width: 760px) {
+  .carga-opciones { grid-template-columns: 1fr; }
+}
 .editar-mesa .grid-2 { grid-template-columns: 1fr; gap: 0; }
 .table td.sin-corte { white-space: nowrap; }
 

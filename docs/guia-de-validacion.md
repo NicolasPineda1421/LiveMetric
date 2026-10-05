@@ -38,7 +38,7 @@ Las pruebas automáticas están en `services/auth/src/__tests__/segundoFactor.te
 
 ## Padrón: agregar, filtrar y eliminar
 
-Las pruebas automáticas están en `services/auth/src/__tests__/padron.test.js` y en `services/frontend/src/__tests__/AdminTabs.test.jsx`.
+Las pruebas automáticas están en `services/auth/src/__tests__/padron.test.js` y, en el frontend, en `AdminTabs.test.jsx`, `CargaPadron.test.jsx` y `padronArchivo.test.js` (`services/frontend/src/__tests__/`).
 
 1. **Agregar no modifica** — En **Padrón**, agregar con el formulario una cédula que ya existe, con otro nombre: el panel avisa *"Ya estaban y no se modificaron"* y el votante conserva su nombre. Los demás del mismo formulario sí se agregan, cada uno con su PIN.
 2. **Mismo lugar, mismas palabras** — Agregar un votante con puesto "puesto central" y mesa "1": en el listado aparece como "Puesto Central" / "Mesa 1", como los que ya estaban.
@@ -47,6 +47,9 @@ Las pruebas automáticas están en `services/auth/src/__tests__/padron.test.js` 
    **Autocompletar:** al escribir en el buscador, desde el segundo carácter aparecen hasta 8 sugerencias (`GET /admin/voters/sugerencias?q=…`): primero las cédulas que empiezan con lo escrito, después por nombre. Escribir una cédula completa de corrido hace uno o dos pedidos (se espera a que se deje de escribir), sin respuestas `429`. Elegir una sugerencia, con clic o con las flechas y Enter, filtra el listado a ese votante.
 5. **Eliminar** — **Eliminar** pide confirmación; confirmado, el votante desaparece y ya no puede ingresar con su PIN. En **Auditoría** queda `VOTER_DELETED` con el hash de su cédula, nunca la cédula. Sus votos anteriores y el acta no cambian.
 6. **Filtrar no agota el cupo** — Las consultas del panel tienen un límite propio (60 por minuto) y los cambios otro (20 por minuto): después de cambiar muchas veces los filtros, **Eliminar** y **Regenerar PIN** siguen funcionando.
+7. **Cargar desde un archivo o Excel** — En **Padrón**, **Varios desde un archivo o Excel**, cargar un CSV (por ejemplo, la plantilla, con **Descargar la plantilla**) con una fila sin mesa, una cédula repetida en el archivo y una que ya está en el padrón. La revisión muestra los votantes listos, la fila con error con su número y qué corregir, y la repetida, sin cargar nada todavía. Al cargar, dice cuántos se agregaron y que la que ya estaba no se modificó, y **Descargar los N PIN (CSV)** baja un archivo con cédula, nombre, puesto, mesa, PIN y vencimiento; un PIN de ese archivo sirve en `POST /login/voter`. Lo mismo pegando las celdas copiadas de Excel. Volver a cargar el mismo archivo no agrega nada: todos se informan como repetidos. En **Auditoría** queda un `VOTERS_ADDED` por lote de 100, con `via: archivo`.
+8. **Una fórmula no se ejecuta** — Un votante cargado con el nombre `=HYPERLINK("http://ejemplo.com";"x")`: en el CSV de PIN, la celda empieza con un apóstrofo y Excel la muestra como texto (amenaza 20).
+9. **Cuerpos grandes, solo con sesión** — `POST /admin/voters` y `/admin/voters/bulk` aceptan hasta 200 votantes (256 kB) por pedido, y solo con un token de administrador: sin token responden `401` sin leer el cuerpo. Cualquier otra ruta con un cuerpo de más de 10 kB responde `413` (amenaza 22).
 
 ## Detener una elección, plantilla presidencial, mesas y acta
 

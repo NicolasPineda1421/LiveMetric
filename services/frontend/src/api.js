@@ -37,7 +37,12 @@ async function request(service, path, { method = 'GET', body, token } = {}) {
   }
 
   if (!response.ok) {
-    throw new Error(data?.error || `Error ${response.status} en ${service}${path}`);
+    const error = new Error(data?.error || `Error ${response.status} en ${service}${path}`);
+    // Para quien quiera reintentar: el estado y, con 429 (límite de
+    // operaciones), los segundos hasta que se renueva el cupo.
+    error.status = response.status;
+    error.retryAfter = Number(response.headers?.get('RateLimit-Reset') || response.headers?.get('Retry-After')) || null;
+    throw error;
   }
   return data;
 }
@@ -70,10 +75,11 @@ export const api = {
     request('auth', `/admin/users/${userId}/mesa`, { method: 'PUT', token, body: { pollingPlace, votingTable } }),
   resetUserTotp: (token, userId) =>
     request('auth', `/admin/users/${userId}/reset-totp`, { method: 'POST', token }),
-  // Agrega votantes desde el formulario: nunca modifica a uno que ya está.
+  // Agrega votantes (hasta 200 por vez): nunca modifica a uno que ya está.
   // pinExpiresAt: vencimiento (ISO) de los PIN que se generen; sin él, el sugerido.
-  addVoters: (token, voters, pinExpiresAt) =>
-    request('auth', '/admin/voters', { method: 'POST', token, body: { voters, pinExpiresAt } }),
+  // origen: 'archivo' en la carga masiva, para la auditoría.
+  addVoters: (token, voters, pinExpiresAt, origen) =>
+    request('auth', '/admin/voters', { method: 'POST', token, body: { voters, pinExpiresAt, origen } }),
   // filtros: { q, pollingPlace, votingTable, pin, totp, assisted, limit, offset }; los vacíos no se mandan.
   listVoters: (token, filtros = {}) => {
     const params = new URLSearchParams(Object.entries(filtros).filter(([, valor]) => valor !== '' && valor !== undefined && valor !== null));

@@ -13,7 +13,7 @@ const { requireAdmin, requireRole } = require('./middleware/auth');
 const { encryptField, decryptField } = require('./voterCrypto');
 const totp = require('./totp');
 const { evaluarContrasena, mensajeContrasenaDebil, MINIMO_CONTRASENA, MAXIMO_CONTRASENA } = require('./politicaContrasena');
-const { juradoCubre, lugaresDelPadron, ubicarEnPadron, normalizarPuesto, mismoPuesto, mismaMesa } = require('./lugares');
+const { juradoCubre, lugaresDelPadron, ubicarEnPadron, lugarCanonico, normalizarPuesto, mismoPuesto, mismaMesa } = require('./lugares');
 
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -34,7 +34,15 @@ app.use(helmet());
 // navegador del usuario corre en un puerto distinto (frontend :3000) al de
 // esta API, así que el preflight CORS debe permitir ese origen puntual.
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000' }));
-app.use(express.json({ limit: '10kb' }));
+// El cuerpo de casi todas las rutas es chico: 10 kB. Las que agregan
+// votantes reciben hasta 200 por vez (la carga desde un archivo los manda
+// en lotes), así que leen el suyo con otro límite, y DESPUÉS de comprobar
+// que quien llama es un administrador: sin sesión, nadie consigue que el
+// servicio lea un cuerpo grande.
+const jsonChico = express.json({ limit: '10kb' });
+const jsonVotantes = express.json({ limit: '256kb' });
+const RUTAS_DE_VOTANTES = new Set(['/admin/voters', '/admin/voters/bulk']);
+app.use((req, res, next) => (req.method === 'POST' && RUTAS_DE_VOTANTES.has(req.path) ? next() : jsonChico(req, res, next)));
 
 // Login de votantes (cédula + PIN de 6 dígitos, y después el código del
 // autenticador o la autorización del jurado): el límite frena a quien
@@ -856,8 +864,12 @@ app.post(
   '/admin/voters/bulk',
   requireAdmin,
   adminOpsLimiter,
+  jsonVotantes,
   [
-    body('voters').isArray({ min: 1, max: 5000 }),
+    // Como POST /admin/voters: hasta 200 por pedido. Más no entra en el
+    // límite del cuerpo, y generar sus PIN (bcrypt) tardaría más de lo que
+    // nginx espera una respuesta.
+    body('voters').isArray({ min: 1, max: 200 }),
     body('voters.*.cedula').trim().isLength({ min: 5, max: 20 }).matches(/^[0-9A-Za-z-]+$/),
     // Sin .escape(): convertía "O'Neil" o "Sede A / B" en entidades HTML
     // (O&#x27;Neil) que después salían así en el panel y en el acta. Aquí
@@ -1120,38 +1132,55 @@ app.get(
   }
 );
 
-// Agregar votantes desde el formulario del panel: uno o varios, pero nunca
-// modifica a uno que ya está (a diferencia de la carga masiva, que actualiza
-// sus datos). Las cédulas que ya estaban se informan y quedan como estaban.
+// Agregar votantes desde el panel: con el formulario, o desde un archivo o
+// una hoja de cálculo, que el panel manda en lotes de hasta 200. Nunca
+// modifica a uno que ya está (a diferencia de /admin/voters/bulk, que
+// actualiza sus datos): las cédulas que ya estaban se informan y quedan
+// como estaban, así que volver a cargar el mismo archivo no cambia nada.
 // Si el puesto o la mesa ya figuran en el padrón escritos de otra forma
 // ("puesto central", "1"), se guardan como figuran, para que el padrón no
-// tenga el mismo lugar escrito de dos maneras.
+// tenga el mismo lugar escrito de dos maneras; también entre los votantes
+// del mismo pedido, cuando el puesto es nuevo. assisted (opcional) los
+// marca para el voto asistido, y origen dice en la auditoría de dónde
+// vinieron.
 const VOTER_FIELD_LABELS = {
   cedula: 'la cédula debe tener de 5 a 20 letras, números o guiones',
   fullName: 'el nombre debe tener 3 caracteres o más',
   pollingPlace: 'falta el puesto de votación',
   votingTable: 'falta la mesa',
+  assisted: 'el voto asistido debe ser sí o no',
 };
+
+// "voters[2].cedula" -> { fila: 3, campo: 'cedula' }: qué votante y qué dato
+// tienen el error. Sin expresión regular: la ruta sale del pedido.
+function votanteConError(ruta = '') {
+  const [antes, campo] = String(ruta).split('].');
+  const indice = antes.startsWith('voters[') ? Number(antes.slice('voters['.length)) : NaN;
+  return Number.isInteger(indice) && campo ? { fila: indice + 1, campo } : null;
+}
 
 app.post(
   '/admin/voters',
   requireAdmin,
   adminOpsLimiter,
+  jsonVotantes,
   [
     body('voters').isArray({ min: 1, max: 200 }),
     body('voters.*.cedula').isString().trim().isLength({ min: 5, max: 20 }).matches(/^[0-9A-Za-z-]+$/),
     body('voters.*.fullName').isString().trim().isLength({ min: 3, max: 200 }),
     body('voters.*.pollingPlace').isString().trim().isLength({ min: 2, max: 150 }),
     body('voters.*.votingTable').isString().trim().isLength({ min: 1, max: 50 }),
+    body('voters.*.assisted').optional().isBoolean({ strict: true }),
+    body('origen').optional().isIn(['formulario', 'archivo']),
   ],
   async (req, res) => {
     const errors = validationResult(req).array();
     if (errors.length > 0) {
-      // "voters[2].cedula" -> "Votante 3: la cédula debe tener…"
-      const match = /^voters\[(\d+)\]\.(\w+)$/.exec(errors[0].path || '');
-      const motivo = match ? Object.hasOwn(VOTER_FIELD_LABELS, match[2]) && VOTER_FIELD_LABELS[match[2]] : null;
+      // "Votante 3: la cédula debe tener…"
+      const conError = votanteConError(errors[0].path);
+      const motivo = conError && Object.hasOwn(VOTER_FIELD_LABELS, conError.campo) ? VOTER_FIELD_LABELS[conError.campo] : null;
       return res.status(400).json({
-        error: match && motivo ? `Votante ${Number(match[1]) + 1}: ${motivo}.` : 'Agrega entre 1 y 200 votantes por vez.',
+        error: motivo ? `Votante ${conError.fila}: ${motivo}.` : 'Agrega entre 1 y 200 votantes por vez.',
       });
     }
 
@@ -1173,20 +1202,24 @@ app.post(
     try {
       await client.query('BEGIN');
       for (const [i, v] of voters.entries()) {
-        const puesto = lugares.find((p) => mismoPuesto(p.pollingPlace, v.pollingPlace));
-        const pollingPlace = puesto ? puesto.pollingPlace : v.pollingPlace;
-        const votingTable = (puesto && puesto.votingTables.find((m) => mismaMesa(m, v.votingTable))) || v.votingTable;
+        const { pollingPlace, votingTable } = lugarCanonico(lugares, v.pollingPlace, v.votingTable);
         const result = await client.query(
-          `INSERT INTO voters (cedula, full_name, polling_place, voting_table, access_code_hash, access_code_expires_at, created_by)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
+          `INSERT INTO voters (cedula, full_name, polling_place, voting_table, access_code_hash, access_code_expires_at, created_by, assisted)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            ON CONFLICT (cedula) DO NOTHING
            RETURNING id`,
-          // eslint-disable-next-line security/detect-object-injection -- i es el índice numérico de voters, pins y pinHashes, arreglos paralelos
-          [encryptField(v.cedula), v.fullName, encryptField(pollingPlace), encryptField(votingTable), pinHashes[i], pinExpiresAt, req.user.sub]
+          [
+            encryptField(v.cedula), v.fullName, encryptField(pollingPlace), encryptField(votingTable),
+            // eslint-disable-next-line security/detect-object-injection -- i es el índice numérico de voters, pins y pinHashes, arreglos paralelos
+            pinHashes[i], pinExpiresAt, req.user.sub, v.assisted === true,
+          ]
         );
-        // eslint-disable-next-line security/detect-object-injection -- i es el índice numérico de pins, paralelo a voters
-        if (result.rows.length === 1) accessCodes.push({ cedula: v.cedula, pin: pins[i] });
-        else duplicates.push(v.cedula);
+        if (result.rows.length === 1) {
+          // eslint-disable-next-line security/detect-object-injection -- i es el índice numérico de pins, paralelo a voters
+          accessCodes.push({ cedula: v.cedula, pin: pins[i], fullName: v.fullName, pollingPlace, votingTable });
+        } else {
+          duplicates.push(v.cedula);
+        }
       }
       await client.query('COMMIT');
     } catch (err) {
@@ -1202,7 +1235,13 @@ app.post(
       actorType: 'admin',
       actorRef: req.user.username,
       req,
-      metadata: { inserted: accessCodes.length, duplicates: duplicates.length, pinExpiresAt },
+      metadata: {
+        inserted: accessCodes.length,
+        duplicates: duplicates.length,
+        assisted: voters.filter((v) => v.assisted === true).length,
+        pinExpiresAt,
+        via: req.body.origen || 'formulario',
+      },
     });
     return res.status(201).json({ inserted: accessCodes.length, duplicates, accessCodes, pinExpiresAt });
   }

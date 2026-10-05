@@ -225,9 +225,11 @@ activa.
 El **padrón** es la lista de quiénes tienen derecho a votar. Sin estar en el padrón, una
 persona no puede ingresar.
 
-**Agregar votantes:**
+**Agregar votantes.** Hay dos formas: **Uno por uno**, con el formulario, y **Varios desde
+un archivo o Excel**, para cargar cientos o miles de una vez (ver más abajo). Con el
+formulario:
 
-1. Pestaña **Padrón**, sección **Agregar votantes**.
+1. Pestaña **Padrón**, sección **Agregar votantes**, **Uno por uno**.
 2. Complete los datos del votante: **Cédula**, **Nombre completo**, **Puesto de votación**
    y **Mesa**. El puesto y la mesa sugieren los que ya están en el padrón.
 3. Para agregar varios de una vez, **+ Agregar otro votante**: la fila nueva copia el
@@ -244,7 +246,9 @@ agregar (ver más abajo).
 **Generar los PINes:**
 
 Cada votante nuevo recibe un **PIN de acceso** al agregarlo, que aparece en la sección
-**PIN de acceso generados**.
+**PIN de acceso generados**, con su nombre, su puesto y su mesa. **Descargar los PIN
+(CSV)** los baja en un archivo para imprimirlos o repartirlos por mesa (ver la advertencia
+de la carga desde un archivo, más abajo).
 
 **Vencimiento de los PIN.** Antes de cargar, revise el campo **Vencimiento de los PIN que
 se generen**. El sistema propone el **cierre de la última elección programada**, para que
@@ -279,8 +283,69 @@ actualizar: el cierre de la última elección programada, o 24 horas.)
 ![Captura 11: Agregar votantes con el formulario: una fila por votante (cédula, nombre, puesto y mesa) y el vencimiento de los PIN, que propone el cierre de la elección programada](img/11-padron-carga.png)
 *Captura 11. Agregar votantes con el formulario: una fila por votante (cédula, nombre, puesto y mesa) y el vencimiento de los PIN, que propone el cierre de la elección programada. El tercero escribió "puesto central" y "1": se guardan como "Puesto Central" y "Mesa 1".*
 
-![Captura 12: Los PIN generados, que se muestran una sola vez. En esta captura están difuminados: no deben quedar credenciales en la documentación](img/12-padron-pines.png)
-*Captura 12. Los PIN generados, que se muestran una sola vez, con su fecha de vencimiento. En esta captura están difuminados: no deben quedar credenciales en la documentación.*
+![Captura 12: Los PIN generados, que se muestran una sola vez, con el botón para descargarlos. En esta captura están difuminados: no deben quedar credenciales en la documentación](img/12-padron-pines.png)
+*Captura 12. Los PIN generados, que se muestran una sola vez, con su fecha de vencimiento y el botón para descargarlos. Marta Ríos quedó en "Puesto Central — Mesa 1". En esta captura los PIN están difuminados: no deben quedar credenciales en la documentación.*
+
+**Cargar muchos votantes a la vez (archivo o Excel).** Para un padrón de cientos o miles
+de personas, **Varios desde un archivo o Excel** los carga desde una hoja de cálculo:
+
+1. Prepare la hoja con una fila por votante y las columnas **Cédula**, **Nombre
+   completo** (o dos columnas, **Nombres** y **Apellidos**), **Puesto de votación**,
+   **Mesa** y, si quiere, **Voto asistido** (*sí* o *no*). Con encabezados en la primera
+   fila, las columnas pueden ir en cualquier orden y llamarse de otras formas habituales
+   ("Documento", "N° de documento", "Puesto"); las demás (correo, teléfono) se ignoran. Sin
+   encabezados, tienen que ir en ese orden. **Descargar la plantilla (CSV)** baja un
+   ejemplo listo para llenar.
+2. Elija una de dos formas:
+   - **Un archivo CSV.** En Excel, *Guardar como* → *CSV UTF-8* (también sirve el *CSV
+     (delimitado por comas)* del Excel en español, que separa con punto y coma); en Google
+     Sheets, *Archivo* → *Descargar* → *CSV*; en LibreOffice, *Guardar como* → *CSV*.
+     Después, **Elegir un archivo CSV**, o arrástrelo al recuadro. Un libro `.xlsx` no se
+     acepta directamente: hay que guardarlo como CSV.
+   - **Copiar y pegar.** Seleccione las celdas en la hoja de cálculo (con o sin la fila de
+     encabezados), cópielas (**Ctrl+C**), péguelas en el recuadro (**Ctrl+V**) y pulse
+     **Revisar**.
+3. Antes de cargar nada, el sistema muestra la **revisión** (captura 34): cuántos votantes
+   están listos, cuántos votan asistidos, cuántos hay por puesto, las **filas con errores**
+   (con su número de fila y qué corregir) y las **cédulas repetidas** en el archivo (se
+   carga solo la primera vez que aparece), y los primeros cinco como van a quedar. Las
+   cédulas con puntos de miles ("1.000.000.001") se limpian solas. Una cédula que Excel
+   convirtió en notación científica ("1,03141E+09") aparece como error: hay que darle
+   formato de *Texto* a esa columna y volver a guardar.
+4. Revise el **Vencimiento de los PIN que se generen** y pulse **Cargar N votantes al
+   padrón**. Las filas con errores no se cargan: corríjalas en la hoja y vuelva a cargar el
+   archivo.
+5. La carga va en lotes de 100, con una barra de avance; generar el PIN de cada votante
+   toma un momento (unos 25 segundos cada 300 votantes). Mientras carga, no cierre ni
+   cambie de pestaña: el sistema pregunta antes de salir. **Detener después de este
+   lote** la corta sin dejar nada a medias.
+6. Al terminar, dice cuántos se agregaron, cuáles **ya estaban** (no se modifican) y cuántas
+   filas tenían errores. Los PIN aparecen en **PIN de acceso generados** (en pantalla, los
+   primeros 50) y **Descargar los N PIN (CSV)** los baja todos: cédula, nombre, puesto,
+   mesa, PIN y vencimiento.
+
+> ⚠️ **El archivo de PIN es una credencial:** con la cédula, abre el primer paso del
+> ingreso de cada votante. Guárdelo en un lugar seguro, no lo envíe por correo ni lo deje
+> en una carpeta compartida, y bórrelo cuando termine de entregar los PIN. El sistema no
+> vuelve a mostrar esos PIN. (Sin el celular del votante o el jurado de su mesa, el PIN
+> solo no alcanza para votar.)
+
+Volver a cargar el mismo archivo no cambia nada: los que ya están se informan como
+repetidos. Por eso, si la carga se corta (por ejemplo, se cayó la red), basta con volver a
+cargarlo para completar lo que faltó; los PIN de los lotes que sí se cargaron siguen en
+pantalla para descargar. El puesto y la mesa escritos de otra forma ("colegio andino",
+"2" por "Mesa 2") quedan como ya figuran, también entre las filas del mismo archivo. Cada
+lote queda en **Auditoría** (`VOTERS_ADDED`, con cuántos se agregaron y que vinieron de un
+archivo). Por carga, hasta 50.000 votantes y 10 MB.
+
+![Captura 33: Varios desde un archivo o Excel: elegir o arrastrar un CSV, o pegar las celdas copiadas de la hoja de cálculo, y la plantilla para descargar](img/33-padron-archivo-elegir.png)
+*Captura 33. Varios desde un archivo o Excel: elegir o arrastrar un CSV, o pegar las celdas copiadas de la hoja de cálculo. Abajo, la plantilla para descargar.*
+
+![Captura 34: La revisión antes de cargar: el archivo, sus columnas, cuántos votantes están listos, las filas con errores y qué corregir, y los primeros cinco como van a quedar](img/34-padron-archivo-revision.png)
+*Captura 34. La revisión antes de cargar nada: las columnas que reconoció (y las que no usa, como "Teléfono"), cuántos votantes están listos y por puesto, las filas con errores con qué corregir, y los primeros cinco como van a quedar.*
+
+![Captura 35: El resultado de la carga y los PIN generados, con el botón para descargarlos todos en un CSV. Los PIN están difuminados](img/35-padron-archivo-pines.png)
+*Captura 35. El resultado de la carga y los PIN generados, con el botón para descargarlos todos en un CSV. Los PIN están difuminados.*
 
 **Buscar y filtrar.** Sobre el listado (**Padrón actual**) hay filtros: **Buscar por
 cédula o nombre** (parte de la cédula o del nombre, sin importar mayúsculas ni tildes; se
@@ -521,7 +586,7 @@ Resumen del recorrido de punta a punta:
 |---|---|---|---|
 | 1 | Crear la plantilla con los candidatos | Administrador | Plantillas |
 | 2 | Programar la elección con su ventana horaria | Administrador | Elecciones |
-| 3 | Agregar a los votantes al padrón (se generan sus PIN, que vencen al cierre de la elección); entregarlos y marcar el voto asistido de quien lo necesite | Administrador | Padrón |
+| 3 | Agregar a los votantes al padrón, uno por uno o desde un archivo o Excel (se generan sus PIN, que vencen al cierre de la elección); entregarlos y marcar el voto asistido de quien lo necesite | Administrador | Padrón |
 | 4 | Crear los jurados de las mesas con votantes asistidos | Administrador | Usuarios |
 | 5 | **Apertura automática** al llegar la hora | Sistema | — |
 | 6 | Ingresar (PIN y código de su autenticador, o autorización del jurado) y votar | Votantes / Jurados | Vista de votante |
@@ -609,7 +674,7 @@ instalación de prueba ya borrada (además, cada código vence a los 30 segundos
 | 09 | `09-eleccion-programar.png` | Programar elección |
 | 10 | `10-elecciones-lista.png` | Listado de elecciones |
 | 11 | `11-padron-carga.png` | Agregar votantes (formulario) |
-| 12 | `12-padron-pines.png` | PINes generados (difuminados) |
+| 12 | `12-padron-pines.png` | PINes generados (difuminados), con la descarga |
 | 13 | `13-padron-lista.png` | Listado del padrón con filtros y Eliminar |
 | 14 | `14-usuarios.png` | Creación de usuarios y jurados (puesto y mesa del padrón) |
 | 15 | `15-resultados-vivo.png` | Total en vivo (sin votos por opción) |
@@ -629,6 +694,9 @@ instalación de prueba ya borrada (además, cada código vence a los 30 segundos
 | 30 | `30-voto-asistido.png` | Voto asistido: autorización del jurado |
 | 31 | `31-panel-jurado.png` | Panel del jurado (de todo el puesto) |
 | 32 | `32-padron-autocompletar.png` | Autocompletar del buscador del padrón |
+| 33 | `33-padron-archivo-elegir.png` | Carga del padrón desde un archivo o Excel |
+| 34 | `34-padron-archivo-revision.png` | Revisión antes de cargar: filas con errores y vista previa |
+| 35 | `35-padron-archivo-pines.png` | Resultado de la carga y descarga de los PIN (difuminados) |
 
 Las capturas 05 y 26 juntas muestran el control de acceso por rol: conviene usarlas también
 en el informe y en el video.

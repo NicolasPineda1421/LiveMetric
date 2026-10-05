@@ -3,6 +3,9 @@ import { api } from '../api.js';
 import { HIDDEN_RESULTS_NOTE } from '../components/widgets/dataAdapters.js';
 import { ownValue } from '../utils/ownValue.js';
 import BuscadorPadron from '../components/BuscadorPadron.jsx';
+import CargaPadron from '../components/CargaPadron.jsx';
+import { descargarTexto } from '../utils/descargar.js';
+import { pinesCsv } from '../utils/padronArchivo.js';
 import ReportsTab from './ReportsTab.jsx';
 
 const TABS = [
@@ -17,8 +20,19 @@ const TABS = [
   { id: 'audit', label: 'Auditoría' },
 ];
 
+// Mientras se carga el padrón desde un archivo, salir de la pestaña la
+// detiene (después del lote en curso) y se pierden de la pantalla los PIN
+// ya generados: se pregunta antes.
+const AVISO_CARGA_EN_CURSO = 'Se está cargando el padrón. Si sales de esta pestaña, la carga se detiene después del lote '
+  + 'actual y los PIN ya generados dejan de mostrarse (habría que regenerarlos). ¿Salir igual?';
+
 export default function AdminDashboard({ session, onLogout }) {
   const [tab, setTab] = useState('overview');
+  const cargando = useRef(false);
+  const siNoHayCarga = (accion) => () => {
+    if (cargando.current && !window.confirm(AVISO_CARGA_EN_CURSO)) return;
+    accion();
+  };
 
   return (
     <div className="app-shell">
@@ -26,13 +40,13 @@ export default function AdminDashboard({ session, onLogout }) {
         <div className="wordmark"><span className="seal">LM</span> LiveMetric</div>
         <div className="session-info">
           <span>Admin: {session.username}</span>
-          <button className="link-button" onClick={onLogout}>Salir</button>
+          <button className="link-button" onClick={siNoHayCarga(onLogout)}>Salir</button>
         </div>
       </div>
 
       <div className="tabbar">
         {TABS.map((t) => (
-          <button key={t.id} className={`tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+          <button key={t.id} className={`tab ${tab === t.id ? 'active' : ''}`} onClick={siNoHayCarga(() => setTab(t.id))}>
             {t.label}
           </button>
         ))}
@@ -47,7 +61,7 @@ export default function AdminDashboard({ session, onLogout }) {
         {tab === 'reports' && <ReportsTab session={session} />}
         {tab === 'scrutiny' && <ScrutinyTab session={session} />}
         {tab === 'users' && <UsersTab session={session} />}
-        {tab === 'voters' && <VotersTab session={session} />}
+        {tab === 'voters' && <VotersTab session={session} onCargaEnCurso={(enCurso) => { cargando.current = enCurso; }} />}
         {tab === 'audit' && <AuditTab session={session} />}
       </div>
     </div>
@@ -993,7 +1007,11 @@ const filaNueva = (anterior = {}) => ({
   votingTable: anterior.votingTable || '',
 });
 
-function VotersTab({ session }) {
+// Los PIN que se listan en pantalla; todos van en el archivo para descargar.
+const PINES_MOSTRADOS = 50;
+
+function VotersTab({ session, onCargaEnCurso }) {
+  const [modoAlta, setModoAlta] = useState('formulario');
   const [filas, setFilas] = useState(() => [filaNueva()]);
   const [voters, setVoters] = useState([]);
   const [total, setTotal] = useState(0);
@@ -1077,13 +1095,15 @@ function VotersTab({ session }) {
     }
   }
 
-  async function resetPin(voterId) {
+  async function resetPin(voter) {
     if (!window.confirm('¿Generar un PIN nuevo para este votante? El PIN anterior (si tenía) dejará de funcionar.')) return;
-    setResettingId(voterId);
+    setResettingId(voter.id);
     limpiarMensajes();
     try {
-      const result = await api.resetVoterPin(session.token, voterId, pinExpiresAt());
-      setNewAccessCodes([{ cedula: result.cedula, pin: result.pin }]);
+      const result = await api.resetVoterPin(session.token, voter.id, pinExpiresAt());
+      setNewAccessCodes([{
+        cedula: result.cedula, pin: result.pin, fullName: voter.full_name, pollingPlace: voter.polling_place, votingTable: voter.voting_table,
+      }]);
       setCodesExpireAt(result.pinExpiresAt || null);
       load();
     } catch (err) {
@@ -1145,7 +1165,42 @@ function VotersTab({ session }) {
     }
   }
 
+  // La lista de PIN, para imprimirla o repartirla por mesa.
+  function descargarPines() {
+    const vence = codesExpireAt ? new Date(codesExpireAt).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    const marca = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+    descargarTexto(`pin-padron-${marca}.csv`, pinesCsv(newAccessCodes, vence));
+  }
+
+  function cambiarModo(modo) {
+    setError('');
+    setSuccess('');
+    setModoAlta(modo);
+  }
+
   const totalPages = Math.max(1, Math.ceil(total / VOTERS_PAGE_SIZE));
+
+  const campoVencimiento = (
+    <div className="field-dark">
+      <label htmlFor="vencimiento-pin">Vencimiento de los PIN que se generen</label>
+      <input
+        id="vencimiento-pin"
+        type="datetime-local"
+        value={expiresAt}
+        onChange={(e) => setExpiresAt(e.target.value)}
+        min={toLocalInput(Date.now())}
+        max={pinExpiry ? toLocalInput(Date.now() + pinExpiry.maxDays * 24 * 3600 * 1000) : undefined}
+      />
+      {pinExpiry && (
+        <div className="field-hint-dark">
+          {pinExpiry.electionTitle
+            ? `Sugerido: el cierre de «${pinExpiry.electionTitle}», la última elección programada.`
+            : 'No hay elecciones programadas: se sugieren 24 horas. Conviene programar la elección antes de generar los PIN.'}{' '}
+          Vale también para «Generar PIN» y «Regenerar PIN». Vacío, se usa el sugerido. Máximo {pinExpiry.maxDays} días.
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div>
@@ -1157,7 +1212,8 @@ function VotersTab({ session }) {
         contraseña que él mismo elige. Además, en su primer ingreso registra un autenticador (Microsoft o Google
         Authenticator) y desde ahí entra también con su código. Quien no pueda usar una app se marca para el{' '}
         <strong>voto asistido</strong>: lo autoriza el jurado de su mesa, que verifica su cédula en persona. Los datos de
-        un votante no se editan: si algo está mal, se elimina y se vuelve a agregar.
+        un votante no se editan: si algo está mal, se elimina y se vuelve a agregar. Para muchos votantes a la vez,
+        «Varios desde un archivo o Excel» carga un CSV o las celdas copiadas de una hoja de cálculo.
       </p>
       <p className="section-desc">
         <strong>Vigencia del PIN:</strong> cada PIN vence en la fecha que elijas al generarlo y, hasta entonces,
@@ -1167,97 +1223,129 @@ function VotersTab({ session }) {
 
       <div className="panel">
         <h3>Agregar votantes</h3>
+        <div className="modo-alta" role="group" aria-label="Cómo agregar votantes">
+          {[['formulario', 'Uno por uno'], ['archivo', 'Varios desde un archivo o Excel']].map(([modo, texto]) => (
+            <button
+              key={modo}
+              type="button"
+              className={`btn ${modoAlta === modo ? 'btn-gold' : 'btn-outline'}`}
+              aria-pressed={modoAlta === modo}
+              onClick={() => cambiarModo(modo)}
+            >
+              {texto}
+            </button>
+          ))}
+        </div>
         {error && <div className="error-banner">{error}</div>}
         {success && <div className="success-banner">{success}</div>}
-        <form onSubmit={submit}>
-          <datalist id="puestos-padron">
-            {places.map((p) => <option key={p.pollingPlace} value={p.pollingPlace} />)}
-          </datalist>
-          {filas.map((fila, i) => {
-            const mesas = places.find((p) => p.pollingPlace.toLowerCase() === fila.pollingPlace.trim().toLowerCase())?.votingTables || [];
-            return (
-              <fieldset className="fila-votante" key={fila.key}>
-                <legend>Votante {i + 1}</legend>
-                <div className="field-dark">
-                  <label htmlFor={`cedula-${fila.key}`}>Cédula</label>
-                  <input
-                    id={`cedula-${fila.key}`}
-                    value={fila.cedula}
-                    onChange={(e) => cambiarFila(fila.key, 'cedula', e.target.value)}
-                    required
-                    pattern="[0-9A-Za-z\-]{5,20}"
-                    title="De 5 a 20 letras, números o guiones"
-                    inputMode="numeric"
-                  />
-                </div>
-                <div className="field-dark">
-                  <label htmlFor={`nombre-${fila.key}`}>Nombre completo</label>
-                  <input id={`nombre-${fila.key}`} value={fila.fullName} onChange={(e) => cambiarFila(fila.key, 'fullName', e.target.value)} required minLength={3} />
-                </div>
-                <div className="field-dark">
-                  <label htmlFor={`puesto-${fila.key}`}>Puesto de votación</label>
-                  <input id={`puesto-${fila.key}`} list="puestos-padron" value={fila.pollingPlace} onChange={(e) => cambiarFila(fila.key, 'pollingPlace', e.target.value)} required minLength={2} />
-                </div>
-                <div className="field-dark">
-                  <label htmlFor={`mesa-${fila.key}`}>Mesa</label>
-                  <input id={`mesa-${fila.key}`} list={`mesas-${fila.key}`} value={fila.votingTable} onChange={(e) => cambiarFila(fila.key, 'votingTable', e.target.value)} required />
-                  <datalist id={`mesas-${fila.key}`}>
-                    {mesas.map((m) => <option key={m} value={m} />)}
-                  </datalist>
-                </div>
-                {filas.length > 1 && (
-                  <button type="button" className="link-button quitar-fila" onClick={() => setFilas(filas.filter((f) => f.key !== fila.key))}>
-                    Quitar
-                  </button>
-                )}
-              </fieldset>
-            );
-          })}
-          <button type="button" className="btn btn-outline" style={{ marginBottom: '1rem' }} onClick={() => setFilas([...filas, filaNueva(filas[filas.length - 1])])}>
-            + Agregar otro votante
-          </button>
-          <div className="field-dark">
-            <label htmlFor="vencimiento-pin">Vencimiento de los PIN que se generen</label>
-            <input
-              id="vencimiento-pin"
-              type="datetime-local"
-              value={expiresAt}
-              onChange={(e) => setExpiresAt(e.target.value)}
-              min={toLocalInput(Date.now())}
-              max={pinExpiry ? toLocalInput(Date.now() + pinExpiry.maxDays * 24 * 3600 * 1000) : undefined}
-            />
-            {pinExpiry && (
-              <div className="field-hint-dark">
-                {pinExpiry.electionTitle
-                  ? `Sugerido: el cierre de «${pinExpiry.electionTitle}», la última elección programada.`
-                  : 'No hay elecciones programadas: se sugieren 24 horas. Conviene programar la elección antes de generar los PIN.'}{' '}
-                Vale también para «Generar PIN» y «Regenerar PIN». Vacío, se usa el sugerido. Máximo {pinExpiry.maxDays} días.
-              </div>
-            )}
-          </div>
-          <button className="btn btn-gold">{filas.length === 1 ? 'Agregar al padrón' : `Agregar ${filas.length} votantes al padrón`}</button>
-        </form>
+        {modoAlta === 'formulario' && (
+          <form onSubmit={submit}>
+            <datalist id="puestos-padron">
+              {places.map((p) => <option key={p.pollingPlace} value={p.pollingPlace} />)}
+            </datalist>
+            {filas.map((fila, i) => {
+              const mesas = places.find((p) => p.pollingPlace.toLowerCase() === fila.pollingPlace.trim().toLowerCase())?.votingTables || [];
+              return (
+                <fieldset className="fila-votante" key={fila.key}>
+                  <legend>Votante {i + 1}</legend>
+                  <div className="field-dark">
+                    <label htmlFor={`cedula-${fila.key}`}>Cédula</label>
+                    <input
+                      id={`cedula-${fila.key}`}
+                      value={fila.cedula}
+                      onChange={(e) => cambiarFila(fila.key, 'cedula', e.target.value)}
+                      required
+                      pattern="[0-9A-Za-z\-]{5,20}"
+                      title="De 5 a 20 letras, números o guiones"
+                      inputMode="numeric"
+                    />
+                  </div>
+                  <div className="field-dark">
+                    <label htmlFor={`nombre-${fila.key}`}>Nombre completo</label>
+                    <input id={`nombre-${fila.key}`} value={fila.fullName} onChange={(e) => cambiarFila(fila.key, 'fullName', e.target.value)} required minLength={3} />
+                  </div>
+                  <div className="field-dark">
+                    <label htmlFor={`puesto-${fila.key}`}>Puesto de votación</label>
+                    <input id={`puesto-${fila.key}`} list="puestos-padron" value={fila.pollingPlace} onChange={(e) => cambiarFila(fila.key, 'pollingPlace', e.target.value)} required minLength={2} />
+                  </div>
+                  <div className="field-dark">
+                    <label htmlFor={`mesa-${fila.key}`}>Mesa</label>
+                    <input id={`mesa-${fila.key}`} list={`mesas-${fila.key}`} value={fila.votingTable} onChange={(e) => cambiarFila(fila.key, 'votingTable', e.target.value)} required />
+                    <datalist id={`mesas-${fila.key}`}>
+                      {mesas.map((m) => <option key={m} value={m} />)}
+                    </datalist>
+                  </div>
+                  {filas.length > 1 && (
+                    <button type="button" className="link-button quitar-fila" onClick={() => setFilas(filas.filter((f) => f.key !== fila.key))}>
+                      Quitar
+                    </button>
+                  )}
+                </fieldset>
+              );
+            })}
+            <button type="button" className="btn btn-outline" style={{ marginBottom: '1rem' }} onClick={() => setFilas([...filas, filaNueva(filas[filas.length - 1])])}>
+              + Agregar otro votante
+            </button>
+            {campoVencimiento}
+            <button className="btn btn-gold">{filas.length === 1 ? 'Agregar al padrón' : `Agregar ${filas.length} votantes al padrón`}</button>
+          </form>
+        )}
+        {/* Montada siempre (oculta en el otro modo): cambiar de modo no
+            interrumpe una carga ni pierde lo que se estaba revisando. */}
+        <div hidden={modoAlta !== 'archivo'}>
+          <CargaPadron
+            token={session.token}
+            pinExpiresAt={pinExpiresAt}
+            campoVencimiento={modoAlta === 'archivo' ? campoVencimiento : null}
+            onPines={(pines, vence) => {
+              setNewAccessCodes(pines);
+              setCodesExpireAt(vence || null);
+            }}
+            onCambio={() => {
+              load();
+              loadPlaces();
+            }}
+            onCargaEnCurso={onCargaEnCurso}
+          />
+        </div>
       </div>
 
       {newAccessCodes.length > 0 && (
         <div className="panel access-codes-panel">
           <h3>PIN de acceso generados</h3>
           <p className="section-desc" style={{ marginBottom: '0.8rem' }}>
-            Se muestran solo esta vez: cópialos o impímelos ahora para entregarlos en el puesto de votación.
+            Se muestran solo esta vez: descárgalos, cópialos o imprímelos ahora para entregarlos en el puesto de votación.
             LiveMetric no vuelve a mostrar un PIN ya generado (solo puede regenerarse, invalidando el anterior).
             {codesExpireAt && <> Vencen el <strong>{formatPinExpiry(codesExpireAt)}</strong>.</>}
           </p>
-          <table className="table">
-            <thead><tr><th>Cédula</th><th>PIN</th></tr></thead>
-            <tbody>
-              {newAccessCodes.map((a) => (
-                <tr key={a.cedula}>
-                  <td className="mono">{a.cedula}</td>
-                  <td className="mono">{a.pin}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="descarga-pines">
+            <button type="button" className="btn btn-gold" onClick={descargarPines}>
+              {newAccessCodes.length === 1 ? 'Descargar el PIN (CSV)' : `Descargar los ${newAccessCodes.length.toLocaleString('es-CO')} PIN (CSV)`}
+            </button>
+            <span className="field-hint-dark">
+              Con la cédula, ese archivo da acceso al voto: guárdalo en un lugar seguro y bórralo cuando termines de entregar los PIN.
+            </span>
+          </div>
+          <div className="tabla-desplazable">
+            <table className="table">
+              <thead><tr><th>Cédula</th><th>Nombre</th><th>Puesto y mesa</th><th>PIN</th></tr></thead>
+              <tbody>
+                {newAccessCodes.slice(0, PINES_MOSTRADOS).map((a) => (
+                  <tr key={a.cedula}>
+                    <td className="mono">{a.cedula}</td>
+                    <td>{a.fullName}</td>
+                    <td>{[a.pollingPlace, a.votingTable].filter(Boolean).join(' — ')}</td>
+                    <td className="mono">{a.pin}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {newAccessCodes.length > PINES_MOSTRADOS && (
+            <p className="field-hint-dark">
+              Y {(newAccessCodes.length - PINES_MOSTRADOS).toLocaleString('es-CO')} más: están todos en el archivo para descargar.
+            </p>
+          )}
         </div>
       )}
 
@@ -1358,7 +1446,7 @@ function VotersTab({ session }) {
                       {/* Una columna por acción: así cada una queda alineada en
                           todas las filas, aunque a un votante le falte alguna. */}
                       <td className="accion">
-                        <button className="btn btn-outline" disabled={resettingId === v.id} onClick={() => resetPin(v.id)}>
+                        <button className="btn btn-outline" disabled={resettingId === v.id} onClick={() => resetPin(v)}>
                           {resettingId === v.id ? 'Generando…' : v.has_pin ? 'Regenerar PIN' : 'Generar PIN'}
                         </button>
                       </td>

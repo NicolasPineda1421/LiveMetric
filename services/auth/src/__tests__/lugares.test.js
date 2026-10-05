@@ -1,6 +1,6 @@
 // Comparación de puestos y mesas (lugares.js): lo que decide si un jurado
 // puede autorizar a un votante asistido.
-const { normalizarMesa, mismoPuesto, mismaMesa, juradoCubre, ubicarEnPadron } = require('../lugares');
+const { normalizarMesa, mismoPuesto, mismaMesa, juradoCubre, ubicarEnPadron, lugarCanonico } = require('../lugares');
 
 describe('Puestos y mesas escritos de distintas formas', () => {
   it('el mismo puesto, sin importar mayúsculas, tildes ni espacios', () => {
@@ -51,5 +51,17 @@ describe('ubicarEnPadron', () => {
     expect(ubicarEnPadron([], 'Puesto Central', 'Mesa 1')).toEqual({ error: 'padron_vacio' });
     expect(ubicarEnPadron(lugares, 'Punto central', 'Mesa 1')).toEqual({ error: 'puesto' });
     expect(ubicarEnPadron(lugares, 'Puesto Norte', 'Mesa 2')).toEqual({ error: 'mesa' });
+  });
+});
+
+describe('lugarCanonico (votantes nuevos)', () => {
+  it('usa el puesto y la mesa como ya figuran, y anota los nuevos para los siguientes del mismo pedido', () => {
+    const lugares = [{ pollingPlace: 'Puesto Central', votingTables: ['Mesa 1'] }];
+    expect(lugarCanonico(lugares, 'puesto central', '1')).toEqual({ pollingPlace: 'Puesto Central', votingTable: 'Mesa 1' });
+    expect(lugarCanonico(lugares, 'PUESTO CENTRAL', 'Mesa 2')).toEqual({ pollingPlace: 'Puesto Central', votingTable: 'Mesa 2' });
+    expect(lugarCanonico(lugares, 'Puesto Central', '2')).toEqual({ pollingPlace: 'Puesto Central', votingTable: 'Mesa 2' });
+    expect(lugarCanonico(lugares, 'Sede Norte', '3')).toEqual({ pollingPlace: 'Sede Norte', votingTable: '3' });
+    expect(lugarCanonico(lugares, 'sede norte', 'Mesa 3')).toEqual({ pollingPlace: 'Sede Norte', votingTable: '3' });
+    expect(lugares).toHaveLength(2);
   });
 });
