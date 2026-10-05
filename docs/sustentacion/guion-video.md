@@ -98,10 +98,10 @@ git reset prueba.js && rm prueba.js
 
 **Pantalla:** GitHub Actions (workflow *Release*), Docker Hub y el repositorio.
 
-- Una versión se publica creando un tag `vX.Y.Z`. Mostrar la corrida de `release.yml` para la v1.3.6: cada imagen se construye, **Trivy la escanea antes de publicarla** y, si pasa, sube con `1.3.6`, `v1.3.6`, `1.3` y `latest`.
+- Una versión se publica creando un tag `vX.Y.Z`. Mostrar la corrida de `release.yml` para la v1.3.7: cada imagen se construye, **Trivy la escanea antes de publicarla** y, si pasa, sube con `1.3.7`, `v1.3.7`, `1.3` y `latest`.
 - En Docker Hub, las seis imágenes con sus etiquetas.
 - Infraestructura como código: el job de Terraform levanta el sistema completo, comprueba que responde y lo destruye en cada corrida. Mostrar `infra/terraform/main.tf`, una de las políticas de `politicas-checkov/` y el paso del *smoke test* en Actions.
-- Docker Swarm: `cd orquestacion && ./deploy.sh v1.3.6` despliega las imágenes publicadas, con réplicas y *rolling updates*. Basta con mencionarlo: Swarm y compose no pueden correr a la vez en la misma PC.
+- Docker Swarm: `cd orquestacion && ./deploy.sh v1.3.7` despliega las imágenes publicadas, con réplicas y *rolling updates*. Basta con mencionarlo: Swarm y compose no pueden correr a la vez en la misma PC.
 
 ## Bloque 7 — Monitoreo y detección en tiempo de ejecución (11:30 – 13:30)
 
@@ -129,7 +129,7 @@ git reset prueba.js && rm prueba.js
   - 0 secretos;
   - 0 CVE críticas o altas en dependencias e imágenes;
   - ZAP con 0 alertas altas y 0 medias;
-  - 366 pruebas, con 81,4 % de cobertura.
+  - 401 pruebas, con 80,3 % de cobertura.
 - **Limitaciones:** sin HTTPS; ZAP informa pero no bloquea; los servicios comparten usuario de base de datos.
 - **Lecciones:**
   - el modelo de amenazas tiene que guiar el código;

@@ -81,7 +81,7 @@ Las 6 imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspine
 | Scheduler (worker) | [`nicolaspineda1421/livemetric-scheduler`](https://hub.docker.com/r/nicolaspineda1421/livemetric-scheduler) |
 
 ```bash
-docker pull nicolaspineda1421/livemetric-auth:1.3.6
+docker pull nicolaspineda1421/livemetric-auth:1.3.7
 ```
 
 Para publicar una versión nueva basta con crear el tag: `git tag -a v1.4.0 -m "..." && git push origin v1.4.0`.

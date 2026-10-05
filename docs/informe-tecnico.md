@@ -73,7 +73,7 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 | Base de datos de código abierto | PostgreSQL 16, en una red interna sin puerto hacia la PC |
 | Autenticación JWT con roles | JWT HS256 con los roles `admin`, `auditor` y `voter`, verificados en cada servicio |
 | Dockerfile por servicio, docker-compose | Seis Dockerfile multietapa sobre Alpine, sin root; `docker-compose.yml` para desarrollo |
-| Imágenes en Docker Hub con versión semántica | Seis imágenes publicadas por `release.yml` con `1.3.6`, `v1.3.6`, `1.3` y `latest`, solo si Trivy las aprueba |
+| Imágenes en Docker Hub con versión semántica | Seis imágenes publicadas por `release.yml` con `1.3.7`, `v1.3.7`, `1.3` y `latest`, solo si Trivy las aprueba |
 | Pipeline DevSecOps | 37 jobs en GitHub Actions, con un *Security Gate* final (sección 4) |
 | IaC y orquestación | Terraform (provider `kreuzwerker/docker`) y Docker Swarm |
 | Documentación en Markdown | README y manuales de arquitectura, desarrollo, despliegue, seguridad y usuario |
@@ -575,7 +575,7 @@ El job `container-scan` construye las seis imágenes reales, igual que en produc
 
 ### 4.5 Fase 4 — Pruebas
 
-**Pruebas unitarias y de integración.** Jest corre en los seis componentes: **366 pruebas** en la corrida sobre la v1.3.6.
+**Pruebas unitarias y de integración.** Jest corre en los seis componentes: **401 pruebas** en la corrida sobre la v1.3.7.
 
 - **Servicios.** Supertest llama a la app de Express en memoria contra un PostgreSQL 16 real y desechable: cada `npm test` lo levanta en un contenedor, le carga `db/init.sql` y lo borra al terminar.
 - **Frontend.** React Testing Library prueba los componentes sobre jsdom, con el cliente HTTP reemplazado por un doble.
@@ -642,7 +642,7 @@ definition:
             type=raw,value=latest
 ```
 
-*Fragmento 6. Etiquetas de cada imagen publicada (`release.yml`): `1.3.6`, `v1.3.6`, `1.3` y `latest`.*
+*Fragmento 6. Etiquetas de cada imagen publicada (`release.yml`): `1.3.7`, `v1.3.7`, `1.3` y `latest`.*
 
 ### 4.7 Fase 6 — Operación y monitoreo
 
@@ -669,18 +669,18 @@ Los mismos controles, salvo Checkov, Terraform y ZAP, corren en la PC con `./scr
 
 ### 5.1 Resumen de la última corrida
 
-Los datos de esta sección salen de la corrida del pipeline sobre la versión v1.3.6, del 3 de octubre de 2026, y del pipeline local sobre ese mismo código.
+Los datos de esta sección salen de la corrida del pipeline sobre la versión v1.3.7, del 5 de octubre de 2026, y del pipeline local sobre ese mismo código.
 
 | Control | Resultado |
 |---|---|
-| Gitleaks | Sin secretos en los 92 commits del historial |
-| Semgrep | 289 reglas sobre 214 archivos: 0 hallazgos de severidad alta o media; 33 informativos |
-| ESLint | 0 hallazgos en los 6 servicios; 13 excepciones justificadas en el código |
+| Gitleaks | Sin secretos en los 97 commits del historial |
+| Semgrep | 289 reglas sobre 223 archivos: 0 hallazgos de severidad alta o media; 33 informativos |
+| ESLint | 0 hallazgos en los 6 servicios; 15 excepciones justificadas en el código |
 | npm audit | 0 vulnerabilidades en las dependencias de producción de los 6 servicios |
 | Trivy (dependencias) | 0 CVE críticas o altas |
 | Trivy (imágenes) | 0 CVE críticas o altas en las 6 imágenes |
 | Checkov | 37 controles aprobados, 0 fallidos |
-| Jest | 366 pruebas aprobadas; 81,4 % de cobertura de líneas |
+| Jest | 401 pruebas aprobadas; 80,3 % de cobertura de líneas |
 | Terraform | Despliegue, *smoke test* y destrucción correctos |
 | OWASP ZAP | 0 alertas altas, 0 medias, 1 baja (falso positivo) y 8 informativas |
 
@@ -692,12 +692,12 @@ Los datos de esta sección salen de la corrida del pipeline sobre la versión v1
 
 ```
   Todo el repositorio
-   ✔ Secretos  · Gitleaks    sin secretos expuestos (92 commits revisados)
+   ✔ Secretos  · Gitleaks    sin secretos expuestos (97 commits revisados)
    ✔ Código    · Semgrep     sin hallazgos para revisar · 33 informativos
 
   Por servicio Código     Dependencias          Imagen Docker         Pruebas
               ESLint     npm audit  Trivy      build      Trivy      Jest
-  auth        ✔          ✔          ✔          ✔          ✔          ✔ 86
+  auth        ✔          ✔          ✔          ✔          ✔          ✔ 114
   voting      ✔          ✔          ✔          ✔          ✔          ✔ 35
   analytics   ✔          ✔          ✔          ✔          ✔          ✔ 85
   scrutiny    ✔          ✔          ✔          ✔          ✔          ✔ 22
@@ -710,15 +710,15 @@ Los datos de esta sección salen de la corrida del pipeline sobre la versión v1
 **Gitleaks.** Revisa el historial completo con las reglas por defecto, más una propia para `JWT_SECRET`. Cuatro huellas de falsos positivos ya revisados están en `.gitleaksignore`, cada una con su motivo: una contraseña deliberadamente incorrecta en una prueba y los ejemplos de la documentación que muestran cómo comprobar que Gitleaks bloquea.
 
 ```
-INF 92 commits scanned.
-INF scanned ~3564222 bytes (3.56 MB) in 1.44s
+INF 97 commits scanned.
+INF scanned ~3646401 bytes (3.65 MB) in 1.68s
 INF no leaks found
 ```
 
 **Semgrep.** Los 33 hallazgos que quedan son informativos, en siete categorías, y confirman protecciones que están implementadas. Por ejemplo, `helmet_header_x_powered_by` (9 casos) indica que helmet quita la cabecera `X-Powered-By`, y `rate_limit_control` (4) que los servicios limitan la tasa de peticiones. Los 28 hallazgos altos y medios de las primeras corridas se corrigieron todos (Tabla 10).
 
 ```
-Ran 289 rules on 214 files: 33 findings.
+Ran 289 rules on 223 files: 33 findings.
 [INFO] helmet_header_x_powered_by (9)
 [INFO] rate_limit_control (4)
 [INFO] helmet_header_dns_prefetch (4)   [INFO] helmet_header_hsts (4)
@@ -766,11 +766,13 @@ La evolución de ZAP muestra el ciclo completo de gestión de un hallazgo:
 |---|---|---|---|
 | Analytics | 90 | 497 / 531 | 93,6 % |
 | Scrutiny | 22 | 323 / 359 | 90,0 % |
-| Frontend | 129 | 784 / 997 | 78,6 % |
+| Frontend | 136 | 838 / 1052 | 79,7 % |
 | Voting | 35 | 159 / 204 | 77,9 % |
-| Auth | 86 | 521 / 694 | 75,1 % |
+| Auth | 114 | 579 / 818 | 70,8 % |
 | Scheduler | 4 | 26 / 52 | 50,0 % |
-| **Total** | **366** | **2310 / 2837** | **81,4 %** |
+| **Total** | **401** | **2422 / 3016** | **80,3 %** |
+
+En Auth, los scripts de terminal (`crearAdmin.js`, `cambiarContrasena.js` y `terminal.js`) se prueban ejecutándolos de verdad, como procesos aparte con la entrada por tubería (`crearAdmin.test.js`): Jest no mide la cobertura de un proceso hijo, así que figuran como no cubiertos aunque tienen pruebas. Por eso la cobertura de Auth bajó respecto de la versión anterior (75,1 %).
 
 ### 5.3 Tabla de hallazgos
 
@@ -985,7 +987,7 @@ Además, Falco corre con `rule_matching=all`, porque por defecto sus reglas gen�
 |---|---|
 | Repositorio | https://github.com/NicolasPineda1421/LiveMetric |
 | Imágenes | https://hub.docker.com/u/nicolaspineda1421 |
-| Versión documentada | v1.3.6 (release en GitHub y tags en Docker Hub) |
+| Versión documentada | v1.3.7 (release en GitHub y tags en Docker Hub) |
 | Modelo de amenazas | `docs/threat-model/livemetric.threatdragon.json` y `STRIDE-analysis.md` |
 | Pipeline | `.github/workflows/devsecops.yml` y `release.yml` |
 | Manuales | `docs/` (arquitectura, desarrollo, instalación y despliegue, seguridad, usuario) |
