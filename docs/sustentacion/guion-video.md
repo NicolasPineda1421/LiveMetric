@@ -47,7 +47,7 @@ docker compose ps
 **Pantalla:** Threat Dragon con el DFD de nivel 1 abierto; clic en el flujo rojo y en el almacén del acta para mostrar sus amenazas.
 
 - STRIDE por elemento: cada proceso, almacén y flujo revisado contra las seis categorías.
-- 18 amenazas, cada una anclada a un elemento real del código y con su control.
+- 19 amenazas, cada una anclada a un elemento real del código y con su control.
 - El flujo rojo es el repudio del voto: una amenaza **aceptada** a propósito, para preservar el secreto del voto.
 - La amenaza 15 (alguien con acceso a la base rehace la cadena de hashes de un acta) es la que se va a atacar en vivo en el bloque 5.
 

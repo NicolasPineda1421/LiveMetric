@@ -12,6 +12,7 @@ const { recordAuditEvent } = require('./audit');
 const { requireAdmin, requireRole } = require('./middleware/auth');
 const { encryptField, decryptField } = require('./voterCrypto');
 const totp = require('./totp');
+const { evaluarContrasena, mensajeContrasenaDebil, MINIMO_CONTRASENA, MAXIMO_CONTRASENA } = require('./politicaContrasena');
 const { juradoCubre, lugaresDelPadron, ubicarEnPadron, normalizarPuesto, mismoPuesto, mismaMesa } = require('./lugares');
 
 const app = express();
@@ -712,7 +713,7 @@ app.post(
   adminOpsLimiter,
   [
     body('username').trim().isLength({ min: 3, max: 50 }).escape(),
-    body('password').isLength({ min: 10, max: 128 }),
+    body('password').isString().isLength({ max: MAXIMO_CONTRASENA }),
     body('role').optional().isIn(['admin', 'auditor', 'jurado']),
     ...lugarJuradoRules,
   ],
@@ -720,13 +721,16 @@ app.post(
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
-        error: 'Datos inválidos: la contraseña necesita al menos 10 caracteres, y un jurado, su puesto',
+        error: `Datos inválidos: el usuario necesita de 3 a 50 caracteres, la contraseña de ${MINIMO_CONTRASENA} a ${MAXIMO_CONTRASENA}, y un jurado, su puesto`,
       });
     }
 
     const { username, password } = req.body;
     const role = req.body.role || 'admin';
     const jurado = role === 'jurado';
+    // Misma política que el primer administrador (scripts/crearAdmin.js).
+    const problemas = evaluarContrasena(password, { username });
+    if (problemas.length > 0) return res.status(400).json({ error: mensajeContrasenaDebil(problemas) });
 
     try {
       const lugar = jurado ? await lugarDelJurado(req.body.pollingPlace, req.body.votingTable) : null;

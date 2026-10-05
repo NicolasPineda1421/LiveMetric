@@ -119,6 +119,20 @@ describe('POST /admin/users', () => {
     expect(res.status).toBe(401);
   });
 
+  it('rechaza una contraseña débil, con el motivo', async () => {
+    const res = await request(app)
+      .post('/admin/users')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ username: `${RUN_ID}_debil`, password: 'Admin2026!' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/^La contraseña no es segura: tiene menos de 12 caracteres; es una contraseña común/);
+    const conUsuario = await request(app)
+      .post('/admin/users')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ username: `${RUN_ID}_debil`, password: `X9#${RUN_ID}_debil!` });
+    expect(conUsuario.body.error).toMatch(/contiene el nombre de usuario/);
+  });
+
   it('crea un admin nuevo cuando lo pide un admin autenticado', async () => {
     const res = await request(app)
       .post('/admin/users')

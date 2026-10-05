@@ -856,8 +856,12 @@ function UsersTab({ session }) {
             <input value={username} onChange={(e) => setUsername(e.target.value)} required minLength={3} />
           </div>
           <div className="field-dark">
-            <label>Contraseña (mínimo 10 caracteres)</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={10} />
+            <label>Contraseña (mínimo 12 caracteres)</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={12} maxLength={128} autoComplete="new-password" />
+            <div className="field-hint-dark">
+              Tres tipos entre minúsculas, mayúsculas, números y símbolos (o una frase de 16 caracteres o más). No puede
+              ser una contraseña común, tener secuencias como 123456 o qwerty, ni contener el usuario.
+            </div>
           </div>
           <div className="field-dark">
             <label>Rol</label>

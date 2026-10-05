@@ -1621,7 +1621,21 @@
               "type": "tm.Flow",
               "name": "login / gestión padrón y usuarios",
               "outOfScope": false,
-              "threats": [],
+              "threats": [
+                {
+                  "id": "e6d5d604-e60a-5ade-a26e-8c101758ac81",
+                  "title": "Adivinar la contraseña de un administrador",
+                  "status": "Mitigated",
+                  "severity": "High",
+                  "type": "Spoofing",
+                  "description": "El administrador entra solo con su contraseña: una débil (1234567890, Admin2026!) se adivina, y quien la tenga controla el padrón y las elecciones.",
+                  "mitigation": "Política de contraseñas para administradores, auditores y jurados (services/auth/src/politicaContrasena.js): de 12 a 128 caracteres, tres tipos de caracteres (o una frase de 16 o más), sin contraseñas comunes ni palabras comunes con números alrededor, sin secuencias y sin el nombre de usuario. La aplican el primer administrador (crearAdmin.js, que la vuelve a pedir en lugar de seguir sin administrador) y la pestaña Usuarios. Además, 10 intentos de login cada 15 minutos por IP, bcrypt con costo 12 y cada intento en la auditoría. Residual: el administrador entra solo con su contraseña (sin segundo factor); las creadas antes de esta política se reemplazan con cambiarContrasena.js.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 19,
+                  "score": ""
+                }
+              ],
               "protocol": "HTTP",
               "isPublicNetwork": true,
               "isEncrypted": false,

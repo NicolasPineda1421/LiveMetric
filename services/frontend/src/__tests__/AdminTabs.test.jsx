@@ -148,12 +148,12 @@ describe('Elecciones', () => {
 });
 
 describe('Usuarios', () => {
-  it('crea un auditor; la contraseña no se ve y exige 10 caracteres', async () => {
+  it('crea un auditor; la contraseña no se ve y exige 12 caracteres', async () => {
     api.createAdminUser.mockResolvedValue({});
     const usuario = await abrir('Usuarios');
-    const clave = campo('Contraseña (mínimo 10 caracteres)');
+    const clave = campo('Contraseña (mínimo 12 caracteres)');
     expect(clave).toHaveAttribute('type', 'password');
-    expect(clave).toHaveAttribute('minLength', '10');
+    expect(clave).toHaveAttribute('minLength', '12');
 
     await usuario.type(campo('Usuario'), 'auditora');
     await usuario.type(clave, 'una-clave-larga');
@@ -171,6 +171,16 @@ describe('Usuarios', () => {
     ],
   };
 
+  it('si el servicio rechaza la contraseña por débil, muestra el motivo y no limpia el formulario', async () => {
+    api.createAdminUser.mockRejectedValue(new Error('La contraseña no es segura: es una contraseña común, o una palabra común con números o símbolos.'));
+    const usuario = await abrir('Usuarios');
+    await usuario.type(campo('Usuario'), 'auditora');
+    await usuario.type(campo('Contraseña (mínimo 12 caracteres)'), 'Livemetric2026!');
+    await usuario.click(screen.getByRole('button', { name: 'Crear usuario' }));
+    expect(await screen.findByText(/La contraseña no es segura: es una contraseña común/)).toBeInTheDocument();
+    expect(campo('Usuario')).toHaveValue('auditora');
+  });
+
   it('un jurado se crea eligiendo del padrón su puesto y su mesa', async () => {
     api.createAdminUser.mockResolvedValue({});
     api.listUsers.mockResolvedValue({ users: [] });
@@ -178,7 +188,7 @@ describe('Usuarios', () => {
     const usuario = await abrir('Usuarios');
     expect(screen.queryByText('Mesa', { selector: 'label' })).not.toBeInTheDocument();
     await usuario.type(campo('Usuario'), 'jurado.mesa1');
-    await usuario.type(campo('Contraseña (mínimo 10 caracteres)'), 'una-clave-larga');
+    await usuario.type(campo('Contraseña (mínimo 12 caracteres)'), 'una-clave-larga');
     await usuario.selectOptions(campo('Rol'), 'jurado');
     // Sin puesto, la mesa no se puede elegir; con él, solo sus mesas.
     expect(campo('Mesa')).toBeDisabled();
@@ -199,7 +209,7 @@ describe('Usuarios', () => {
     api.listPadronPlaces.mockResolvedValue(LUGARES);
     const usuario = await abrir('Usuarios');
     await usuario.type(campo('Usuario'), 'jurado.norte');
-    await usuario.type(campo('Contraseña (mínimo 10 caracteres)'), 'una-clave-larga');
+    await usuario.type(campo('Contraseña (mínimo 12 caracteres)'), 'una-clave-larga');
     await usuario.selectOptions(campo('Rol'), 'jurado');
     await usuario.selectOptions(campo('Puesto de votación'), 'Puesto Norte');
     await usuario.click(screen.getByRole('button', { name: 'Crear usuario' }));

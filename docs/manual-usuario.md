@@ -312,7 +312,9 @@ cambia. Queda en **Auditoría** quién lo eliminó y cuándo, sin la cédula.
 Para crear otros administradores, auditores o jurados de mesa.
 
 1. Pestaña **Usuarios**.
-2. **Usuario** y **Contraseña** (mínimo 10 caracteres).
+2. **Usuario** y **Contraseña**: al menos 12 caracteres con tres tipos entre minúsculas, mayúsculas,
+   números y símbolos (o una frase de 16 caracteres o más), que no sea una contraseña común ni tenga
+   secuencias como 123456 o qwerty, ni el nombre de usuario. Si no cumple, el panel dice por qué.
 3. Elija el rol: **Administrador**, **Auditor (solo lectura)** o **Jurado de mesa**.
 4. Para un jurado, elija su **Puesto de votación** y su **Mesa** de las listas, que salen
    del padrón (por eso hay que cargar el padrón antes de crear jurados). Con **Todas las

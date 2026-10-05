@@ -127,8 +127,12 @@ if errorlevel 1 (
 REM Primer administrador: en una base nueva no hay ninguno (el repositorio
 REM no trae credenciales), asi que se ofrece crearlo aca mismo. Si ya hay
 REM alguno, crearAdmin.js --si-no-hay no hace nada.
+REM Si no se pudo crear (por ejemplo, tres contrasenas inseguras), se avisa al
+REM final: sin administrador no se puede entrar al panel.
 echo.
+set "SIN_ADMIN=0"
 call docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay
+if errorlevel 1 set "SIN_ADMIN=1"
 
 REM Con el contenedor del frontend sano, esto solo confirma que el puerto
 REM 3000 tambien responde desde afuera de Docker (mapeo de puertos, firewall).
@@ -167,6 +171,14 @@ if "%FRONTEND_UP%"=="1" (
   echo %AMARILLO%%RAYA%%RESET%
   echo %AMARILLO%%NEGRITA%  ATENCION - Los contenedores estan sanos, pero http://localhost:3000 no responde.%RESET%
   echo %AMARILLO%    Revisa que nada mas use el puerto 3000 y los logs con: docker compose logs -f frontend%RESET%
+  echo %AMARILLO%%RAYA%%RESET%
+)
+if "%SIN_ADMIN%"=="1" (
+  echo.
+  echo %AMARILLO%%RAYA%%RESET%
+  echo %AMARILLO%%NEGRITA%  ATENCION - No se creo el administrador: sin el no se puede entrar al panel.%RESET%
+  echo %AMARILLO%    Crealo con una contrasena segura:%RESET%
+  echo %AMARILLO%    docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay%RESET%
   echo %AMARILLO%%RAYA%%RESET%
 )
 

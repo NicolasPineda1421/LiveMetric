@@ -249,9 +249,13 @@ fi
 # trae credenciales), así que se ofrece crearlo acá mismo. Si ya hay alguno,
 # crearAdmin.js --si-no-hay no hace nada. Necesita una terminal para pedir
 # la contraseña; sin ella (por ejemplo, en CI) solo se indica cómo hacerlo.
+# Si no se pudo crear (por ejemplo, tres contraseñas inseguras), el stack ya
+# está arriba igual: se avisa al final, bien visible, en lugar de seguir como
+# si nada. Sin administrador no se puede entrar al panel.
 echo ""
+SIN_ADMIN=false
 if [ -t 0 ] && [ -t 1 ]; then
-  docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay || true
+  docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay || SIN_ADMIN=true
 else
   info "Si todavía no hay ningún administrador, créalo con:"
   info "  docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay"
@@ -283,4 +287,10 @@ if $FRONTEND_OK; then
 else
   banner "$C_AMARILLO" "⚠ Los contenedores están sanos, pero http://localhost:3000 no responde desde el host." \
     "  Revisá que nada más use el puerto 3000 y los logs con: docker compose logs -f frontend"
+fi
+
+if $SIN_ADMIN; then
+  banner "$C_AMARILLO" "⚠ No se creó el administrador: sin él no se puede entrar al panel." \
+    "  Créalo con una contraseña segura:" \
+    "  docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay"
 fi

@@ -20,6 +20,7 @@ Pruebas manuales para comprobar que cada funcionalidad hace lo que promete, adem
 4. **Expiración corta del token de votante** — Iniciar sesión como votante, esperar a que pase `VOTER_JWT_EXPIRES_IN` (10 minutos por defecto) y luego intentar votar: debe responder `401` ("expirada, inicia sesión de nuevo").
 5. **Append-only del log de auditoría** — Igual que con `scrutiny_ledger`: `UPDATE audit_log SET actor_ref = 'x' WHERE id = 1;` directo en PostgreSQL debe ser rechazado por el trigger `trg_audit_no_update`.
 6. **Nada de PII en el log** — Revisar cualquier fila de `audit_log` para eventos de tipo `*_VOTER`: la columna `actor_ref` debe contener siempre un hash SHA-256 (64 caracteres hexadecimales), nunca un número de cédula reconocible.
+7. **Contraseñas de las cuentas del panel** — Al crear el primer administrador (`crearAdmin.js`, desde el arranque) o un usuario en **Usuarios**, `1234567890`, `Admin2026!`, `P@ssw0rd1234` o una que contenga el usuario se rechazan con el motivo ("La contraseña no es segura: …"). El script la vuelve a pedir hasta tres veces; si no se crea, `start.sh` y `contenedor.sh` lo avisan al final, en amarillo. `cambiarContrasena.js <usuario>` reemplaza la contraseña de una cuenta existente, con la misma política, y queda `ADMIN_PASSWORD_CHANGED` en **Auditoría**. Pruebas: `politicaContrasena.test.js` y `crearAdmin.test.js`, que ejecuta los dos scripts de verdad.
 
 ## Segundo factor, voto asistido y vigencia del PIN
 

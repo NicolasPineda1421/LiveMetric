@@ -309,9 +309,12 @@ iniciar() {
   # trae credenciales), así que se ofrece crearlo acá mismo; si ya hay
   # alguno, crearAdmin.js --si-no-hay no hace nada. Necesita una terminal
   # para pedir la contraseña.
+  # Si no se pudo crear (por ejemplo, tres contraseñas inseguras), se avisa
+  # al final, bien visible: sin administrador no se puede entrar al panel.
   echo ""
+  local sin_admin=false
   if [ -t 0 ] && [ -t 1 ]; then
-    docker exec -it "$NOMBRE" docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay || true
+    docker exec -it "$NOMBRE" docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay || sin_admin=true
   else
     info "Si todavía no hay ningún administrador, créalo desde ./scripts/contenedor.sh shell con:"
     info "  docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay"
@@ -358,6 +361,11 @@ iniciar() {
     "  ./scripts/contenedor.sh logs      logs en vivo (o: logs auth-service)" \
     "  ./scripts/contenedor.sh shell     terminal adentro" \
     "  ./scripts/contenedor.sh detener   apagar todo"
+  if $sin_admin; then
+    banner "$C_AMARILLO" "⚠ No se creó el administrador: sin él no se puede entrar al panel." \
+      "  Créalo con una contraseña segura:" \
+      "  docker exec -it $NOMBRE docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay"
+  fi
 }
 
 estado() {

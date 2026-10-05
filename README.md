@@ -65,7 +65,7 @@ La primera vez tarda varios minutos (construye y analiza las 6 imágenes). Al te
     Desde otra PC de la red:  http://192.168.x.x:3000
 ```
 
-**3. Primer ingreso.** El repositorio no trae ninguna cuenta: con la base nueva, el script de arranque te pide el usuario y la contraseña (sin mostrarla) del primer administrador. Si lo saltaste, créalo después con `docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay`; las demás cuentas se crean desde **Usuarios**. Hay un padrón y plantillas de demostración para probar el ciclo completo (los votantes necesitan un PIN que se genera en **Padrón**) (ver el [recorrido por la interfaz](docs/instalacion-y-despliegue.md#recorrido-por-la-interfaz)).
+**3. Primer ingreso.** El repositorio no trae ninguna cuenta: con la base nueva, el script de arranque te pide el usuario y la contraseña (sin mostrarla) del primer administrador: tiene que ser segura (12 caracteres o más, variada, no común), y si no lo es, te dice por qué y te la vuelve a pedir. Si lo saltaste, créalo después con `docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay`; las demás cuentas se crean desde **Usuarios**. Hay un padrón y plantillas de demostración para probar el ciclo completo (los votantes necesitan un PIN que se genera en **Padrón**) (ver el [recorrido por la interfaz](docs/instalacion-y-despliegue.md#recorrido-por-la-interfaz)).
 
 ## Imágenes en Docker Hub
 

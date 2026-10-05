@@ -254,8 +254,12 @@ if errorlevel 1 (
 REM Primer administrador: en una base nueva no hay ninguno (el repositorio
 REM no trae credenciales), asi que se ofrece crearlo aca mismo. Si ya hay
 REM alguno, crearAdmin.js --si-no-hay no hace nada.
+REM Si no se pudo crear (por ejemplo, tres contrasenas inseguras), se avisa al
+REM final: sin administrador no se puede entrar al panel.
 echo.
+set "SIN_ADMIN=0"
 docker exec -it %NOMBRE% docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay
+if errorlevel 1 set "SIN_ADMIN=1"
 
 REM --- 5. Monitoreo, adentro ---------------------------------------------------
 set "MONITOREO_OK=0"
@@ -319,6 +323,14 @@ echo %VERDE%    scripts\contenedor.bat shell     terminal adentro%RESET%
 echo %VERDE%    scripts\contenedor.bat detener   apagar todo%RESET%
 echo %VERDE%%RAYA%%RESET%
 if defined IP_LAN call :info "Si otra PC no llega, permiti el puerto %PUERTO% TCP en el Firewall de Windows, ver docs\instalacion-y-despliegue.md."
+if "%SIN_ADMIN%"=="1" (
+  echo.
+  echo %AMARILLO%%RAYA%%RESET%
+  echo %AMARILLO%%NEGRITA%  ATENCION - No se creo el administrador: sin el no se puede entrar al panel.%RESET%
+  echo %AMARILLO%    Crealo con una contrasena segura:%RESET%
+  echo %AMARILLO%    docker exec -it %NOMBRE% docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay%RESET%
+  echo %AMARILLO%%RAYA%%RESET%
+)
 call :restaurar_consola
 exit /b 0
 
