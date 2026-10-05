@@ -146,7 +146,7 @@ habría que hacer lo mismo con el scheduler.
 
 **No convive con `docker compose` en la misma PC.** Los dos usan los mismos nombres de
 red (`livemetric_app-net`, `livemetric_db-net`) y el mismo puerto 3000: antes de desplegar
-el stack hay que bajar el compose (`docker compose down`), y al revés.
+el stack hay que bajar el compose (`./scripts/start.sh detener` o `docker compose down`), y al revés.
 
 **La base no tiene respaldo automático ni alta disponibilidad.** Si el nodo manager se
 pierde, se pierde la base. El respaldo es manual (`pg_dump`, ver

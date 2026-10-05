@@ -182,7 +182,7 @@ iniciar() {
     ocupantes="$(docker ps --filter "publish=$PUERTO" --format '{{.Names}}' | tr '\n' ' ')"
     if [[ "$ocupantes" == *livemetric-* ]]; then
       info "Lo usa LiveMetric corriendo directo en el host (./scripts/start.sh): $ocupantes"
-      info "Bajalo con: docker compose down"
+      info "Apagalo con: ./scripts/start.sh detener"
     elif [ -n "$ocupantes" ]; then
       info "Lo usa: $ocupantes"
     fi
@@ -198,8 +198,7 @@ iniciar() {
       if puerto_ocupado "$p"; then
         falla "El puerto $p (monitoreo) ya está en uso en esta PC."
         if [ -n "$(docker ps -q --filter name=livemetric-grafana --filter name=livemetric-prometheus)" ]; then
-          info "Lo usa el monitoreo corriendo directo en el host. Bajalo con:"
-          info "  docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml --profile falco down"
+          info "Lo usa el monitoreo corriendo directo en el host. Apagalo con: ./scripts/start.sh detener"
         fi
         info "O usá otros puertos: LIVEMETRIC_PUERTO_GRAFANA=3011 LIVEMETRIC_PUERTO_PROMETHEUS=9091 ./scripts/contenedor.sh"
         info "O sin monitoreo: LIVEMETRIC_MONITOREO=0 ./scripts/contenedor.sh"
@@ -318,8 +317,7 @@ iniciar() {
   if [ -t 0 ] && [ -t 1 ]; then
     docker exec -it "$NOMBRE" docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay || sin_admin=true
   else
-    info "Si todavía no hay ningún administrador, créalo desde ./scripts/contenedor.sh shell con:"
-    info "  docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay"
+    info "Si todavía no hay ningún administrador, créalo con: ./scripts/contenedor.sh admin"
   fi
 
   # 5. Monitoreo (adentro) ------------------------------------------------------

@@ -70,6 +70,15 @@ if /i "%COMANDO%"=="-d" set "COMANDO=iniciar" & set "ARG_DETALLE=--detalle"
 if /i "%~2"=="--detalle" set "ARG_DETALLE=--detalle"
 if /i "%~2"=="-d" set "ARG_DETALLE=--detalle"
 
+REM El resto de los argumentos, despues del comando: los servicios de logs
+REM y el usuario de admin.
+set "RESTO="
+set "SALTAR=1"
+for %%a in (%*) do (
+  if defined SALTAR (set "SALTAR=") else set "RESTO=!RESTO! %%a"
+)
+for %%c in (iniciar logs shell admin borrar) do if /i "%COMANDO%"=="%%c" call :terminal
+
 if /i "%COMANDO%"=="iniciar" goto :iniciar
 if /i "%COMANDO%"=="estado" goto :estado
 if /i "%COMANDO%"=="logs" goto :logs
@@ -109,7 +118,7 @@ netstat -ano | findstr /r /c:":%PUERTO% .*LISTENING" >nul
 if not errorlevel 1 (
   call :falla "El puerto %PUERTO% ya esta en uso en esta PC."
   for /f "delims=" %%n in ('docker ps --filter "publish=%PUERTO%" --format "{{.Names}}"') do call :info "Lo usa: %%n"
-  call :info "Si es LiveMetric corriendo directo con start.bat, bajalo con: docker compose down"
+  call :info "Si es LiveMetric corriendo directo con start.bat, apagalo con: scripts\start.bat detener"
   call :info "O usa otro puerto: set LIVEMETRIC_PUERTO=3100 y volve a correr este script."
   goto :fin_error
 )
@@ -121,8 +130,7 @@ for %%p in (%PUERTO_GRAFANA% %PUERTO_PROMETHEUS%) do (
   netstat -ano | findstr /r /c:":%%p .*LISTENING" >nul
   if not errorlevel 1 (
     call :falla "El puerto %%p, del monitoreo, ya esta en uso en esta PC."
-    call :info "Si es el monitoreo corriendo directo en la PC, bajalo con:"
-    call :info "  docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml down"
+    call :info "Si es el monitoreo corriendo directo en la PC, apagalo con: scripts\start.bat detener"
     call :info "O usa otros puertos: set LIVEMETRIC_PUERTO_GRAFANA=3011 y set LIVEMETRIC_PUERTO_PROMETHEUS=9091"
     call :info "O sin monitoreo: set LIVEMETRIC_MONITOREO=0"
     goto :fin_error
@@ -213,7 +221,7 @@ REM igual que cuando lo llama start.sh (esta fase ya lo muestra).
 call :fase 3 "Analisis de seguridad, adentro del contenedor global"
 call :info "Los mismos controles que GitHub Actions. Puede tardar varios minutos:"
 call :info "construye las 6 imagenes reales, y la primera vez ademas descarga todo."
-docker exec -it -e LIVEMETRIC_DESDE_START=1 %NOMBRE% ./scripts/pipeline-local.sh %ARG_DETALLE%
+docker exec %ARGS_TTY% -e LIVEMETRIC_DESDE_START=1 %NOMBRE% ./scripts/pipeline-local.sh %ARG_DETALLE%
 if errorlevel 1 (
   echo.
   echo %ROJO%%RAYA%%RESET%
@@ -244,7 +252,7 @@ if errorlevel 1 (
 echo.
 call :ok "Contenedores creados."
 echo.
-docker exec -it %NOMBRE% node scripts/lib/esperar-contenedores.js
+docker exec %ARGS_TTY% %NOMBRE% node scripts/lib/esperar-contenedores.js
 if errorlevel 1 (
   echo.
   echo %ROJO%%RAYA%%RESET%
@@ -256,13 +264,18 @@ if errorlevel 1 (
 
 REM Primer administrador: en una base nueva no hay ninguno (el repositorio
 REM no trae credenciales), asi que se ofrece crearlo aca mismo. Si ya hay
-REM alguno, crearAdmin.js --si-no-hay no hace nada.
+REM alguno, crearAdmin.js --si-no-hay no hace nada. Necesita una terminal
+REM para pedir la contrasena; sin ella solo se indica como hacerlo.
 REM Si no se pudo crear (por ejemplo, tres contrasenas inseguras), se avisa al
 REM final: sin administrador no se puede entrar al panel.
 echo.
 set "SIN_ADMIN=0"
-docker exec -it %NOMBRE% docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay
-if errorlevel 1 set "SIN_ADMIN=1"
+if "%TERMINAL%"=="1" (
+  docker exec -it %NOMBRE% docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay
+  if errorlevel 1 set "SIN_ADMIN=1"
+) else (
+  call :info "Si todavia no hay ningun administrador, crealo con: scripts\contenedor.bat admin"
+)
 
 REM --- 5. Monitoreo, adentro ---------------------------------------------------
 set "MONITOREO_OK=0"
@@ -364,25 +377,30 @@ call :requiere_corriendo
 if errorlevel 1 exit /b 1
 for %%s in (prometheus grafana loki promtail cadvisor blackbox-exporter falco) do (
   if /i "%~2"=="%%s" (
-    docker exec -it %NOMBRE% %MONITOREO_COMPOSE% --profile falco logs -f %2
+    docker exec %ARGS_TTY% %NOMBRE% %MONITOREO_COMPOSE% --profile falco logs -f%RESTO%
     exit /b !errorlevel!
   )
 )
-docker exec -it %NOMBRE% docker compose logs -f %2
+docker exec %ARGS_TTY% %NOMBRE% docker compose logs -f%RESTO%
 exit /b %errorlevel%
 
 :shell
 call :requiere_corriendo
 if errorlevel 1 exit /b 1
-docker exec -it %NOMBRE% bash
+docker exec %ARGS_TTY% %NOMBRE% bash
 exit /b %errorlevel%
 
 REM Cambiar la contrasena de una cuenta (o crear el primer administrador):
-REM services\auth\src\scripts\cambiarContrasena.js, adentro. %2 es el usuario (opcional).
+REM services\auth\src\scripts\cambiarContrasena.js, adentro. Despues de
+REM "admin", el usuario (opcional).
 :admin
 call :requiere_corriendo
 if errorlevel 1 exit /b 1
-docker exec -it %NOMBRE% docker compose exec auth-service node src/scripts/cambiarContrasena.js %2
+if "%TERMINAL%"=="0" (
+  call :falla "Necesita una terminal: pide la contrasena sin mostrarla."
+  exit /b 1
+)
+docker exec -it %NOMBRE% docker compose exec auth-service node src/scripts/cambiarContrasena.js%RESTO%
 exit /b %errorlevel%
 
 :detener
@@ -404,7 +422,9 @@ call :ok "Contenedor global apagado. La base de datos y la cache de imagenes que
 exit /b 0
 
 :borrar
-REM El volumen guarda la base de datos del stack de adentro: pedir confirmacion.
+REM El volumen guarda la base de datos del stack de adentro: pedir
+REM confirmacion si hay alguien para darla.
+if "%TERMINAL%"=="0" goto :borrar_si
 call :aviso "Esto borra tambien la base de datos de esta instalacion (elecciones, padron, actas)."
 set "RESPUESTA="
 set /p "RESPUESTA=     Seguro? [s/N] "
@@ -437,6 +457,21 @@ if errorlevel 1 (
   exit /b 1
 )
 exit /b 0
+
+REM :terminal - TERMINAL=1 si la entrada y la salida son la consola, y
+REM ARGS_TTY con los -it de docker exec: sin una terminal de verdad
+REM (redirigido, CI) "docker exec -t" falla con "the input device is not a
+REM TTY", y no hay como pedir una contrasena sin mostrarla. La salida de
+REM powershell no se redirige: si no, nunca veria la consola.
+:terminal
+set "TERMINAL=0"
+set "ARGS_TTY="
+powershell -NoProfile -Command "if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) { exit 1 }" 2>nul
+if not errorlevel 1 (
+  set "TERMINAL=1"
+  set "ARGS_TTY=-it"
+)
+goto :eof
 
 :requiere_corriendo
 call :requiere_docker

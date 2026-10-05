@@ -79,6 +79,8 @@ docker compose exec postgres psql -U livemetric -d livemetric   # consola SQL
 docker compose down -v                                           # borrar la base y empezar de cero
 ```
 
+Si el monitoreo que levanta `start.sh` está arriba, `docker compose down` no puede borrar la red de la aplicación, porque el monitoreo sigue conectado a ella: en ese caso, `./scripts/start.sh detener` (o `borrar`), que lo baja primero.
+
 Un cambio de esquema se hace en dos lugares:
 
 1. En `db/init.sql`, para que toda base nueva lo tenga.

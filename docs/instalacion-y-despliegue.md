@@ -32,7 +32,7 @@ PostgreSQL 16 corre en su propio contenedor (`postgres` en `docker-compose.yml`)
 
 ## Primer administrador
 
-El repositorio no trae ninguna cuenta ni ninguna credencial. Con una base nueva, `start.sh`, `start.bat` y `contenedor.sh`, al terminar de levantar el stack, piden el usuario y la contraseña del primer administrador (la contraseña, dos veces y sin mostrarla); el evento queda en la auditoría. La contraseña tiene que ser segura: al menos 12 caracteres con tres tipos entre minúsculas, mayúsculas, números y símbolos (o una frase de 16 caracteres o más), sin ser una contraseña común, sin secuencias como `123456` o `qwerty` y sin el nombre de usuario. Si no cumple, el script dice por qué y la vuelve a pedir, hasta tres veces; si igual no se crea, el arranque lo avisa al final. Si ya hay algún administrador, no preguntan nada. Los siguientes se crean desde la pestaña **Usuarios**, con la misma política. Para cambiar la contraseña de una cuenta (por ejemplo, una débil creada antes de esta política): `docker compose exec auth-service node src/scripts/cambiarContrasena.js <usuario>`.
+El repositorio no trae ninguna cuenta ni ninguna credencial. Con una base nueva, `start.sh`, `start.bat` y `contenedor.sh`, al terminar de levantar el stack, piden el usuario y la contraseña del primer administrador (la contraseña, dos veces y sin mostrarla); el evento queda en la auditoría. La contraseña tiene que ser segura: al menos 12 caracteres con tres tipos entre minúsculas, mayúsculas, números y símbolos (o una frase de 16 caracteres o más), sin ser una contraseña común, sin secuencias como `123456` o `qwerty` y sin el nombre de usuario. Si no cumple, el script dice por qué y la vuelve a pedir, hasta tres veces; si igual no se crea, el arranque lo avisa al final. Si ya hay algún administrador, no preguntan nada. Los siguientes se crean desde la pestaña **Usuarios**, con la misma política. Para cambiar la contraseña de una cuenta (por ejemplo, una débil creada antes de esta política): `./scripts/start.sh admin` (ver abajo).
 
 Si lo saltaste, o levantaste el stack con `docker compose` directo:
 
@@ -42,7 +42,7 @@ docker compose exec auth-service node src/scripts/crearAdmin.js <usuario> audito
 docker compose exec auth-service node src/scripts/cambiarContrasena.js [usuario]          # cambiar una contraseña
 ```
 
-Con el contenedor global, `./scripts/contenedor.sh admin` (o `scripts\contenedor.bat admin`) cambia la contraseña de una cuenta: muestra las cuentas y pregunta cuál (si hay un solo administrador, lo propone), o va directo con `./scripts/contenedor.sh admin <usuario>`. Si todavía no hay ningún administrador, crea el primero. Para los otros comandos, entra con `./scripts/contenedor.sh shell` y córrelos ahí.
+`./scripts/start.sh admin` cambia la contraseña de una cuenta: muestra las cuentas y pregunta cuál (si hay un solo administrador, lo propone), o va directo con `./scripts/start.sh admin <usuario>`. Si todavía no hay ningún administrador, crea el primero. Es igual con `scripts\start.bat admin` y, con el contenedor global, con `./scripts/contenedor.sh admin` o `scripts\contenedor.bat admin`; ahí, para los otros comandos, entra con `./scripts/contenedor.sh shell` y córrelos adentro.
 
 ## 1. `start.sh` / `start.bat` (recomendada)
 
@@ -51,13 +51,26 @@ Con el contenedor global, `./scripts/contenedor.sh admin` (o `scripts\contenedor
 scripts\start.bat             # Windows (cmd.exe)
 ```
 
-1. **Requisitos**: instala lo que falte (Docker, Node.js) con el gestor de paquetes del sistema, o con `winget` en Windows.
+1. **Requisitos**: instala lo que falte (Docker, Node.js) con el gestor de paquetes del sistema, o con `winget` en Windows. Revisa además que los puertos estén libres (3000, y 3010 y 9090 para el monitoreo); si los usa el contenedor global, lo dice. Si los usa el mismo LiveMetric de una corrida anterior, sigue: esos contenedores se reemplazan.
 2. **`.env`**: lo usa si existe; si no, [lo genera](#el-archivo-env).
 3. **Análisis de seguridad**: los mismos controles que el pipeline de GitHub Actions (Gitleaks, Semgrep, npm audit, Trivy, las 6 imágenes reales y las pruebas), cada uno con su resultado ya interpretado y un cuadro final por servicio. Si algo falla (✘), **se detiene ahí** y no levanta nada.
-4. **Levantar**: `docker compose up --build` y espera, sin límite de tiempo, a que los 7 contenedores estén sanos (*healthy*), mostrando el estado de cada uno en vivo.
-5. **Primer administrador**: si la base es nueva, [lo pide](#primer-administrador).
+4. **Levantar**: `docker compose up --build` y espera, sin límite de tiempo, a que los 7 contenedores estén sanos (*healthy*), mostrando el estado de cada uno en vivo. Si la base es nueva, [pide el primer administrador](#primer-administrador).
+5. **Monitoreo**: Prometheus, Grafana, Loki, cAdvisor y, en Linux con eBPF, Falco (`monitoring/docker-compose.monitoring.yml`, aparte de la aplicación). Grafana queda en `http://localhost:3010` y Prometheus en `http://localhost:9090`, **solo en `127.0.0.1`**. Con `start.bat` no hay Falco: Docker Desktop corre los contenedores sobre una VM.
 
-Al final muestra la URL en esta PC y la URL para el resto de la red local. Con `--detalle` se ve además la salida completa de cada herramienta; sin eso queda en un log por paso, cuya carpeta se indica al empezar.
+Al final muestra la URL en esta PC, la URL para el resto de la red local y los comandos para seguir. Con `--detalle` se ve además la salida completa de cada herramienta; sin eso queda en un log por paso, cuya carpeta se indica al empezar.
+
+Tiene los mismos comandos que el contenedor global, aquí sobre el Docker de la PC (en Windows, `scripts\start.bat <comando>`):
+
+```bash
+./scripts/start.sh estado      # estado de cada microservicio y del monitoreo
+./scripts/start.sh logs        # logs en vivo (o: logs auth-service, logs grafana, logs falco)
+./scripts/start.sh shell       # terminal dentro de un microservicio (o: shell postgres; sin servicio, auth-service)
+./scripts/start.sh admin       # cambiar la contraseña del administrador (o de otra cuenta; si no hay, crea el primero)
+./scripts/start.sh detener     # apaga LiveMetric y el monitoreo (la base y el historial quedan en sus volúmenes)
+./scripts/start.sh borrar      # además borra los volúmenes (con la BASE DE DATOS) y las imágenes construidas
+```
+
+Otros puertos: `LIVEMETRIC_PUERTO=3100`, `LIVEMETRIC_PUERTO_GRAFANA=3011` y `LIVEMETRIC_PUERTO_PROMETHEUS=9091` (en Windows, con `set` antes de correrlo). Sin Falco: `LIVEMETRIC_FALCO=0`. Sin monitoreo: `LIVEMETRIC_MONITOREO=0`. `borrar` deja el `.env`, y pide confirmación antes de borrar nada.
 
 ## 2. Contenedor global (solo Docker)
 
@@ -81,7 +94,7 @@ Al final muestra la URL en esta PC y la URL para el resto de la red local. Con `
   Con Falco, el contenedor global corre además con `--pid=host`. Falco recibe del kernel los números de proceso de la PC y completa cada evento leyendo `/proc`; con el `/proc` propio del contenedor, esos números corresponden a otros procesos, y atribuía a los servicios cosas que hacía la PC. La contra es que el contenedor global ve los procesos de la PC, lo que agrega poco a lo que ya permite `--privileged`.
 
   Otros puertos: `LIVEMETRIC_PUERTO_GRAFANA=3011 LIVEMETRIC_PUERTO_PROMETHEUS=9091 ./scripts/contenedor.sh`. Sin Falco (y sin `--pid=host`): `LIVEMETRIC_FALCO=0`. Sin monitoreo: `LIVEMETRIC_MONITOREO=0`.
-- El frontend queda en `http://localhost:3000`. Si ese puerto está ocupado (por ejemplo, por el stack levantado con `start.sh`), el script lo avisa; se puede usar otro con `LIVEMETRIC_PUERTO=3100 ./scripts/contenedor.sh`.
+- El frontend queda en `http://localhost:3000`. Si ese puerto está ocupado (por ejemplo, por el stack levantado con `start.sh`, que se apaga con `./scripts/start.sh detener`), el script lo avisa; se puede usar otro con `LIVEMETRIC_PUERTO=3100 ./scripts/contenedor.sh`.
 - El `.env` de la carpeta se monta en solo lectura y nunca queda dentro de la imagen. Si no existe, se genera primero en la carpeta (con el Node.js de la imagen, sin instalar nada en la PC).
 - La base de datos vive dentro del contenedor global, en el mismo volumen `livemetric-global-docker`.
 - Las imágenes construidas adentro se guardan en el volumen `livemetric-global-docker`: desde la segunda vez arranca mucho más rápido.
@@ -115,7 +128,7 @@ terraform destroy -var-file="terraform.tfvars" # para desmontarlo
 
 ## Acceso desde otras PC de la red
 
-El frontend se publica en el puerto 3000 de todas las interfaces. `start.sh` y `contenedor.sh` muestran al final la URL para la red (`http://<ip-de-la-pc>:3000`).
+El frontend se publica en el puerto 3000 (o el de `LIVEMETRIC_PUERTO`) de todas las interfaces. `start.sh` y `contenedor.sh` muestran al final la URL para la red (`http://<ip-de-la-pc>:3000`).
 
 - **Windows:** el firewall bloquea por defecto las conexiones entrantes. La primera vez, acepta el aviso de Docker Desktop o crea una regla de entrada para el puerto **3000/TCP** (Firewall de Windows Defender → Configuración avanzada → Reglas de entrada → Nueva regla → Puerto → TCP → 3000). La IP de la PC se ve con `ipconfig` ("Dirección IPv4").
 - **Para que sobreviva un reinicio:** todos los servicios tienen `restart: unless-stopped`. En Windows, activa en Docker Desktop "Start Docker Desktop when you log in"; el stack vuelve solo en cuanto arranca el motor.
@@ -195,11 +208,11 @@ curl http://127.0.0.1:3004/verify -H "Authorization: Bearer <TOKEN_ADMIN>"
 
 ## Solución de problemas
 
-Lo primero, casi siempre: `docker compose ps` (qué contenedor no está sano) y `docker compose logs <servicio>` (por qué). `start.sh` y `start.bat` ya muestran el motivo de cada contenedor que no queda sano.
+Lo primero, casi siempre: `./scripts/start.sh estado` (qué contenedor no está sano) y `./scripts/start.sh logs <servicio>` (por qué); con el contenedor global, los mismos comandos de `contenedor.sh`, y con `docker compose` directo, `docker compose ps` y `docker compose logs <servicio>`. Al arrancar, los scripts ya muestran el motivo de cada contenedor que no queda sano.
 
 | Síntoma | Causa | Solución |
 |---|---|---|
-| `port is already allocated` o "El puerto 3000 ya está en uso" | Otra forma de despliegue ya está arriba: el contenedor global y `start.sh` usan los dos el 3000 | `docker ps --filter publish=3000` muestra cuál. Bájala (`docker compose down` o `./scripts/contenedor.sh detener`), o usa otro puerto con `LIVEMETRIC_PUERTO=3100 ./scripts/contenedor.sh` |
+| `port is already allocated` o "El puerto 3000 ya está en uso" | Otra forma de despliegue ya está arriba: el contenedor global y `start.sh` usan los dos el 3000 (y el 3010 y el 9090 para el monitoreo) | El script dice cuál lo usa (también `docker ps --filter publish=3000`). Apágala (`./scripts/start.sh detener` o `./scripts/contenedor.sh detener`), o usa otro puerto con `LIVEMETRIC_PUERTO=3100` en cualquiera de los dos |
 | Un servicio se reinicia en bucle y su log dice `FATAL: VOTERS_ENCRYPTION_KEY debe ser una clave AES-256 (32 bytes) en base64.` o `FATAL: ACTA_SIGNING_KEY debe ser una clave Ed25519 de 32 bytes en base64.` | Falta la variable en el `.env`, o tiene todavía el marcador de la plantilla | `node scripts/lib/generar-env.js` agrega lo que falte y genera lo que tenga el marcador, sin tocar los valores reales. Después, `docker compose up -d` |
 | `FATAL: ACTA_PUBLIC_KEY no corresponde a ACTA_SIGNING_KEY` | Las dos claves de la firma de las actas no son pareja (se editó una a mano) | Borra las dos líneas del `.env` y corre `generar-env.js`, que genera un par nuevo. Las actas firmadas con el par anterior pasan a verse como firmadas "con otra clave" |
 | Los servicios no arrancan y su log dice `password authentication failed for user "livemetric"` | El `.env` se regeneró o cambió después de crear la base: Postgres guardó la contraseña de la primera vez | Si tienes el `.env` anterior, restáuralo. Si no, empieza de cero con `docker compose down -v` (**borra la base**) |
@@ -218,10 +231,10 @@ Lo primero, casi siempre: `docker compose ps` (qué contenedor no está sano) y 
 | El votante recibe "Tu PIN venció" | El PIN pasó su fecha de vencimiento (se elige al generarlo) | En **Padrón**, **Regenerar PIN**, con un vencimiento que cubra la elección (el campo propone el cierre de la última programada) |
 | Un votante recibe "Cédula o PIN incorrectos" con los datos correctos | Su cédula no tiene PIN (en **Padrón** figura "Sin asignar"), o el PIN se regeneró | Genera el PIN desde **Padrón** y entrégaselo. El mensaje es el mismo en todos los casos a propósito |
 | "Demasiados intentos. Intenta de nuevo más tarde." al ingresar como votante | Desde ese equipo (esa IP) hubo 8 intentos fallidos en 15 minutos: el sistema lo toma como alguien adivinando PINs y bloquea la IP, también para los PIN correctos. Los ingresos correctos no cuentan, así que un puesto con un solo equipo puede atender a todos sus votantes | Esperar a que pasen los 15 minutos. Si fue un error de digitación repetido, revisar con el votante su cédula y su PIN (o regenerarlo en **Padrón**); si no, revisar el reporte de **Accesos sospechosos** |
-| No hay ningún administrador, o se perdió la contraseña del único | La base es nueva, el script no lo pudo crear (el arranque lo avisa al final) o no hay recuperación de contraseña | `docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay` si no hay ninguno; `cambiarContrasena.js <usuario>` para darle una contraseña nueva a uno que existe (con el contenedor global, las dos cosas con `./scripts/contenedor.sh admin`). Desde ese, se administra el resto en **Usuarios** |
+| No hay ningún administrador, o se perdió la contraseña del único | La base es nueva, el script no lo pudo crear (el arranque lo avisa al final) o no hay recuperación de contraseña | `docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay` si no hay ninguno; `cambiarContrasena.js <usuario>` para darle una contraseña nueva a uno que existe. Con `start.sh` o el contenedor global, las dos cosas con `./scripts/start.sh admin` o `./scripts/contenedor.sh admin`. Desde ese, se administra el resto en **Usuarios** |
 | "La contraseña no es segura" al crear el administrador o un usuario | La contraseña es corta, tiene pocos tipos de caracteres, es común (o una palabra común con números), tiene una secuencia o contiene el usuario | Usa una más larga y variada, o una frase de 16 caracteres o más (por ejemplo, cuatro palabras con guiones). El mensaje dice qué falló |
 | En **Resultados**, un acta aparece como "Sin firma digital" o "Alterada" | "Sin firma": se certificó antes de que existiera la firma digital. "Alterada": algo en ella no coincide (el indicador dice qué) | Ver el [Manual de usuario](manual-usuario.md#46-resultados) y el [Manual de seguridad](manual-seguridad.md). Un acta alterada no debe usarse como oficial |
-| El stack de monitoreo no arranca: `Define GRAFANA_ADMIN_PASSWORD en el .env` | Compose busca el `.env` en `monitoring/` si no se le indica otro | `docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml up -d`, desde la raíz del repo. En un `.env` anterior, `generar-env.js` agrega la contraseña |
+| El stack de monitoreo, levantado a mano, no arranca: `Define GRAFANA_ADMIN_PASSWORD en el .env` | Compose busca el `.env` en `monitoring/` si no se le indica otro | `docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml up -d`, desde la raíz del repo (`start.sh` y `contenedor.sh` ya lo hacen así). En un `.env` anterior, `generar-env.js` agrega la contraseña |
 | `docker compose watch` responde `unknown command` | Compose anterior a la versión 2.22 | Actualiza Docker (o Docker Desktop), o reconstruye a mano: `docker compose up -d --build <servicio>` |
 | En Windows: `error during connect` o `pipe/docker_engine` | Docker Desktop no está corriendo | Ábrelo y espera a que diga que el motor está listo |
 | En Windows con WSL2, todo es muy lento | El repo está en `/mnt/c/...` | Clónalo dentro del sistema de archivos de Linux (`~`) |

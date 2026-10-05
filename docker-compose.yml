@@ -402,7 +402,8 @@ services:
       # solo necesita llegar a este puerto, todo lo demás pasa por el
       # proxy reverso de nginx (ver nginx.conf).
       # Adentro nginx escucha en 8080: corre entero sin root (ver Dockerfile).
-      - "0.0.0.0:3000:8080"
+      # Afuera, 3000 o el LIVEMETRIC_PUERTO con que se corra scripts/start.sh.
+      - "0.0.0.0:${LIVEMETRIC_PUERTO:-3000}:8080"
     # "no-new-privileges" bloquea escalación vía setuid; además nginx corre
     # entero como el usuario "nginx", sin root (ver Dockerfile).
     security_opt:

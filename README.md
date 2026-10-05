@@ -52,9 +52,11 @@ cd LiveMetric
 
 | Opción | Comando | Qué hace |
 |---|---|---|
-| Linux / macOS | `./scripts/start.sh` | Instala lo que falte, corre el análisis de seguridad y, solo si pasa, levanta el stack |
+| Linux / macOS | `./scripts/start.sh` | Instala lo que falte, corre el análisis de seguridad y, solo si pasa, levanta el stack y el monitoreo (Grafana en `http://localhost:3010`) |
 | Windows | `scripts\start.bat` | Lo mismo, desde `cmd.exe` |
-| Solo Docker | `./scripts/contenedor.sh` | Lo mismo, pero todo dentro de un contenedor global: en la PC no se instala nada más. Incluye el monitoreo (Grafana en `http://localhost:3010`) |
+| Solo Docker | `./scripts/contenedor.sh` (o `scripts\contenedor.bat`) | Lo mismo, pero todo dentro de un contenedor global: en la PC no se instala nada más que Docker |
+
+Los dos modos tienen los mismos comandos para después: `estado`, `logs`, `shell`, `admin` (cambiar la contraseña del administrador), `detener` y `borrar`, por ejemplo `./scripts/start.sh estado` o `./scripts/contenedor.sh admin` (ver [instalación y despliegue](docs/instalacion-y-despliegue.md#1-startsh--startbat-recomendada)).
 
 La primera vez tarda varios minutos (construye y analiza las 6 imágenes). Al terminar, cuando los 7 contenedores están sanos, el script muestra las direcciones:
 
@@ -65,7 +67,7 @@ La primera vez tarda varios minutos (construye y analiza las 6 imágenes). Al te
     Desde otra PC de la red:  http://192.168.x.x:3000
 ```
 
-**3. Primer ingreso.** El repositorio no trae ninguna cuenta: con la base nueva, el script de arranque te pide el usuario y la contraseña (sin mostrarla) del primer administrador: tiene que ser segura (12 caracteres o más, variada, no común), y si no lo es, te dice por qué y te la vuelve a pedir. Si lo saltaste, créalo después con `docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay`; las demás cuentas se crean desde **Usuarios**. Hay un padrón y plantillas de demostración para probar el ciclo completo (los votantes necesitan un PIN que se genera en **Padrón**) (ver el [recorrido por la interfaz](docs/instalacion-y-despliegue.md#recorrido-por-la-interfaz)).
+**3. Primer ingreso.** El repositorio no trae ninguna cuenta: con la base nueva, el script de arranque te pide el usuario y la contraseña (sin mostrarla) del primer administrador: tiene que ser segura (12 caracteres o más, variada, no común), y si no lo es, te dice por qué y te la vuelve a pedir. Si lo saltaste, créalo después con `./scripts/start.sh admin` (o `./scripts/contenedor.sh admin`); las demás cuentas se crean desde **Usuarios**. Hay un padrón y plantillas de demostración para probar el ciclo completo (los votantes necesitan un PIN que se genera en **Padrón**) (ver el [recorrido por la interfaz](docs/instalacion-y-despliegue.md#recorrido-por-la-interfaz)).
 
 ## Imágenes en Docker Hub
 

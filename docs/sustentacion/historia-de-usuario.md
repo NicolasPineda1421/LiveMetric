@@ -39,7 +39,7 @@ Todas corren en el job `unit-tests` del pipeline en cada push. Durante la operac
 
 ### Preparación, antes de la sustentación
 
-1. **Instalación de demostración.** Levantar una instalación nueva con `./scripts/start.sh` (o `scripts\start.bat`) y crear su administrador cuando el script lo pida. El paso 5 cambia el acta de forma **permanente**: no usar una instalación con datos que importen. Para volver a empezar: `docker compose down -v`.
+1. **Instalación de demostración.** Levantar una instalación nueva con `./scripts/start.sh` (o `scripts\start.bat`) y crear su administrador cuando el script lo pida. El paso 5 cambia el acta de forma **permanente**: no usar una instalación con datos que importen. Para volver a empezar: `./scripts/start.sh borrar` (borra la base; el `.env` queda).
 2. **Plantilla.** En **Plantillas**, crear una genérica con tres opciones.
 3. **Padrón y autenticadores.**
    - En **Padrón**, agregar tres votantes con el formulario y anotar los PIN que muestra (solo se ven esa vez). En el campo de vencimiento, elegir una fecha que llegue al día de la sustentación.

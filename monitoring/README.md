@@ -57,10 +57,13 @@ autenticación.
 
 ### 2. Levantar
 
-**Con el contenedor global** (`./scripts/contenedor.sh`) no hay que hacer nada: el
-monitoreo ya se levanta adentro, junto a la aplicación, con los mismos puertos (3010 y
-9090, solo en `127.0.0.1`) y, en Linux, con Falco. Lo que sigue es para la aplicación
-levantada con `start.sh` o `docker compose`.
+**Con `start.sh`, `start.bat` o el contenedor global** (`./scripts/contenedor.sh`) no hay
+que hacer nada: el monitoreo se levanta junto a la aplicación, en los puertos 3010 y 9090
+(solo en `127.0.0.1`; otros con `LIVEMETRIC_PUERTO_GRAFANA` y
+`LIVEMETRIC_PUERTO_PROMETHEUS`) y, en Linux con eBPF, con Falco (`LIVEMETRIC_FALCO=0` lo
+deja afuera; `LIVEMETRIC_MONITOREO=0`, todo el monitoreo). `./scripts/start.sh logs grafana`
+o `logs falco` muestran sus logs, y `./scripts/start.sh detener` lo apaga junto con la
+aplicación. Lo que sigue es para la aplicación levantada con `docker compose` directo.
 
 ```bash
 # Primero la aplicación, que es quien crea la red app-net
@@ -92,7 +95,8 @@ externa. Si la aplicación no está levantada, esa red no existe y el arranque f
 docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml down
 ```
 
-Con `-v` si además quieren borrar las métricas y logs históricos.
+Con `-v` si además quieren borrar las métricas y logs históricos. Con los scripts:
+`./scripts/start.sh detener` (o `borrar`, que además borra el historial y la base).
 
 ## El tablero
 

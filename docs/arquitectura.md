@@ -139,7 +139,7 @@ LiveMetric/
 │   ├── terraform/                # El mismo stack como código (provider Docker)
 │   └── contenedor-global/        # Imagen Docker-in-Docker (scripts/contenedor.sh)
 ├── scripts/
-│   ├── start.sh / start.bat           # Análisis de seguridad + levantar el stack
+│   ├── start.sh / start.bat           # Análisis de seguridad + levantar el stack y el monitoreo
 │   ├── contenedor.sh / contenedor.bat # Lo mismo, todo dentro de un contenedor global
 │   ├── pipeline-local.sh / .bat       # Solo el análisis de seguridad (antes de un push)
 │   ├── pipeline-status.sh             # Estado del último pipeline en GitHub

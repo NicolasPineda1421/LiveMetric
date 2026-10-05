@@ -5,11 +5,13 @@
 # el monitoreo no debe poder tumbar lo que monitorea. Si Grafana consume
 # memoria de mas o Loki llena el disco, la votacion sigue funcionando.
 #
-# Uso:
+# Lo levantan scripts/start.sh y scripts/contenedor.sh despues de la app. A
+# mano, desde la raiz del repo:
 #   docker compose up -d                                  # primero la app
-#   docker compose -f monitoring/docker-compose.monitoring.yml up -d
+#   docker compose --env-file .env -f monitoring/docker-compose.monitoring.yml up -d
 #
-# Accesos:
+# Accesos (otros puertos con LIVEMETRIC_PUERTO_GRAFANA y
+# LIVEMETRIC_PUERTO_PROMETHEUS, ver scripts/start.sh):
 #   Grafana      http://localhost:3010
 #   Prometheus   http://localhost:9090
 #
@@ -53,7 +55,7 @@ services:
       - monitoring-net
       - app-net
     ports:
-      - "127.0.0.1:9090:9090"
+      - "127.0.0.1:${LIVEMETRIC_PUERTO_PROMETHEUS:-9090}:9090"
     security_opt:
       - no-new-privileges:true
 
@@ -182,7 +184,7 @@ services:
     networks:
       - monitoring-net
     ports:
-      - "127.0.0.1:3010:3000"
+      - "127.0.0.1:${LIVEMETRIC_PUERTO_GRAFANA:-3010}:3000"
     depends_on:
       - prometheus
       - loki

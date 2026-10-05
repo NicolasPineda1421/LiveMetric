@@ -866,7 +866,7 @@ Los servicios no tienen instrumentación propia: no exponen un endpoint `/metric
 
 *Tabla 11. Componentes del monitoreo.*
 
-El monitoreo corre en un compose aparte (`monitoring/docker-compose.monitoring.yml`), para que no pueda tumbar lo que vigila: si Loki llena el disco, la votación sigue funcionando. Con el contenedor global se levanta solo, adentro, junto a la aplicación. Grafana exige una contraseña propia, generada en el `.env`, y sus puertos se publican solo en `127.0.0.1`.
+El monitoreo corre en un compose aparte (`monitoring/docker-compose.monitoring.yml`), para que no pueda tumbar lo que vigila: si Loki llena el disco, la votación sigue funcionando. `start.sh`, `start.bat` y el contenedor global lo levantan solos, junto a la aplicación (Falco, solo en Linux), y lo apagan con ella (`detener`). Grafana exige una contraseña propia, generada en el `.env`, y sus puertos se publican solo en `127.0.0.1`.
 
 ### 6.2 Tablero
 
