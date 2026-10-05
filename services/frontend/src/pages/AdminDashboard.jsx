@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { HIDDEN_RESULTS_NOTE } from '../components/widgets/dataAdapters.js';
 import { ownValue } from '../utils/ownValue.js';
+import BuscadorPadron from '../components/BuscadorPadron.jsx';
 import ReportsTab from './ReportsTab.jsx';
 
 const TABS = [
@@ -1261,7 +1262,16 @@ function VotersTab({ session }) {
           <div className="field-dark filtro-busqueda">
             <label htmlFor="filtro-busqueda">Buscar por cédula o nombre</label>
             <div className="busqueda">
-              <input id="filtro-busqueda" type="search" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} maxLength={50} />
+              <BuscadorPadron
+                token={session.token}
+                value={busqueda}
+                onChange={(texto) => {
+                  setBusqueda(texto);
+                  // Borrar la búsqueda (a mano o con la ×) vuelve a mostrar a todos.
+                  if (!texto.trim() && filtros.q) filtrar({ q: '' });
+                }}
+                onSearch={(q) => filtrar({ q: q.trim() })}
+              />
               <button className="btn btn-outline">Buscar</button>
             </div>
           </div>

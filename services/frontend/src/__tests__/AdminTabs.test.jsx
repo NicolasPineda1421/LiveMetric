@@ -365,6 +365,16 @@ describe('Padrón', () => {
     expect(screen.getByLabelText('Buscar por cédula o nombre')).toHaveValue('');
   });
 
+  it('borrar el texto del buscador vuelve a mostrar a todos, sin pulsar Buscar', async () => {
+    api.listVoters.mockResolvedValue({ voters: [], total: 0, registered: 12 });
+    const usuario = await abrir('Padrón');
+    await usuario.type(screen.getByLabelText('Buscar por cédula o nombre'), '1031');
+    await usuario.click(screen.getByRole('button', { name: 'Buscar' }));
+    expect(api.listVoters).toHaveBeenLastCalledWith('jwt-admin', expect.objectContaining({ q: '1031' }));
+    await usuario.clear(screen.getByLabelText('Buscar por cédula o nombre'));
+    expect(api.listVoters).toHaveBeenLastCalledWith('jwt-admin', expect.objectContaining({ q: '' }));
+  });
+
   it('pagina de a 50 votantes', async () => {
     const pagina = (offset) => Array.from({ length: 50 }, (_, i) => ({ id: offset + i + 1, cedula: String(1000000000 + offset + i), full_name: `Votante ${offset + i + 1}`, polling_place: 'P', voting_table: 'M', is_active: true, has_pin: false }));
     api.listVoters.mockImplementation((token, { offset }) => Promise.resolve({ voters: pagina(offset), total: 120, registered: 120 }));

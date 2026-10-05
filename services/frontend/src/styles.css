@@ -258,6 +258,20 @@ input, select, textarea {
 @media (max-width: 900px) { .filtros-padron { grid-template-columns: 1fr 1fr; } }
 .busqueda { display: flex; gap: 0.4rem; }
 .busqueda input { flex: 1; min-width: 0; }
+/* Autocompletar del buscador del padrón */
+.autocompletar { position: relative; flex: 1; min-width: 0; display: flex; }
+.sugerencias {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 30;
+  min-width: max(100%, 420px); max-height: 340px; overflow-y: auto;
+  list-style: none; margin: 0; padding: 0.3rem 0;
+  background: var(--color-panel-raised); border: 1px solid var(--color-border); border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.sugerencias li[role="option"] { display: grid; grid-template-columns: auto 1fr; column-gap: 0.8rem; padding: 0.45rem 0.8rem; cursor: pointer; font-size: 0.88rem; }
+.sugerencias li[role="option"].activa { background: var(--color-accent-soft); }
+.sugerencias .sugerencia-lugar { grid-column: 2; color: var(--color-text-muted); font-size: 0.78rem; }
+.sugerencias mark { background: none; color: var(--color-accent); font-weight: 700; }
+.sugerencias .sin-sugerencias { padding: 0.45rem 0.8rem; color: var(--color-text-muted); font-size: 0.82rem; }
 .resumen-filtros { display: flex; gap: 1rem; align-items: center; color: var(--color-text-muted); font-size: 0.85rem; margin: 0 0 0.6rem; }
 .editar-mesa .grid-2 { grid-template-columns: 1fr; gap: 0; }
 .table td.sin-corte { white-space: nowrap; }

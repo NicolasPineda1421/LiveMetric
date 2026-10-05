@@ -289,6 +289,16 @@ vencido, sin vencimiento o sin asignar), **Autenticador** (registrado o pendient
 **Voto asistido**. Debajo se ve cuántos coinciden ("4 de 8 votantes") y **Limpiar
 filtros**. El listado muestra 50 votantes por página.
 
+**Autocompletar.** Mientras escribe en el buscador, desde el segundo carácter aparecen
+hasta 8 votantes que coinciden, con su cédula (la parte escrita resaltada), su nombre, su
+puesto y su mesa. Primero van las cédulas que empiezan con lo escrito; también encuentra
+por nombre. Elija uno con un clic, o con las flechas **↑ ↓** y **Enter**: el listado
+queda filtrado a ese votante. **Escape** cierra la lista, y borrar el texto vuelve a
+mostrar a todos.
+
+![Captura 32: El autocompletar del buscador: al escribir «1031» aparecen los votantes cuya cédula empieza así, con su nombre, puesto y mesa](img/32-padron-autocompletar.png)
+*Captura 32. El autocompletar del buscador: al escribir «1031» aparecen los votantes cuya cédula empieza así, con su nombre, puesto y mesa.*
+
 **Eliminar.** El botón **Eliminar** de cada fila saca al votante del padrón, después de
 confirmar. No se puede deshacer: ya no podrá ingresar. Los votos que ya emitió se
 conservan, porque son anónimos (no apuntan a su fila del padrón), así que el acta no
@@ -620,6 +630,7 @@ instalación de prueba ya borrada (además, cada código vence a los 30 segundos
 | 29 | `29-codigo-autenticador.png` | Código del autenticador |
 | 30 | `30-voto-asistido.png` | Voto asistido: autorización del jurado |
 | 31 | `31-panel-jurado.png` | Panel del jurado (de todo el puesto) |
+| 32 | `32-padron-autocompletar.png` | Autocompletar del buscador del padrón |
 
 Las capturas 05 y 26 juntas muestran el control de acceso por rol: conviene usarlas también
 en el informe y en el video.

@@ -1095,6 +1095,51 @@ app.get(
   }
 );
 
+// Sugerencias para el buscador del padrón (autocompletar, mientras se
+// escribe): hasta 8 votantes. Primero los que tienen una cédula que empieza
+// con lo escrito, después los que la contienen y después los que coinciden
+// por nombre (sin mayúsculas ni tildes). Liviana a propósito: solo lo que
+// muestra la lista, sin el estado del PIN ni el vencimiento sugerido.
+const SUGERENCIAS_MAXIMO = 8;
+
+app.get(
+  '/admin/voters/sugerencias',
+  requireAdmin,
+  adminReadLimiter,
+  [query('q').isString().trim().isLength({ min: 2, max: 50 })],
+  async (req, res) => {
+    if (!validationResult(req).isEmpty()) return res.status(400).json({ error: 'Escribe al menos 2 caracteres' });
+    const texto = normalizarPuesto(req.query.q);
+    try {
+      const result = await pool.query('SELECT id, cedula, full_name, polling_place, voting_table FROM voters');
+      const conPuntaje = [];
+      for (const v of result.rows) {
+        const cedula = decryptField(v.cedula);
+        const nombre = normalizarPuesto(v.full_name);
+        const enCedula = cedula.toLowerCase().indexOf(texto);
+        let puntaje = null;
+        if (enCedula === 0) puntaje = 0;
+        else if (enCedula > 0) puntaje = 1;
+        else if (nombre.split(' ').some((palabra) => palabra.startsWith(texto))) puntaje = 2;
+        else if (nombre.includes(texto)) puntaje = 3;
+        if (puntaje !== null) conPuntaje.push({ puntaje, v, cedula });
+      }
+      conPuntaje.sort((a, b) => a.puntaje - b.puntaje || a.cedula.localeCompare(b.cedula, 'es', { numeric: true }));
+      const suggestions = conPuntaje.slice(0, SUGERENCIAS_MAXIMO).map(({ v, cedula }) => ({
+        id: v.id,
+        cedula,
+        fullName: v.full_name,
+        pollingPlace: decryptField(v.polling_place),
+        votingTable: decryptField(v.voting_table),
+      }));
+      return res.status(200).json({ suggestions, total: conPuntaje.length });
+    } catch (err) {
+      console.error('Error en GET /admin/voters/sugerencias:', err.message);
+      return res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  }
+);
+
 // Agregar votantes desde el formulario del panel: uno o varios, pero nunca
 // modifica a uno que ya está (a diferencia de la carga masiva, que actualiza
 // sus datos). Las cédulas que ya estaban se informan y quedan como estaban.

@@ -130,6 +130,54 @@ describe('Filtros del listado', () => {
   });
 });
 
+describe('Sugerencias del buscador (autocompletar)', () => {
+  const sugerir = (q) => conAdmin('get', `/admin/voters/sugerencias?q=${encodeURIComponent(q)}`);
+  // Diez más, en otro puesto, para probar el máximo de 8; y uno cuya cédula
+  // empieza con "an", para el orden.
+  const extra = [...Array.from({ length: 10 }, (_, i) => `LIM${i}-${sufijo}`), `AN-${sufijo}`];
+
+  beforeAll(async () => {
+    await agregar(extra.map((cedula, i) => ({ cedula, fullName: i < 10 ? `Votante Lote ${i}` : 'Zoe Zapata', pollingPlace: `${PUESTO} B`, votingTable: 'Mesa 1' })));
+  });
+
+  afterAll(async () => {
+    await pool.query('DELETE FROM voters WHERE cedula = ANY($1)', [extra.map(encryptField)]);
+  });
+
+  it('muestra la cédula, el nombre, el puesto y la mesa de cada sugerencia', async () => {
+    const res = await sugerir(`pad3-${sufijo}`);
+    expect(res.status).toBe(200);
+    expect(res.body.suggestions).toEqual([
+      { id: expect.any(Number), cedula: ced(3), fullName: 'Lucía Pérez', pollingPlace: PUESTO, votingTable: 'Mesa 1' },
+    ]);
+  });
+
+  it('primero las cédulas que empiezan con lo escrito, después por nombre', async () => {
+    const res = await sugerir('an');
+    const nombres = res.body.suggestions.map((v) => v.fullName);
+    expect(nombres[0]).toBe('Zoe Zapata');
+    expect(nombres).toEqual(expect.arrayContaining(['Ana Gómez', 'María José Ángel']));
+    expect(nombres).not.toContain('Lucía Pérez');
+  });
+
+  it('por nombre, sin mayúsculas ni tildes, y también por una parte del medio', async () => {
+    expect((await sugerir('LUC')).body.suggestions.map((v) => v.fullName)).toEqual(['Lucía Pérez']);
+    expect((await sugerir('erez')).body.suggestions.map((v) => v.fullName)).toEqual(['Lucía Pérez']);
+  });
+
+  it('a lo sumo 8, con el total de coincidencias', async () => {
+    const res = await sugerir(`lim`);
+    expect(res.body.suggestions).toHaveLength(8);
+    expect(res.body.total).toBe(10);
+    expect(res.body.suggestions.map((v) => v.cedula)).toEqual(extra.slice(0, 8));
+  });
+
+  it('pide al menos 2 caracteres, y solo para el administrador', async () => {
+    expect((await sugerir('a')).status).toBe(400);
+    expect((await request(app).get('/admin/voters/sugerencias?q=an')).status).toBe(401);
+  });
+});
+
 describe('Eliminar', () => {
   it('elimina al votante, queda en la auditoría sin la cédula, y ya no puede ingresar', async () => {
     const votacion = await abrirVotacion(`${RUN_ID}-votacion`);

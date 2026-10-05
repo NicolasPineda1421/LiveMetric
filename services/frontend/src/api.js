@@ -80,6 +80,8 @@ export const api = {
     return request('auth', `/admin/voters?${params}`, { token });
   },
   deleteVoter: (token, voterId) => request('auth', `/admin/voters/${voterId}`, { method: 'DELETE', token }),
+  // Autocompletar del buscador: hasta 8 votantes cuya cédula (o nombre) coincide.
+  suggestVoters: (token, q) => request('auth', `/admin/voters/sugerencias?q=${encodeURIComponent(q)}`, { token }),
   resetVoterPin: (token, voterId, pinExpiresAt) =>
     request('auth', `/admin/voters/${voterId}/reset-pin`, { method: 'POST', token, body: { pinExpiresAt } }),
   resetVoterTotp: (token, voterId) =>
