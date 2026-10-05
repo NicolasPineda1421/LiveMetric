@@ -966,13 +966,20 @@ function UsersTab({ session }) {
 
 /* ============================================================ Padrón */
 
-// <input type="datetime-local"> trabaja en hora local y sin segundos. Se
-// redondea hacia arriba al minuto: un PIN sugerido para el cierre de la
-// elección no vence unos segundos antes.
-function toLocalInput(fecha) {
-  const d = new Date(Math.ceil(new Date(fecha).getTime() / 60000) * 60000);
-  const dos = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}T${dos(d.getHours())}:${dos(d.getMinutes())}`;
+// Cuánto vale cada PIN desde que se genera (PIN_VIGENCIA_HORAS del
+// servicio): "24 horas", "3 días", "1 hora".
+export function duracionDelPin(horas) {
+  if (horas % 24 === 0 && horas > 24) return `${horas / 24} días`;
+  return horas === 1 ? '1 hora' : `${horas} horas`;
+}
+
+// "Vencen el 4 de oct, 18:00", o entre dos fechas si los PIN se generaron
+// en momentos distintos (una carga larga, en lotes).
+function cuandoVencen(codigos) {
+  const fechas = codigos.map((c) => new Date(c.expiresAt).getTime()).filter((t) => !Number.isNaN(t));
+  if (fechas.length === 0) return null;
+  const [primera, ultima] = [Math.min(...fechas), Math.max(...fechas)].map(formatPinExpiry);
+  return primera === ultima ? <>Vencen el <strong>{primera}</strong>.</> : <>Vencen entre el <strong>{primera}</strong> y el <strong>{ultima}</strong>.</>;
 }
 
 // Corta, para que entre en la celda del listado: "4 de oct, 18:00" (con el
@@ -1025,11 +1032,8 @@ function VotersTab({ session, onCargaEnCurso }) {
   const [newAccessCodes, setNewAccessCodes] = useState([]);
   const [resettingId, setResettingId] = useState(null);
   const [savingId, setSavingId] = useState(null);
-  // Vencimiento de los PIN que se generen: lo sugiere el servidor (el cierre
-  // de la última elección programada) y el administrador lo puede cambiar.
-  const [pinExpiry, setPinExpiry] = useState(null);
-  const [expiresAt, setExpiresAt] = useState('');
-  const [codesExpireAt, setCodesExpireAt] = useState(null);
+  // Horas que vale cada PIN desde que se genera (las fija el servicio).
+  const [pinVigenciaHoras, setPinVigenciaHoras] = useState(null);
 
   function load() {
     api.listVoters(session.token, { ...filtros, limit: VOTERS_PAGE_SIZE, offset: page * VOTERS_PAGE_SIZE })
@@ -1037,10 +1041,7 @@ function VotersTab({ session, onCargaEnCurso }) {
         setVoters(d.voters);
         setTotal(d.total ?? d.voters.length);
         setRegistered(d.registered ?? d.voters.length);
-        if (d.pinExpiry) {
-          setPinExpiry(d.pinExpiry);
-          setExpiresAt((actual) => actual || toLocalInput(d.pinExpiry.suggested));
-        }
+        if (d.pinVigenciaHoras) setPinVigenciaHoras(d.pinVigenciaHoras);
       })
       .catch((e) => setError(e.message));
   }
@@ -1053,7 +1054,8 @@ function VotersTab({ session, onCargaEnCurso }) {
   }
   useEffect(loadPlaces, [session.token]);
 
-  const pinExpiresAt = () => (expiresAt ? new Date(expiresAt).toISOString() : undefined);
+  // Cada PIN, con su vencimiento: el de la respuesta que lo generó.
+  const conVencimiento = (codigos, vence) => (codigos || []).map((c) => ({ ...c, expiresAt: vence }));
   const limpiarMensajes = () => { setError(''); setSuccess(''); setNewAccessCodes([]); };
 
   // Los filtros se aplican al cambiarlos (la búsqueda, al pulsar Buscar), y
@@ -1079,14 +1081,13 @@ function VotersTab({ session, onCargaEnCurso }) {
       votingTable: votingTable.trim(),
     }));
     try {
-      const result = await api.addVoters(session.token, nuevos, pinExpiresAt());
+      const result = await api.addVoters(session.token, nuevos);
       const agregados = `Se ${result.inserted === 1 ? 'agregó 1 votante' : `agregaron ${result.inserted} votantes`} al padrón.`;
       const repetidos = result.duplicates?.length
         ? ` Ya estaban y no se modificaron: ${result.duplicates.join(', ')}.`
         : '';
       setSuccess(agregados + repetidos);
-      setNewAccessCodes(result.accessCodes || []);
-      setCodesExpireAt(result.pinExpiresAt || null);
+      setNewAccessCodes(conVencimiento(result.accessCodes, result.pinExpiresAt));
       setFilas([filaNueva(filas[filas.length - 1])]);
       load();
       loadPlaces();
@@ -1100,11 +1101,10 @@ function VotersTab({ session, onCargaEnCurso }) {
     setResettingId(voter.id);
     limpiarMensajes();
     try {
-      const result = await api.resetVoterPin(session.token, voter.id, pinExpiresAt());
-      setNewAccessCodes([{
+      const result = await api.resetVoterPin(session.token, voter.id);
+      setNewAccessCodes(conVencimiento([{
         cedula: result.cedula, pin: result.pin, fullName: voter.full_name, pollingPlace: voter.polling_place, votingTable: voter.voting_table,
-      }]);
-      setCodesExpireAt(result.pinExpiresAt || null);
+      }], result.pinExpiresAt));
       load();
     } catch (err) {
       setError(err.message);
@@ -1167,9 +1167,9 @@ function VotersTab({ session, onCargaEnCurso }) {
 
   // La lista de PIN, para imprimirla o repartirla por mesa.
   function descargarPines() {
-    const vence = codesExpireAt ? new Date(codesExpireAt).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    const fecha = (vence) => (vence ? new Date(vence).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '');
     const marca = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
-    descargarTexto(`pin-padron-${marca}.csv`, pinesCsv(newAccessCodes, vence));
+    descargarTexto(`pin-padron-${marca}.csv`, pinesCsv(newAccessCodes.map((c) => ({ ...c, vence: fecha(c.expiresAt) }))));
   }
 
   function cambiarModo(modo) {
@@ -1180,26 +1180,12 @@ function VotersTab({ session, onCargaEnCurso }) {
 
   const totalPages = Math.max(1, Math.ceil(total / VOTERS_PAGE_SIZE));
 
-  const campoVencimiento = (
-    <div className="field-dark">
-      <label htmlFor="vencimiento-pin">Vencimiento de los PIN que se generen</label>
-      <input
-        id="vencimiento-pin"
-        type="datetime-local"
-        value={expiresAt}
-        onChange={(e) => setExpiresAt(e.target.value)}
-        min={toLocalInput(Date.now())}
-        max={pinExpiry ? toLocalInput(Date.now() + pinExpiry.maxDays * 24 * 3600 * 1000) : undefined}
-      />
-      {pinExpiry && (
-        <div className="field-hint-dark">
-          {pinExpiry.electionTitle
-            ? `Sugerido: el cierre de «${pinExpiry.electionTitle}», la última elección programada.`
-            : 'No hay elecciones programadas: se sugieren 24 horas. Conviene programar la elección antes de generar los PIN.'}{' '}
-          Vale también para «Generar PIN» y «Regenerar PIN». Vacío, se usa el sugerido. Máximo {pinExpiry.maxDays} días.
-        </div>
-      )}
-    </div>
+  // Dónde se generan PIN, cuánto valen: el tiempo corre desde que se generan.
+  const avisoVigencia = pinVigenciaHoras && (
+    <p className="field-hint-dark aviso-vigencia">
+      Cada PIN vence <strong>{duracionDelPin(pinVigenciaHoras)}</strong> después de generarlo, haya o no una elección:
+      conviene generarlos y entregarlos poco antes de votar.
+    </p>
   );
 
   return (
@@ -1216,9 +1202,10 @@ function VotersTab({ session, onCargaEnCurso }) {
         «Varios desde un archivo o Excel» carga un CSV o las celdas copiadas de una hoja de cálculo.
       </p>
       <p className="section-desc">
-        <strong>Vigencia del PIN:</strong> cada PIN vence en la fecha que elijas al generarlo y, hasta entonces,
-        sirve haya o no una votación abierta (por ejemplo, para registrar el autenticador antes del día de la
-        elección). Votar, en cambio, solo se puede dentro del horario de la elección.
+        <strong>Vigencia del PIN:</strong> cada PIN vence{pinVigenciaHoras ? ` ${duracionDelPin(pinVigenciaHoras)}` : ''} después de
+        generarlo (al agregar al votante o al regenerarlo) y, hasta entonces, sirve haya o no una votación abierta (por
+        ejemplo, para registrar el autenticador antes de votar). Votar, en cambio, solo se puede dentro del horario de la
+        elección.
       </p>
 
       <div className="panel">
@@ -1286,7 +1273,7 @@ function VotersTab({ session, onCargaEnCurso }) {
             <button type="button" className="btn btn-outline" style={{ marginBottom: '1rem' }} onClick={() => setFilas([...filas, filaNueva(filas[filas.length - 1])])}>
               + Agregar otro votante
             </button>
-            {campoVencimiento}
+            {avisoVigencia}
             <button className="btn btn-gold">{filas.length === 1 ? 'Agregar al padrón' : `Agregar ${filas.length} votantes al padrón`}</button>
           </form>
         )}
@@ -1295,12 +1282,8 @@ function VotersTab({ session, onCargaEnCurso }) {
         <div hidden={modoAlta !== 'archivo'}>
           <CargaPadron
             token={session.token}
-            pinExpiresAt={pinExpiresAt}
-            campoVencimiento={modoAlta === 'archivo' ? campoVencimiento : null}
-            onPines={(pines, vence) => {
-              setNewAccessCodes(pines);
-              setCodesExpireAt(vence || null);
-            }}
+            avisoVigencia={avisoVigencia}
+            onPines={setNewAccessCodes}
             onCambio={() => {
               load();
               loadPlaces();
@@ -1316,7 +1299,7 @@ function VotersTab({ session, onCargaEnCurso }) {
           <p className="section-desc" style={{ marginBottom: '0.8rem' }}>
             Se muestran solo esta vez: descárgalos, cópialos o imprímelos ahora para entregarlos en el puesto de votación.
             LiveMetric no vuelve a mostrar un PIN ya generado (solo puede regenerarse, invalidando el anterior).
-            {codesExpireAt && <> Vencen el <strong>{formatPinExpiry(codesExpireAt)}</strong>.</>}
+            {' '}{cuandoVencen(newAccessCodes)}
           </p>
           <div className="descarga-pines">
             <button type="button" className="btn btn-gold" onClick={descargarPines}>

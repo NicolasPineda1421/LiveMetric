@@ -4,6 +4,7 @@
 // los votantes al servicio, en lotes, con el avance en pantalla. Los PIN
 // generados se los pasa a la pestaña a medida que llegan (onPines), que los
 // muestra y permite descargarlos; onCambio, al terminar, recarga el padrón.
+// Cada PIN vence un tiempo fijo después de generarse (avisoVigencia lo dice).
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import {
@@ -36,7 +37,7 @@ const leerBytes = (archivo) => new Promise((resolver, rechazar) => {
 
 class CargaDetenida extends Error {}
 
-export default function CargaPadron({ token, pinExpiresAt, campoVencimiento, onPines, onCambio, onCargaEnCurso }) {
+export default function CargaPadron({ token, avisoVigencia, onPines, onCambio, onCargaEnCurso }) {
   const [paso, setPaso] = useState('elegir'); // elegir | revisar | cargando | listo
   const [texto, setTexto] = useState('');
   const [origen, setOrigen] = useState('');
@@ -106,10 +107,10 @@ export default function CargaPadron({ token, pinExpiresAt, campoVencimiento, onP
     setError('');
   }
 
-  async function enviarLote(votantes, vence) {
+  async function enviarLote(votantes) {
     for (let intento = 1; ; intento += 1) {
       try {
-        return await api.addVoters(token, votantes, vence, 'archivo');
+        return await api.addVoters(token, votantes, 'archivo');
       } catch (err) {
         if (err.status !== 429 || intento > REINTENTOS) throw err;
         for (let s = err.retryAfter || 60; s > 0; s -= 1) {
@@ -130,7 +131,6 @@ export default function CargaPadron({ token, pinExpiresAt, campoVencimiento, onP
     setPaso('cargando');
     const pines = [];
     const yaEstaban = [];
-    let vence = pinExpiresAt();
     let hechos = 0;
     let fallo = null;
     for (const lote of enLotes(votantes, TAMANO_LOTE)) {
@@ -138,15 +138,13 @@ export default function CargaPadron({ token, pinExpiresAt, campoVencimiento, onP
       try {
         const respuesta = await enviarLote(
           lote.map(({ cedula, fullName, pollingPlace, votingTable, assisted }) => ({ cedula, fullName, pollingPlace, votingTable, assisted })),
-          vence,
         );
-        // Todos los lotes vencen igual: en la fecha que usó el primero.
-        vence = respuesta.pinExpiresAt || vence;
-        pines.push(...(respuesta.accessCodes || []));
+        // El tiempo de cada PIN corre desde que se generó: el de su lote.
+        pines.push(...(respuesta.accessCodes || []).map((c) => ({ ...c, expiresAt: respuesta.pinExpiresAt })));
         yaEstaban.push(...(respuesta.duplicates || []));
         hechos += lote.length;
         setAvance((a) => ({ ...a, hechos }));
-        onPines([...pines], vence);
+        onPines([...pines]);
       } catch (err) {
         if (!(err instanceof CargaDetenida)) fallo = { fila: lote[0].fila, mensaje: err.message };
         break;
@@ -304,7 +302,7 @@ export default function CargaPadron({ token, pinExpiresAt, campoVencimiento, onP
                 </tbody>
               </table>
             </div>
-            {campoVencimiento}
+            {avisoVigencia}
             <p className="field-hint-dark">
               Las cédulas que ya estén en el padrón no se modifican: al final se dice cuáles eran. Un puesto o una mesa
               escritos de otra forma («colegio andino», «2» por «Mesa 2») quedan como ya figuran. A cada votante nuevo se

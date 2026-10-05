@@ -1,11 +1,13 @@
-// Vigencia del PIN del votante (VIGENCIA DEL PIN en app.js): vence en una
-// fecha, y hasta entonces sirve haya o no una votación abierta. Las
-// elecciones que hacen falta (para la fecha sugerida) se arman y se borran
-// en cada prueba.
+// Vigencia del PIN del votante (VIGENCIA DEL PIN en app.js y vigenciaPin.js):
+// vence PIN_VIGENCIA_HORAS después de generarlo (24 por defecto), y hasta
+// entonces sirve haya o no una votación abierta. Las elecciones que hacen
+// falta se arman y se borran en cada prueba.
 //
 // Los intentos rechazados van desde IPs distintas (la app confía en un
 // proxy): si no, agotarían el límite de intentos del login, que es por IP.
 const crypto = require('crypto');
+const path = require('path');
+const { spawnSync } = require('child_process');
 const bcrypt = require('bcryptjs');
 const request = require('supertest');
 const app = require('../app');
@@ -13,6 +15,7 @@ const pool = require('../db');
 const { encryptField } = require('../voterCrypto');
 const totp = require('../totp');
 const { abrirVotacion, cerrarVotacion } = require('./votacion');
+const { leerHorasDeVigencia, vencimientoDelPin } = require('../vigenciaPin');
 
 const RUN_ID = `CITEST_VIG_${Date.now()}`;
 const sufijo = Date.now().toString().slice(-7);
@@ -118,50 +121,65 @@ describe('Fecha de vencimiento', () => {
   });
 });
 
-describe('Vencimiento al generar los PIN', () => {
-  const cargar = (cedula, extra = {}) =>
-    conAdmin('post', '/admin/voters/bulk').send({
-      voters: [{ cedula, fullName: 'Votante de la carga', pollingPlace: 'Puesto CI', votingTable: 'Mesa 1' }],
-      ...extra,
-    });
+describe('El tiempo del PIN corre desde que se genera', () => {
+  const VEINTICUATRO_HORAS = 24 * HORA;
+  // A un minuto, como mucho, de "esperado".
+  const cerca = (fecha, esperado) => Math.abs(new Date(fecha).getTime() - esperado) < 60 * 1000;
+  const votante = (cedula) => ({ cedula, fullName: 'Votante de la carga', pollingPlace: 'Puesto CI', votingTable: 'Mesa 1' });
+  const cargar = (cedula, extra = {}) => conAdmin('post', '/admin/voters/bulk').send({ voters: [votante(cedula)], ...extra });
 
-  it('sin fecha pedida, vencen al cierre de la última elección programada (o en 24 h si no hay ninguna)', async () => {
-    const sinEleccion = await cargar(`CI-VIGB-${sufijo}`);
-    expect(sinEleccion.status).toBe(201);
-    expect(Math.abs(new Date(sinEleccion.body.pinExpiresAt) - (Date.now() + 24 * HORA))).toBeLessThan(60 * 1000);
-
-    await conVotacion({ status: 'scheduled', desdeMin: 60 * 24, hastaMin: 60 * 30 }, async (id) => {
-      const { rows } = await pool.query('SELECT scheduled_end FROM elections WHERE id = $1', [id]);
-      const conEleccion = await cargar(`CI-VIGC-${sufijo}`);
-      expect(Math.abs(new Date(conEleccion.body.pinExpiresAt) - rows[0].scheduled_end)).toBeLessThan(1000);
+  it('al cargar el padrón vence 24 horas después, aunque la elección programada sea más adelante; el listado dice cuánto vale', async () => {
+    await conVotacion({ status: 'scheduled', desdeMin: 60 * 24 * 3, hastaMin: 60 * 24 * 4 }, async () => {
+      const res = await cargar(`CI-VIGB-${sufijo}`);
+      expect(res.status).toBe(201);
+      expect(cerca(res.body.pinExpiresAt, Date.now() + VEINTICUATRO_HORAS)).toBe(true);
 
       const lista = await conAdmin('get', '/admin/voters?limit=200');
-      expect(lista.body.pinExpiry).toMatchObject({ electionTitle: `${RUN_ID}-eleccion`, maxDays: 90 });
-      const fila = lista.body.voters.find((v) => v.cedula === `CI-VIGC-${sufijo}`);
-      expect(new Date(fila.pin_expires_at).getTime()).toBe(new Date(conEleccion.body.pinExpiresAt).getTime());
+      expect(lista.body.pinVigenciaHoras).toBe(24);
+      expect(lista.body).not.toHaveProperty('pinExpiry');
+      const fila = lista.body.voters.find((v) => v.cedula === `CI-VIGB-${sufijo}`);
+      expect(new Date(fila.pin_expires_at).getTime()).toBe(new Date(res.body.pinExpiresAt).getTime());
     });
   });
 
-  it('respeta la fecha pedida, y rechaza una pasada, una de más de 90 días o una que no es fecha', async () => {
-    const pedida = new Date(Date.now() + 3 * 24 * HORA).toISOString();
-    const ok = await cargar(`CI-VIGD-${sufijo}`, { pinExpiresAt: pedida });
-    expect(ok.status).toBe(201);
-    expect(ok.body.pinExpiresAt).toBe(pedida);
-
-    for (const mala of [new Date(Date.now() - HORA).toISOString(), new Date(Date.now() + 91 * 24 * HORA).toISOString(), 'mañana', 12345]) {
-      const res = await cargar(`CI-VIGE-${sufijo}`, { pinExpiresAt: mala });
-      expect(res.status).toBe(400);
-      expect(res.body.error).toMatch(/fecha futura, de no más de 90 días/);
-    }
+  it('una fecha pedida por la API ya no cambia nada', async () => {
+    const res = await cargar(`CI-VIGC-${sufijo}`, { pinExpiresAt: new Date(Date.now() + 60 * VEINTICUATRO_HORAS).toISOString() });
+    expect(res.status).toBe(201);
+    expect(cerca(res.body.pinExpiresAt, Date.now() + VEINTICUATRO_HORAS)).toBe(true);
   });
 
-  it('regenerar el PIN le pone el vencimiento pedido', async () => {
+  it('agregar desde el panel y regenerar el PIN, igual: vence 24 horas después de generarlo', async () => {
+    const agregado = await conAdmin('post', '/admin/voters').send({ voters: [votante(`CI-VIGD-${sufijo}`)] });
+    expect(agregado.status).toBe(201);
+    expect(cerca(agregado.body.pinExpiresAt, Date.now() + VEINTICUATRO_HORAS)).toBe(true);
+
+    // Al votante de estas pruebas le quedaba un minuto: el PIN nuevo, 24 horas.
+    await venceEn("now() + interval '1 minute'");
     const { rows } = await pool.query('SELECT id FROM voters WHERE cedula = $1', [encryptField(CEDULA)]);
-    const pedida = new Date(Date.now() + 2 * HORA).toISOString();
-    const res = await conAdmin('post', `/admin/voters/${rows[0].id}/reset-pin`).send({ pinExpiresAt: pedida });
+    const res = await conAdmin('post', `/admin/voters/${rows[0].id}/reset-pin`).send({ pinExpiresAt: '2020-01-01T00:00:00Z' });
     expect(res.status).toBe(200);
-    expect(res.body.pinExpiresAt).toBe(pedida);
-    const mala = await conAdmin('post', `/admin/voters/${rows[0].id}/reset-pin`).send({ pinExpiresAt: '2020-01-01T00:00:00Z' });
-    expect(mala.status).toBe(400);
+    expect(cerca(res.body.pinExpiresAt, Date.now() + VEINTICUATRO_HORAS)).toBe(true);
+  });
+});
+
+describe('PIN_VIGENCIA_HORAS', () => {
+  it('24 si no se define; si no, un entero de horas, de 1 a 2160 (90 días)', () => {
+    expect(leerHorasDeVigencia(undefined)).toBe(24);
+    expect(leerHorasDeVigencia(' ')).toBe(24);
+    expect(leerHorasDeVigencia('72')).toBe(72);
+    expect(leerHorasDeVigencia('2160')).toBe(2160);
+    for (const malo of ['0', '-5', '1.5', 'veinte', '2161']) expect(leerHorasDeVigencia(malo)).toBeNull();
+    expect(vencimientoDelPin(72, 0).getTime()).toBe(72 * HORA);
+  });
+
+  it('con un valor que no sirve, el servicio no arranca y dice por qué', () => {
+    const arranque = spawnSync(process.execPath, ['-e', "require('./src/app')"], {
+      cwd: path.join(__dirname, '..', '..'),
+      env: { ...process.env, PIN_VIGENCIA_HORAS: 'veinte' },
+      encoding: 'utf8',
+      timeout: 20000,
+    });
+    expect(arranque.status).toBe(1);
+    expect(arranque.stderr).toContain('FATAL: PIN_VIGENCIA_HORAS debe ser un número entero de horas, de 1 a 2160 (90 días).');
   });
 });

@@ -65,6 +65,7 @@ async function pegar(usuario, lineas) {
 describe('Revisar antes de cargar', () => {
   it('las celdas pegadas: muestra qué se carga y qué filas corregir, y carga solo las que sirven', async () => {
     api.addVoters.mockImplementation((_token, votantes) => Promise.resolve(respuesta(votantes)));
+    api.listVoters.mockResolvedValue({ voters: [], total: 0, registered: 0, pinVigenciaHoras: 24 });
     const usuario = await abrirCarga();
     await pegar(usuario, [
       fila('Cédula', 'Nombre', 'Puesto', 'Mesa', 'Voto asistido'),
@@ -74,6 +75,7 @@ describe('Revisar antes de cargar', () => {
     ]);
 
     expect(screen.getByText('2 votantes listos')).toBeInTheDocument();
+    expect(screen.getByText(/después de generarlo, haya o no una elección/).closest('.carga-padron')).not.toBeNull();
     expect(screen.getByText(/1 con voto asistido/)).toBeInTheDocument();
     expect(screen.getByText('1 fila tiene errores: no se cargan')).toBeInTheDocument();
     const errores = screen.getByText('Filas con errores').closest('details');
@@ -83,7 +85,7 @@ describe('Revisar antes de cargar', () => {
     expect(api.addVoters).toHaveBeenCalledWith('jwt-admin', [
       { cedula: '1000000001', fullName: 'Ana Gómez', pollingPlace: 'Sede Norte', votingTable: 'Mesa 1', assisted: false },
       { cedula: '1000000003', fullName: 'Eva Ruiz', pollingPlace: 'Sede Sur', votingTable: 'Mesa 2', assisted: true },
-    ], undefined, 'archivo');
+    ], 'archivo');
     expect(await screen.findByText('Se agregaron 2 votantes al padrón. 1 fila con errores no se cargó.')).toBeInTheDocument();
     const pines = screen.getByText('PIN de acceso generados').closest('.panel');
     expect(within(pines).getByText('Eva Ruiz').closest('tr')).toHaveTextContent('Sede Sur — Mesa 2100001');
@@ -123,25 +125,29 @@ describe('Cargar en lotes', () => {
   // n votantes de la mesa 1, sin encabezados: la fila i es la del votante i.
   const votantes = (n) => Array.from({ length: n }, (_, i) => fila(`${2000000000 + i}`, `Votante ${i}`, 'Sede', 'Mesa 1'));
 
-  it('de a 100, todos con el vencimiento que usó el primero; suma los repetidos y deja descargar todos los PIN', async () => {
+  it('de a 100, cada PIN con el vencimiento de su lote; suma los repetidos y deja descargar todos los PIN', async () => {
     api.addVoters
       .mockImplementationOnce((_t, lote) => Promise.resolve(respuesta(lote)))
-      .mockImplementationOnce((_t, lote) => Promise.resolve(respuesta(lote.slice(2), { duplicates: lote.slice(0, 2).map((v) => v.cedula) })));
+      .mockImplementationOnce((_t, lote) => Promise.resolve(respuesta(lote.slice(2), {
+        duplicates: lote.slice(0, 2).map((v) => v.cedula),
+        pinExpiresAt: '2026-10-20T23:05:00.000Z',
+      })));
     const usuario = await abrirCarga();
     await pegar(usuario, votantes(150));
     await usuario.click(screen.getByRole('button', { name: 'Cargar 150 votantes al padrón' }));
 
     expect(await screen.findByText('Se agregaron 148 votantes al padrón. 2 ya estaban y no se modificaron.')).toBeInTheDocument();
     expect(api.addVoters.mock.calls.map((c) => c[1].length)).toEqual([100, 50]);
-    expect(api.addVoters.mock.calls[0][2]).toBeUndefined();
-    expect(api.addVoters.mock.calls[1][2]).toBe('2026-10-20T23:00:00.000Z');
+    expect(api.addVoters.mock.calls.map((c) => c[2])).toEqual(['archivo', 'archivo']);
+    expect(screen.getByText('PIN de acceso generados').closest('.panel')).toHaveTextContent(/Vencen entre el .+ y el /);
     expect(screen.getByText('Y 98 más: están todos en el archivo para descargar.')).toBeInTheDocument();
 
     await usuario.click(screen.getByRole('button', { name: 'Descargar los 148 PIN (CSV)' }));
     expect(descargas[0].nombre).toMatch(/^pin-padron-[\d-]+\.csv$/);
     const lineas = (await textoDe(descargas[0].blob)).trim().split('\r\n');
     expect(lineas).toHaveLength(149);
-    expect(lineas[1]).toMatch(/^2000000000;Votante 0;Sede;Mesa 1;100000;/);
+    expect(lineas[1]).toMatch(/^2000000000;Votante 0;Sede;Mesa 1;100000;.+/);
+    expect(lineas[1].split(';')[5]).not.toBe(lineas[148].split(';')[5]); // el último lote vence 5 minutos después
   });
 
   it('si un lote falla, dice desde qué fila, y los PIN de los lotes ya cargados siguen ahí', async () => {

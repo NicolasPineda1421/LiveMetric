@@ -3,7 +3,9 @@
 -- El PIN que entrega el administrador vence en una fecha que se elige al
 -- generarlo (por defecto, el cierre de la última elección programada). Así
 -- uno viejo no sirve en elecciones futuras. (Esta versión además lo limitaba
--- a la ventana de la votación; esa regla se quitó: ver la migración 008.)
+-- a la ventana de la votación; esa regla se quitó: ver la migración 008.
+-- Hoy no hay fecha para elegir: vence PIN_VIGENCIA_HORAS después de
+-- generarlo, ver services/auth/src/vigenciaPin.js.)
 --
 -- Los PIN generados antes de esta migración quedan sin fecha (NULL); la
 -- migración 008 se la pone.

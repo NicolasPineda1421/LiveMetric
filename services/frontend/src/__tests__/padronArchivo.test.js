@@ -107,7 +107,7 @@ describe('Archivos para descargar', () => {
     expect(celdaSegura('=HYPERLINK("http://x")')).toBe('\'=HYPERLINK("http://x")');
     expect(celdaSegura('+57')).toBe("'+57");
     expect(celdaSegura('Ana Gómez')).toBe('Ana Gómez');
-    const texto = pinesCsv([{ cedula: '1000000001', pin: '012345', fullName: '@Ana; "la jefa"', pollingPlace: 'Sede', votingTable: 'Mesa 1' }], '5 oct, 18:00');
+    const texto = pinesCsv([{ cedula: '1000000001', pin: '012345', fullName: '@Ana; "la jefa"', pollingPlace: 'Sede', votingTable: 'Mesa 1', vence: '5 oct, 18:00' }]);
     expect(texto.startsWith('\uFEFFCédula;Nombre;Puesto de votación;Mesa;PIN;Vence\r\n')).toBe(true);
     expect(texto).toContain('1000000001;"\'@Ana; ""la jefa""";Sede;Mesa 1;012345;5 oct, 18:00');
   });

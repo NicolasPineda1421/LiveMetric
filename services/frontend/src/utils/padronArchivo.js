@@ -264,8 +264,9 @@ export const plantillaCsv = () => csv([
   ['1000000002', 'Luis Alberto Peña', 'Colegio Central', 'Mesa 2', 'sí'],
 ]);
 
-// Los PIN recién generados, para imprimirlos o repartirlos por mesa.
-export const pinesCsv = (codigos, vence) => csv([
+// Los PIN recién generados, para imprimirlos o repartirlos por mesa; "vence"
+// es la fecha de cada uno, ya escrita como se quiere mostrar.
+export const pinesCsv = (codigos) => csv([
   ['Cédula', 'Nombre', 'Puesto de votación', 'Mesa', 'PIN', 'Vence'],
-  ...codigos.map((c) => [c.cedula, c.fullName || '', c.pollingPlace || '', c.votingTable || '', c.pin, vence || '']),
+  ...codigos.map((c) => [c.cedula, c.fullName || '', c.pollingPlace || '', c.votingTable || '', c.pin, c.vence || '']),
 ]);

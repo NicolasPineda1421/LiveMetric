@@ -6,7 +6,8 @@
 -- de la votación, valdrían para siempre. Reciben la misma fecha que el panel
 -- propone al generar uno: el cierre de la última elección programada o
 -- abierta, o, si no hay ninguna, 24 horas desde que corre esta migración;
--- nunca más de 90 días.
+-- nunca más de 90 días. (Hoy el panel ya no propone una fecha: cada PIN
+-- vence PIN_VIGENCIA_HORAS después de generarlo.)
 --
 -- Es seguro re-ejecutarlo: los PIN nuevos siempre tienen fecha, así que
 -- después de la primera vez no queda ninguno que cambiar.

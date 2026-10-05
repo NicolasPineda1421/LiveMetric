@@ -1,6 +1,6 @@
-// Elecciones a medida para las pruebas de auth (por ejemplo, la fecha que se
-// propone para el vencimiento del PIN es el cierre de la última elección
-// programada): se abren con esto y se borran al terminar.
+// Elecciones a medida para las pruebas de auth (por ejemplo, para ver que el
+// PIN sirve haya o no una votación, y que su vencimiento no depende de
+// ella): se abren con esto y se borran al terminar.
 const pool = require('../db');
 
 async function abrirVotacion(titulo, { desdeMin = -60, hastaMin = 120, status = 'active' } = {}) {

@@ -60,6 +60,12 @@ variable "voter_jwt_expires_in" {
   default = "10m"
 }
 
+# Horas que vale cada PIN de votante desde que se genera (1 a 2160).
+variable "pin_vigencia_horas" {
+  type    = number
+  default = 24
+}
+
 variable "voter_id_salt" {
   type      = string
   sensitive = true
@@ -198,6 +204,7 @@ resource "docker_container" "auth" {
     "JWT_SECRET=${var.jwt_secret}",
     "JWT_EXPIRES_IN=${var.jwt_expires_in}",
     "VOTER_JWT_EXPIRES_IN=${var.voter_jwt_expires_in}",
+    "PIN_VIGENCIA_HORAS=${var.pin_vigencia_horas}",
     "VOTER_ID_SALT=${var.voter_id_salt}",
     "VOTERS_ENCRYPTION_KEY=${var.voters_encryption_key}",
     "FRONTEND_ORIGIN=${var.frontend_origin}",

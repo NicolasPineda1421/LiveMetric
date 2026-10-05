@@ -76,10 +76,10 @@ export const api = {
   resetUserTotp: (token, userId) =>
     request('auth', `/admin/users/${userId}/reset-totp`, { method: 'POST', token }),
   // Agrega votantes (hasta 200 por vez): nunca modifica a uno que ya está.
-  // pinExpiresAt: vencimiento (ISO) de los PIN que se generen; sin él, el sugerido.
+  // Cada PIN vence un tiempo fijo después de generarse (pinExpiresAt, en la respuesta).
   // origen: 'archivo' en la carga masiva, para la auditoría.
-  addVoters: (token, voters, pinExpiresAt, origen) =>
-    request('auth', '/admin/voters', { method: 'POST', token, body: { voters, pinExpiresAt, origen } }),
+  addVoters: (token, voters, origen) =>
+    request('auth', '/admin/voters', { method: 'POST', token, body: { voters, origen } }),
   // filtros: { q, pollingPlace, votingTable, pin, totp, assisted, limit, offset }; los vacíos no se mandan.
   listVoters: (token, filtros = {}) => {
     const params = new URLSearchParams(Object.entries(filtros).filter(([, valor]) => valor !== '' && valor !== undefined && valor !== null));
@@ -88,8 +88,8 @@ export const api = {
   deleteVoter: (token, voterId) => request('auth', `/admin/voters/${voterId}`, { method: 'DELETE', token }),
   // Autocompletar del buscador: hasta 8 votantes cuya cédula (o nombre) coincide.
   suggestVoters: (token, q) => request('auth', `/admin/voters/sugerencias?q=${encodeURIComponent(q)}`, { token }),
-  resetVoterPin: (token, voterId, pinExpiresAt) =>
-    request('auth', `/admin/voters/${voterId}/reset-pin`, { method: 'POST', token, body: { pinExpiresAt } }),
+  // Un PIN nuevo, que vence un tiempo fijo después de generarse.
+  resetVoterPin: (token, voterId) => request('auth', `/admin/voters/${voterId}/reset-pin`, { method: 'POST', token }),
   resetVoterTotp: (token, voterId) =>
     request('auth', `/admin/voters/${voterId}/reset-totp`, { method: 'POST', token }),
   setVoterAssisted: (token, voterId, assisted) =>

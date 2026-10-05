@@ -7,6 +7,7 @@ postgres_password = "CAMBIA_ESTE_VALOR_LOCALMENTE"
 jwt_secret        = "CAMBIA_ESTE_VALOR_LOCALMENTE"
 jwt_expires_in    = "1h"
 voter_jwt_expires_in = "10m"
+pin_vigencia_horas = 24
 voter_id_salt     = "CAMBIA_ESTE_VALOR_LOCALMENTE"
 internal_service_token = "CAMBIA_ESTE_VALOR_LOCALMENTE"
 # Clave AES-256 del padron: exactamente 32 bytes en base64 (openssl rand -base64 32).

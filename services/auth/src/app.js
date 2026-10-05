@@ -13,6 +13,7 @@ const { requireAdmin, requireRole } = require('./middleware/auth');
 const { encryptField, decryptField } = require('./voterCrypto');
 const totp = require('./totp');
 const { evaluarContrasena, mensajeContrasenaDebil, MINIMO_CONTRASENA, MAXIMO_CONTRASENA } = require('./politicaContrasena');
+const { leerHorasDeVigencia, vencimientoDelPin, VIGENCIA_MAXIMA_HORAS } = require('./vigenciaPin');
 const { juradoCubre, lugaresDelPadron, ubicarEnPadron, lugarCanonico, normalizarPuesto, mismoPuesto, mismaMesa } = require('./lugares');
 
 const app = express();
@@ -105,54 +106,23 @@ function generateAccessCode() {
  * VIGENCIA DEL PIN (migraciones 007 y 008)
  * ============================================================
  *
- * El PIN que entrega el administrador vence en la fecha que se elige al
- * generarlo (por defecto, el cierre de la última elección programada, o 24
- * horas si no hay ninguna), nunca a más de 90 días. Hasta entonces sirve
- * haya o no una votación abierta: el votante puede, por ejemplo, registrar
- * su autenticador antes del día de la elección. Votar sí se puede solo
- * dentro del horario de la elección (eso lo controla voting-service). Así un
- * PIN viejo no sirve en elecciones futuras. Se comprueba en el primer paso
- * del ingreso y otra vez en el segundo.
+ * El PIN que entrega el administrador vence PIN_VIGENCIA_HORAS después de
+ * generarlo (24, si el .env no dice otra cosa; ver vigenciaPin.js): el
+ * tiempo corre desde que se genera, sin importar cuándo es la elección.
+ * Hasta entonces sirve haya o no una votación abierta: el votante puede,
+ * por ejemplo, registrar su autenticador antes de votar. Votar sí se puede
+ * solo dentro del horario de la elección (eso lo controla voting-service).
+ * Así un PIN viejo no sirve en elecciones futuras. Se comprueba en el
+ * primer paso del ingreso y otra vez en el segundo.
  */
-const PIN_VIGENCIA_MAXIMA_DIAS = 90;
-const PIN_VIGENCIA_SIN_ELECCION_HORAS = 24;
-const HORA_MS = 60 * 60 * 1000;
+const PIN_VIGENCIA_HORAS = leerHorasDeVigencia(process.env.PIN_VIGENCIA_HORAS);
+if (PIN_VIGENCIA_HORAS === null) {
+  console.error(`FATAL: PIN_VIGENCIA_HORAS debe ser un número entero de horas, de 1 a ${VIGENCIA_MAXIMA_HORAS} (90 días).`);
+  process.exit(1);
+}
+const vencimientoDeUnPinNuevo = () => vencimientoDelPin(PIN_VIGENCIA_HORAS);
 
 const PIN_EXPIRED = { error: 'Tu PIN venció. Pide uno nuevo al encargado de tu puesto de votación.' };
-const PIN_EXPIRY_INVALID = {
-  error: `El vencimiento del PIN debe ser una fecha futura, de no más de ${PIN_VIGENCIA_MAXIMA_DIAS} días.`,
-};
-
-// La fecha que se propone al generar PIN: el cierre de la última elección
-// programada o abierta, para que el PIN sirva en ellas y venza al terminar.
-// Sin ninguna, 24 horas. Nunca más allá del máximo.
-async function suggestedPinExpiry() {
-  const result = await pool.query(
-    `SELECT title, scheduled_end FROM elections
-      WHERE status IN ('scheduled', 'active') AND scheduled_end > now()
-      ORDER BY scheduled_end DESC LIMIT 1`
-  );
-  const maximo = Date.now() + PIN_VIGENCIA_MAXIMA_DIAS * 24 * HORA_MS;
-  const eleccion = result.rows[0];
-  if (!eleccion) {
-    return { suggested: new Date(Date.now() + PIN_VIGENCIA_SIN_ELECCION_HORAS * HORA_MS), electionTitle: null };
-  }
-  return { suggested: new Date(Math.min(new Date(eleccion.scheduled_end).getTime(), maximo)), electionTitle: eleccion.title };
-}
-
-// El vencimiento pedido (o el sugerido, si no se pidió ninguno); null si el
-// pedido no es una fecha futura dentro del máximo.
-async function resolvePinExpiry(requested) {
-  if (requested === undefined || requested === null || requested === '') {
-    return (await suggestedPinExpiry()).suggested;
-  }
-  if (typeof requested !== 'string') return null;
-  const fecha = new Date(requested);
-  const ahora = Date.now();
-  if (Number.isNaN(fecha.getTime()) || fecha.getTime() <= ahora) return null;
-  if (fecha.getTime() > ahora + PIN_VIGENCIA_MAXIMA_DIAS * 24 * HORA_MS) return null;
-  return fecha;
-}
 
 app.get('/health', (_req, res) => res.status(200).json({ status: 'ok', service: 'auth' }));
 
@@ -888,14 +858,13 @@ app.post(
     }
 
     const { voters } = req.body;
-    // Todos los PIN de esta carga vencen en la misma fecha (ver VIGENCIA DEL PIN).
-    const pinExpiresAt = await resolvePinExpiry(req.body.pinExpiresAt);
-    if (!pinExpiresAt) return res.status(400).json(PIN_EXPIRY_INVALID);
 
     // Hashing de bcrypt es intensivo en CPU: se hace en paralelo ANTES de la
     // transacción (no dentro del loop secuencial), para que cargar cientos
     // de votantes no se vuelva lento innecesariamente.
+    // El tiempo del PIN corre desde que se genera (ver VIGENCIA DEL PIN).
     const pins = voters.map(() => generateAccessCode());
+    const pinExpiresAt = vencimientoDeUnPinNuevo();
     const pinHashes = await Promise.all(pins.map((pin) => bcrypt.hash(pin, 10)));
 
     const client = await pool.connect();
@@ -963,7 +932,7 @@ app.post(
 // "nunca tuvo uno" (padrón cargado antes de este cambio) como "perdió o
 // filtró su PIN". El PIN anterior queda inválido de inmediato (se
 // sobrescribe el hash) y el nuevo se devuelve en texto plano UNA sola vez.
-// El PIN nuevo trae su propio vencimiento (el pedido, o el sugerido).
+// El PIN nuevo vence PIN_VIGENCIA_HORAS después de generarlo.
 app.post(
   '/admin/voters/:id/reset-pin',
   requireAdmin,
@@ -976,9 +945,8 @@ app.post(
     }
 
     try {
-      const pinExpiresAt = await resolvePinExpiry(req.body?.pinExpiresAt);
-      if (!pinExpiresAt) return res.status(400).json(PIN_EXPIRY_INVALID);
       const pin = generateAccessCode();
+      const pinExpiresAt = vencimientoDeUnPinNuevo();
       const pinHash = await bcrypt.hash(pin, 10);
       const updated = await pool.query(
         'UPDATE voters SET access_code_hash = $1, access_code_expires_at = $2 WHERE id = $3 RETURNING id, cedula',
@@ -1070,15 +1038,14 @@ app.get(
         .filter((v) => !totpFilter || v.has_totp === (totpFilter === 'registrado'))
         .filter((v) => !assisted || v.assisted === (assisted === 'true'));
       const voters = filtered.slice(offset, offset + limit).map(({ pin_expired: _vencido, ...v }) => v);
-      // Lo que el panel propone como vencimiento al generar PIN, y el máximo.
-      const { suggested, electionTitle } = await suggestedPinExpiry();
       return res.status(200).json({
         limit,
         offset,
         total: filtered.length,
         registered: result.rows.length,
         voters,
-        pinExpiry: { suggested, electionTitle, maxDays: PIN_VIGENCIA_MAXIMA_DIAS },
+        // Para que el panel diga cuánto vale cada PIN que se genere.
+        pinVigenciaHoras: PIN_VIGENCIA_HORAS,
       });
     } catch (err) {
       console.error('Error en GET /admin/voters:', err.message);
@@ -1189,11 +1156,9 @@ app.post(
     const repetida = cedulas.find((c, i) => cedulas.indexOf(c) !== i);
     if (repetida) return res.status(400).json({ error: `La cédula ${repetida} está dos veces en el formulario.` });
 
-    const pinExpiresAt = await resolvePinExpiry(req.body.pinExpiresAt);
-    if (!pinExpiresAt) return res.status(400).json(PIN_EXPIRY_INVALID);
-
     const lugares = await lugaresDelPadron(pool);
     const pins = voters.map(() => generateAccessCode());
+    const pinExpiresAt = vencimientoDeUnPinNuevo();
     const pinHashes = await Promise.all(pins.map((pin) => bcrypt.hash(pin, 10)));
 
     const client = await pool.connect();

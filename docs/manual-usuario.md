@@ -144,9 +144,9 @@ números de cédula.
 ![Captura 04: Un intento fallido: el mensaje es el mismo si la cédula no existe o si el PIN es incorrecto](img/04-login-fallido.png)
 *Captura 04. Un intento fallido: el mensaje es el mismo si la cédula no existe o si el PIN es incorrecto.*
 
-**El PIN tiene fecha de vencimiento.** Hasta esa fecha se puede ingresar haya o no una
-votación abierta: por ejemplo, para registrar el autenticador antes del día de la
-elección. Votar, en cambio, solo se puede dentro del horario de la elección. Si el PIN ya
+**El PIN tiene fecha de vencimiento:** vale 24 horas desde que el administrador lo genera.
+Hasta entonces se puede ingresar haya o no una votación abierta: por ejemplo, para
+registrar el autenticador antes de votar. Votar, en cambio, solo se puede dentro del horario de la elección. Si el PIN ya
 venció, el sistema lo dice (*"Tu PIN venció"*) y hay que pedir uno nuevo al encargado del
 puesto. Ese aviso aparece solo con el PIN correcto, así que no le da pistas a quien prueba
 PIN al azar.
@@ -250,14 +250,15 @@ Cada votante nuevo recibe un **PIN de acceso** al agregarlo, que aparece en la s
 (CSV)** los baja en un archivo para imprimirlos o repartirlos por mesa (ver la advertencia
 de la carga desde un archivo, más abajo).
 
-**Vencimiento de los PIN.** Antes de cargar, revise el campo **Vencimiento de los PIN que
-se generen**. El sistema propone el **cierre de la última elección programada**, para que
-el PIN sirva en ella y venza al terminar; si todavía no hay ninguna, propone 24 horas. Por
-eso conviene **programar la elección antes de generar los PIN**. Se puede elegir otra
-fecha, de hasta 90 días. La misma fecha se usa al generar o regenerar el PIN de un votante
-desde el listado.
+**Vencimiento de los PIN.** Cada PIN vence **24 horas después de generarlo**, al agregar
+al votante o al regenerar su PIN: el tiempo empieza a correr en ese momento, sin importar
+cuándo sea la elección. No hay fecha para elegir; el panel dice cuánto vale cada PIN. Por
+eso conviene **generar y entregar los PIN poco antes de la elección**. Si alguno vence
+antes de que la persona vote, se le regenera desde el listado. (Quien administra la
+instalación puede cambiar esas 24 horas con `PIN_VIGENCIA_HORAS` en el `.env`, de 1 hora a
+90 días.)
 
-Hasta esa fecha, el PIN sirve haya o no una votación abierta; votar solo se puede dentro
+Hasta que vence, el PIN sirve haya o no una votación abierta; votar solo se puede dentro
 del horario de la elección.
 
 > ⚠️ **Importante:** el PIN se muestra **una sola vez**, en el momento de generarlo.
@@ -268,7 +269,7 @@ del horario de la elección.
 Si un votante pierde su PIN, o se le venció, el administrador se lo regenera desde el
 listado del padrón. La columna **PIN** dice hasta cuándo vale cada uno, si ya está
 *Vencido*. (Los generados antes de que existiera el vencimiento recibieron uno al
-actualizar: el cierre de la última elección programada, o 24 horas.)
+actualizar.)
 
 **Autenticador y voto asistido.** El listado muestra, para cada votante:
 
@@ -280,8 +281,8 @@ actualizar: el cierre de la última elección programada, o 24 horas.)
 - **Restablecer autenticador**: para quien cambió o perdió el celular. En su próximo
   ingreso, con su cédula y su PIN, lo registra de nuevo.
 
-![Captura 11: Agregar votantes con el formulario: una fila por votante (cédula, nombre, puesto y mesa) y el vencimiento de los PIN, que propone el cierre de la elección programada](img/11-padron-carga.png)
-*Captura 11. Agregar votantes con el formulario: una fila por votante (cédula, nombre, puesto y mesa) y el vencimiento de los PIN, que propone el cierre de la elección programada. El tercero escribió "puesto central" y "1": se guardan como "Puesto Central" y "Mesa 1".*
+![Captura 11: Agregar votantes con el formulario: una fila por votante (cédula, nombre, puesto y mesa) y, debajo, cuánto vale cada PIN desde que se genera](img/11-padron-carga.png)
+*Captura 11. Agregar votantes con el formulario: una fila por votante (cédula, nombre, puesto y mesa) y, debajo, cuánto vale cada PIN: 24 horas desde que se genera. El tercero escribió "puesto central" y "1": se guardan como "Puesto Central" y "Mesa 1".*
 
 ![Captura 12: Los PIN generados, que se muestran una sola vez, con el botón para descargarlos. En esta captura están difuminados: no deben quedar credenciales en la documentación](img/12-padron-pines.png)
 *Captura 12. Los PIN generados, que se muestran una sola vez, con su fecha de vencimiento y el botón para descargarlos. Marta Ríos quedó en "Puesto Central — Mesa 1". En esta captura los PIN están difuminados: no deben quedar credenciales en la documentación.*
@@ -312,8 +313,8 @@ de personas, **Varios desde un archivo o Excel** los carga desde una hoja de cá
    cédulas con puntos de miles ("1.000.000.001") se limpian solas. Una cédula que Excel
    convirtió en notación científica ("1,03141E+09") aparece como error: hay que darle
    formato de *Texto* a esa columna y volver a guardar.
-4. Revise el **Vencimiento de los PIN que se generen** y pulse **Cargar N votantes al
-   padrón**. Las filas con errores no se cargan: corríjalas en la hoja y vuelva a cargar el
+4. Pulse **Cargar N votantes al padrón**. Cada PIN vence 24 horas después de generarse,
+   así que conviene cargar poco antes de la elección. Las filas con errores no se cargan: corríjalas en la hoja y vuelva a cargar el
    archivo.
 5. La carga va en lotes de 100, con una barra de avance; generar el PIN de cada votante
    toma un momento (unos 25 segundos cada 300 votantes). Mientras carga, no cierre ni
@@ -586,7 +587,7 @@ Resumen del recorrido de punta a punta:
 |---|---|---|---|
 | 1 | Crear la plantilla con los candidatos | Administrador | Plantillas |
 | 2 | Programar la elección con su ventana horaria | Administrador | Elecciones |
-| 3 | Agregar a los votantes al padrón, uno por uno o desde un archivo o Excel (se generan sus PIN, que vencen al cierre de la elección); entregarlos y marcar el voto asistido de quien lo necesite | Administrador | Padrón |
+| 3 | Agregar a los votantes al padrón, uno por uno o desde un archivo o Excel (se generan sus PIN, que valen 24 horas: conviene hacerlo poco antes de la elección); entregarlos y marcar el voto asistido de quien lo necesite | Administrador | Padrón |
 | 4 | Crear los jurados de las mesas con votantes asistidos | Administrador | Usuarios |
 | 5 | **Apertura automática** al llegar la hora | Sistema | — |
 | 6 | Ingresar (PIN y código de su autenticador, o autorización del jurado) y votar | Votantes / Jurados | Vista de votante |
@@ -611,7 +612,7 @@ No. Una vez confirmado, el voto es definitivo.
 Pídale al administrador que le genere uno nuevo desde la pestaña Padrón.
 
 **Me salió "Tu PIN venció".**
-Cada PIN tiene fecha de vencimiento. Pida uno nuevo al encargado del puesto.
+Cada PIN vale 24 horas desde que se genera. Pida uno nuevo al encargado del puesto.
 
 **Cambié o perdí el celular con el autenticador.**
 Avise al encargado del puesto: el administrador restablece su autenticador y usted lo
