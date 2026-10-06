@@ -160,10 +160,10 @@ dejar la sesión guardada en el navegador sería un riesgo.
 
 ## 4. Guía del Administrador
 
-El panel de administración tiene nueve pestañas.
+El panel de administración tiene diez pestañas.
 
-![Captura 05: El panel del administrador, con sus nueve pestañas y Resumen activa](img/05-panel-admin.png)
-*Captura 05. El panel del administrador, con sus nueve pestañas y Resumen activa.*
+![Captura 05: El panel del administrador, con sus diez pestañas y Resumen activa](img/05-panel-admin.png)
+*Captura 05. El panel del administrador, con sus diez pestañas y Resumen activa.*
 
 ### 4.1 Resumen
 
@@ -232,13 +232,29 @@ formulario:
 1. Pestaña **Padrón**, sección **Agregar votantes**, **Uno por uno**.
 2. Complete los datos del votante: **Cédula**, **Nombre completo**, **Puesto de votación**
    y **Mesa**. El puesto y la mesa sugieren los que ya están en el padrón.
-3. Para agregar varios de una vez, **+ Agregar otro votante**: la fila nueva copia el
-   puesto y la mesa de la anterior. **Quitar** saca una fila del formulario.
-4. Botón **Agregar al padrón** (o **Agregar N votantes al padrón**).
+3. Debajo aparece la **ubicación del puesto**. Si el puesto ya está registrado, solo se
+   muestra ("Ubicación del puesto: Chía (Cundinamarca), zona rural"). Si es nuevo (o
+   todavía no tiene ubicación), el formulario la pide: **Departamento** y **Municipio** de
+   las listas oficiales del DANE, **Localidad** (opcional; en Bogotá, una de sus 20
+   localidades) y **Zona** (*Urbana* o *Rural*). El país es Colombia.
+4. Para agregar varios de una vez, **+ Agregar otro votante**: la fila nueva copia el
+   puesto, la mesa y la ubicación de la anterior. Si varios votantes son del mismo puesto
+   nuevo, la ubicación se pide solo en el primero ("la del votante 1"). **Quitar** saca
+   una fila del formulario.
+5. Botón **Agregar al padrón** (o **Agregar N votantes al padrón**).
 
 Si una cédula ya está en el padrón, no se modifica: el sistema avisa *"Ya estaban y no se
 modificaron"* y agrega el resto. Si el puesto o la mesa ya figuran escritos de otra forma
 ("puesto central", "1"), se guardan como figuran ("Puesto Central", "Mesa 1").
+
+**Cada puesto tiene su ubicación.** Todo puesto de votación necesita su país, su
+departamento, su municipio, su zona (urbana o rural) y, si se quiere, su localidad (o
+comuna, o corregimiento). Se registra con el primer votante del puesto y después se ve y
+se corrige en la pestaña **Puestos** (sección 4.5). Un puesto que ya tiene ubicación no
+la cambia al agregar votantes: si alguien escribe otra, el sistema lo rechaza, porque
+podría ser otro puesto con el mismo nombre. **El nombre identifica al puesto en todo el
+país**, así que dos puestos de municipios distintos necesitan nombres distintos (por
+ejemplo, "Colegio Central - Tunja" y "Colegio Central - Duitama").
 
 **Los datos de un votante no se editan.** Si algo está mal, se elimina y se vuelve a
 agregar (ver más abajo).
@@ -281,8 +297,8 @@ actualizar.)
 - **Restablecer autenticador**: para quien cambió o perdió el celular. En su próximo
   ingreso, con su cédula y su PIN, lo registra de nuevo.
 
-![Captura 11: Agregar votantes con el formulario: una fila por votante (cédula, nombre, puesto y mesa) y, debajo, cuánto vale cada PIN desde que se genera](img/11-padron-carga.png)
-*Captura 11. Agregar votantes con el formulario: una fila por votante (cédula, nombre, puesto y mesa) y, debajo, cuánto vale cada PIN: 24 horas desde que se genera. El tercero escribió "puesto central" y "1": se guardan como "Puesto Central" y "Mesa 1".*
+![Captura 11: Agregar votantes con el formulario: una fila por votante (cédula, nombre, puesto y mesa), la ubicación de cada puesto y, debajo, cuánto vale cada PIN desde que se genera](img/11-padron-carga.png)
+*Captura 11. Agregar votantes con el formulario: una fila por votante (cédula, nombre, puesto y mesa) y, debajo de cada uno, la ubicación de su puesto. El primero es de un puesto ya registrado; el segundo, de uno nuevo, que pide departamento, municipio, localidad y zona; el tercero, del mismo puesto nuevo, toma la ubicación del segundo. Al final, cuánto vale cada PIN: 24 horas desde que se genera.*
 
 ![Captura 12: Los PIN generados, que se muestran una sola vez, con el botón para descargarlos. En esta captura están difuminados: no deben quedar credenciales en la documentación](img/12-padron-pines.png)
 *Captura 12. Los PIN generados, que se muestran una sola vez, con su fecha de vencimiento y el botón para descargarlos. Marta Ríos quedó en "Puesto Central — Mesa 1". En esta captura los PIN están difuminados: no deben quedar credenciales en la documentación.*
@@ -292,10 +308,17 @@ de personas, **Varios desde un archivo o Excel** los carga desde una hoja de cá
 
 1. Prepare la hoja con una fila por votante y las columnas **Cédula**, **Nombre
    completo** (o dos columnas, **Nombres** y **Apellidos**), **Puesto de votación**,
-   **Mesa** y, si quiere, **Voto asistido** (*sí* o *no*). Con encabezados en la primera
-   fila, las columnas pueden ir en cualquier orden y llamarse de otras formas habituales
-   ("Documento", "N° de documento", "Puesto"); las demás (correo, teléfono) se ignoran. Sin
-   encabezados, tienen que ir en ese orden. **Descargar la plantilla (CSV)** baja un
+   **Mesa** y, si quiere, **Voto asistido** (*sí* o *no*). Para los puestos que todavía no
+   tienen ubicación, agregue además **Departamento**, **Municipio** (o **Ciudad**),
+   **Zona** (*urbana* o *rural*) y, si quiere, **Localidad** y **País** (*Colombia*). La
+   ubicación basta en **una** de las filas de cada puesto, y un puesto que ya la tiene no
+   la necesita. El departamento y el municipio se reconocen sin tildes, en mayúsculas, con
+   el nombre de uso común ("Cúcuta", "Cali") o con su código del DANE ("15001"). Con
+   encabezados en la primera fila, las columnas pueden ir en cualquier orden y llamarse de
+   otras formas habituales ("Documento", "N° de documento", "Puesto", "Ciudad"); las demás
+   (correo, teléfono) se ignoran. Sin encabezados, van en el orden de la plantilla: 4
+   columnas (cédula, nombre, puesto y mesa), 5 (y voto asistido) o 10 (y país,
+   departamento, municipio, localidad y zona). **Descargar la plantilla (CSV)** baja un
    ejemplo listo para llenar.
 2. Elija una de dos formas:
    - **Un archivo CSV.** En Excel, *Guardar como* → *CSV UTF-8* (también sirve el *CSV
@@ -307,12 +330,16 @@ de personas, **Varios desde un archivo o Excel** los carga desde una hoja de cá
      encabezados), cópielas (**Ctrl+C**), péguelas en el recuadro (**Ctrl+V**) y pulse
      **Revisar**.
 3. Antes de cargar nada, el sistema muestra la **revisión** (captura 34): cuántos votantes
-   están listos, cuántos votan asistidos, cuántos hay por puesto, las **filas con errores**
-   (con su número de fila y qué corregir) y las **cédulas repetidas** en el archivo (se
-   carga solo la primera vez que aparece), y los primeros cinco como van a quedar. Las
-   cédulas con puntos de miles ("1.000.000.001") se limpian solas. Una cédula que Excel
-   convirtió en notación científica ("1,03141E+09") aparece como error: hay que darle
-   formato de *Texto* a esa columna y volver a guardar.
+   están listos, cuántos votan asistidos, los **puestos con su ubicación** (cuáles ya
+   estaban registrados y cuáles se registran con la ubicación del archivo), las **filas
+   con errores** (con su número de fila y qué corregir) y las **cédulas repetidas** en el
+   archivo (se carga solo la primera vez que aparece), y los primeros cinco como van a
+   quedar. Las cédulas con puntos de miles ("1.000.000.001") se limpian solas. Una cédula
+   que Excel convirtió en notación científica ("1,03141E+09") aparece como error: hay que
+   darle formato de *Texto* a esa columna y volver a guardar. También son errores un
+   puesto nuevo sin ubicación en ninguna de sus filas, un municipio que no está en ese
+   departamento, una localidad de Bogotá que no es una de las 20, o una ubicación distinta
+   de la que el puesto ya tiene.
 4. Pulse **Cargar N votantes al padrón**. Cada PIN vence 24 horas después de generarse,
    así que conviene cargar poco antes de la elección. Las filas con errores no se cargan: corríjalas en la hoja y vuelva a cargar el
    archivo.
@@ -342,11 +369,14 @@ archivo). Por carga, hasta 50.000 votantes y 10 MB.
 ![Captura 33: Varios desde un archivo o Excel: elegir o arrastrar un CSV, o pegar las celdas copiadas de la hoja de cálculo, y la plantilla para descargar](img/33-padron-archivo-elegir.png)
 *Captura 33. Varios desde un archivo o Excel: elegir o arrastrar un CSV, o pegar las celdas copiadas de la hoja de cálculo. Abajo, la plantilla para descargar.*
 
-![Captura 34: La revisión antes de cargar: el archivo, sus columnas, cuántos votantes están listos, las filas con errores y qué corregir, y los primeros cinco como van a quedar](img/34-padron-archivo-revision.png)
-*Captura 34. La revisión antes de cargar nada: las columnas que reconoció (y las que no usa, como "Teléfono"), cuántos votantes están listos y por puesto, las filas con errores con qué corregir, y los primeros cinco como van a quedar.*
+![Captura 34: La revisión antes de cargar: el archivo, sus columnas, cuántos votantes están listos, los puestos con su ubicación, las filas con errores y qué corregir, y los primeros cinco como van a quedar](img/34-padron-archivo-revision.png)
+*Captura 34. La revisión antes de cargar nada: las columnas que reconoció (y las que no usa, como "Teléfono"), cuántos votantes están listos, los puestos con su ubicación (cuáles se registran con la del archivo), las filas con errores con qué corregir, y los primeros cinco como van a quedar.*
 
 ![Captura 35: El resultado de la carga y los PIN generados, con el botón para descargarlos todos en un CSV. Los PIN están difuminados](img/35-padron-archivo-pines.png)
 *Captura 35. El resultado de la carga y los PIN generados, con el botón para descargarlos todos en un CSV. Los PIN están difuminados.*
+
+**El listado** muestra, debajo del nombre de cada puesto, dónde queda ("Tunja (Boyacá),
+Centro, zona urbana").
 
 **Buscar y filtrar.** Sobre el listado (**Padrón actual**) hay filtros: **Buscar por
 cédula o nombre** (parte de la cédula o del nombre, sin importar mayúsculas ni tildes; se
@@ -370,10 +400,40 @@ confirmar. No se puede deshacer: ya no podrá ingresar. Los votos que ya emitió
 conservan, porque son anónimos (no apuntan a su fila del padrón), así que el acta no
 cambia. Queda en **Auditoría** quién lo eliminó y cuándo, sin la cédula.
 
-![Captura 13: El padrón filtrado por puesto y mesa: hasta cuándo vale el PIN de cada votante, su autenticador, el voto asistido y el botón Eliminar](img/13-padron-lista.png)
-*Captura 13. El padrón filtrado por puesto y mesa: hasta cuándo vale el PIN de cada votante (o si no tiene), su autenticador, el voto asistido y el botón Eliminar.*
+![Captura 13: El padrón filtrado por puesto y mesa: la ubicación del puesto, hasta cuándo vale el PIN de cada votante, su autenticador, el voto asistido y el botón Eliminar](img/13-padron-lista.png)
+*Captura 13. El padrón filtrado por puesto y mesa: debajo del puesto, dónde queda; hasta cuándo vale el PIN de cada votante (o si no tiene), su autenticador, el voto asistido y el botón Eliminar.*
 
-### 4.5 Usuarios
+### 4.5 Puestos
+
+La pestaña **Puestos** lista cada puesto de votación con su **departamento**, su
+**municipio**, su **localidad**, su **zona** (urbana o rural), cuántas **mesas** y
+cuántos **votantes** tiene. Arriba dice cuántos puestos hay, en cuántos municipios y
+cuántos son urbanos y rurales; **Mostrar** filtra por departamento o deja solo los que no
+tienen ubicación.
+
+Un puesto se registra al agregar a su primer votante (con el formulario o desde un
+archivo), así que aquí no se crean puestos: se completa o se corrige su ubicación.
+
+- **Poner ubicación**: para un puesto que todavía no la tiene. Pasa con los puestos que
+  ya estaban en el padrón antes de que existiera la ubicación: aparecen primero, con
+  *Sin ubicación*, y un aviso arriba dice cuántos son. Hasta que la tengan, no se les
+  pueden agregar votantes.
+- **Cambiar ubicación**: corrige la de un puesto que ya la tiene. No cambia a sus
+  votantes ni sus votos: solo dice dónde queda.
+- **Quitar**: solo para un puesto que ya no tiene votantes (por ejemplo, porque se
+  eliminaron todos), después de confirmar.
+
+La ubicación se elige de las listas oficiales del DANE (Divipola): el **Departamento**, y
+después el **Municipio** de ese departamento (hay municipios con el mismo nombre en
+departamentos distintos, como Armenia). La **Localidad** es opcional: en Bogotá se elige
+una de sus 20 localidades; en los demás municipios se escribe (comuna, corregimiento,
+vereda). La **Zona** es *Urbana* o *Rural*. Cada cambio queda en **Auditoría**
+(`PUESTO_UBICACION_GUARDADA`, con la ubicación anterior y la nueva).
+
+![Captura 36: La pestaña Puestos: cada puesto con su departamento, municipio, localidad, zona, mesas y votantes; un puesto sin ubicación primero, con el aviso arriba, y el formulario para ponérsela](img/36-puestos.png)
+*Captura 36. La pestaña Puestos: cada puesto con su departamento, municipio, localidad, zona, mesas y votantes. El que todavía no tiene ubicación aparece primero, con el aviso arriba, y debajo el formulario para ponérsela.*
+
+### 4.6 Usuarios
 
 Para crear otros administradores, auditores o jurados de mesa.
 
@@ -399,7 +459,7 @@ tildes ni espacios de más, y toma "1" y "Mesa 1" como la misma mesa.
 ![Captura 14: Creación de un jurado de todo el Puesto Central, con el puesto y la mesa elegidos del padrón, y el listado de usuarios con «Cambiar mesa»](img/14-usuarios.png)
 *Captura 14. Creación de un jurado de todo el Puesto Central, con el puesto y la mesa elegidos del padrón, y el listado de usuarios con «Cambiar mesa».*
 
-### 4.6 Resultados
+### 4.7 Resultados
 
 Mientras la votación está abierta, se ve **en vivo solo cuántas personas votaron** (se
 actualiza cada 10 segundos). **No se muestran los votos de cada candidato u opción ni quién va
@@ -427,7 +487,7 @@ mismo veredicto en su encabezado, comprobado en el momento de generarlo.
 ![Captura 16: Resultados de una elección cerrada: el indicador "Acta verificada", el ganador y el conteo certificado](img/16-resultados-certificados.png)
 *Captura 16. Resultados de una elección cerrada: el indicador "Acta verificada", el ganador y el conteo certificado.*
 
-### 4.7 Reportes
+### 4.8 Reportes
 
 Tableros con estadística avanzada: participación, evolución en el tiempo, proyección de
 participación, métricas operativas, de integridad y de accesos sospechosos.
@@ -437,7 +497,7 @@ Los tableros se pueden **exportar a PDF**.
 ![Captura 17: Un tablero de reportes sobre la elección certificada: integridad del acta, participación, concentración del voto, resultados y evolución](img/17-reportes.png)
 *Captura 17. Un tablero de reportes sobre la elección certificada: integridad del acta, participación, concentración del voto, resultados y evolución.*
 
-### 4.8 Escrutinio
+### 4.9 Escrutinio
 
 Es la pestaña que diferencia a LiveMetric de un sistema de encuestas cualquiera.
 
@@ -466,7 +526,7 @@ alterada) y la explicación de cualquier problema.
 ![Captura 20: Primera página del acta en PDF, con el veredicto de verificación en el encabezado](img/20-acta-pdf.png)
 *Captura 20. Primera página del acta en PDF, con el veredicto de verificación en el encabezado.*
 
-### 4.9 Auditoría
+### 4.10 Auditoría
 
 Un registro de todo lo que ocurre en el sistema: ingresos exitosos y fallidos, creación
 de elecciones, cargas al padrón, certificaciones. Cada evento muestra **Evento**,
@@ -668,7 +728,7 @@ instalación de prueba ya borrada (además, cada código vence a los 30 segundos
 | 02 | `02-login-admin.png` | Ingreso de administrador |
 | 03 | `03-login-votante.png` | Ingreso de votante |
 | 04 | `04-login-fallido.png` | Error genérico de credenciales |
-| 05 | `05-panel-admin.png` | Panel de administrador (9 pestañas) |
+| 05 | `05-panel-admin.png` | Panel de administrador (10 pestañas) |
 | 06 | `06-resumen.png` | Pestaña Resumen |
 | 07 | `07-plantilla-nueva.png` | Formulario de plantilla |
 | 08 | `08-plantillas-lista.png` | Listado de plantillas |
@@ -676,7 +736,7 @@ instalación de prueba ya borrada (además, cada código vence a los 30 segundos
 | 10 | `10-elecciones-lista.png` | Listado de elecciones |
 | 11 | `11-padron-carga.png` | Agregar votantes (formulario) |
 | 12 | `12-padron-pines.png` | PINes generados (difuminados), con la descarga |
-| 13 | `13-padron-lista.png` | Listado del padrón con filtros y Eliminar |
+| 13 | `13-padron-lista.png` | Listado del padrón con la ubicación del puesto, filtros y Eliminar |
 | 14 | `14-usuarios.png` | Creación de usuarios y jurados (puesto y mesa del padrón) |
 | 15 | `15-resultados-vivo.png` | Total en vivo (sin votos por opción) |
 | 16 | `16-resultados-certificados.png` | Resultados certificados |
@@ -696,8 +756,9 @@ instalación de prueba ya borrada (además, cada código vence a los 30 segundos
 | 31 | `31-panel-jurado.png` | Panel del jurado (de todo el puesto) |
 | 32 | `32-padron-autocompletar.png` | Autocompletar del buscador del padrón |
 | 33 | `33-padron-archivo-elegir.png` | Carga del padrón desde un archivo o Excel |
-| 34 | `34-padron-archivo-revision.png` | Revisión antes de cargar: filas con errores y vista previa |
+| 34 | `34-padron-archivo-revision.png` | Revisión antes de cargar: puestos con su ubicación, filas con errores y vista previa |
 | 35 | `35-padron-archivo-pines.png` | Resultado de la carga y descarga de los PIN (difuminados) |
+| 36 | `36-puestos.png` | Pestaña Puestos: la ubicación de cada puesto y el formulario para ponerla |
 
 Las capturas 05 y 26 juntas muestran el control de acceso por rol: conviene usarlas también
 en el informe y en el video.

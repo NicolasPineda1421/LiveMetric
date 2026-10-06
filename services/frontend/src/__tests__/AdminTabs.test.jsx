@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import AdminDashboard, { duracionDelPin, formatPinExpiry } from '../pages/AdminDashboard.jsx';
 import { api } from '../api.js';
 import { reiniciarApiFalsa } from './apiFalsa.js';
+import { CATALOGO, CHIA, TUNJA } from './catalogoDePrueba.js';
 
 jest.mock('../api.js', () => require('./apiFalsa.js').crearApiFalsa());
 
@@ -269,7 +270,12 @@ describe('Usuarios', () => {
 });
 
 describe('Padrón', () => {
-  beforeEach(() => api.listVoters.mockResolvedValue({ voters: [], total: 0, registered: 0 }));
+  beforeEach(() => {
+    api.listVoters.mockResolvedValue({ voters: [], total: 0, registered: 0 });
+    // "Puesto Norte" ya está registrado, con su ubicación.
+    api.listPuestos.mockResolvedValue({ puestos: [{ pollingPlace: 'Puesto Norte', votingTables: ['Mesa 1', 'Mesa 2'], voters: 3, ubicacion: CHIA }] });
+    api.getDivipola.mockResolvedValue(CATALOGO);
+  });
 
   // Llena la fila n (desde 1) del formulario de alta.
   async function llenarFila(usuario, n, { cedula, fullName, pollingPlace, votingTable }) {
@@ -324,6 +330,49 @@ describe('Padrón', () => {
     expect(screen.queryByText('Votante 2', { selector: 'legend' })).not.toBeInTheDocument();
   });
 
+  it('un puesto que ya tiene ubicación la muestra; uno nuevo la pide una vez, de las listas del DANE', async () => {
+    api.addVoters.mockResolvedValue({ inserted: 2, duplicates: [], accessCodes: [] });
+    const usuario = await abrir('Padrón');
+    await llenarFila(usuario, 1, { cedula: '1000000010', fullName: 'Ana Gómez', pollingPlace: 'puesto norte', votingTable: 'Mesa 2' });
+    expect(await screen.findByText('Ubicación del puesto: Chía (Cundinamarca), zona rural')).toBeInTheDocument();
+
+    await llenarFila(usuario, 1, { cedula: '1000000010', fullName: 'Ana Gómez', pollingPlace: 'Escuela Nueva', votingTable: 'Mesa 1' });
+    const ubicacion = screen.getByText('Puesto nuevo: ¿dónde queda?').closest('fieldset');
+    expect(within(ubicacion).getByLabelText('País')).toHaveValue('Colombia');
+    expect(within(ubicacion).getByLabelText('Municipio')).toBeDisabled();
+    await usuario.selectOptions(within(ubicacion).getByLabelText('Departamento'), 'Bogotá, D.C.');
+    await usuario.selectOptions(within(ubicacion).getByLabelText('Municipio'), 'Bogotá, D.C.');
+    // En Bogotá, la localidad es una de sus 20.
+    expect(within(within(ubicacion).getByLabelText('Localidad (opcional)')).getAllByRole('option')).toHaveLength(21);
+    await usuario.selectOptions(within(ubicacion).getByLabelText('Localidad (opcional)'), 'La Candelaria');
+    await usuario.selectOptions(within(ubicacion).getByLabelText('Zona'), 'Urbana');
+
+    // El segundo votante del mismo puesto no la vuelve a pedir.
+    await usuario.click(screen.getByRole('button', { name: '+ Agregar otro votante' }));
+    await llenarFila(usuario, 2, { cedula: '1000000011', fullName: 'Luis Peña', pollingPlace: 'escuela nueva', votingTable: 'Mesa 1' });
+    expect(screen.getByText('Ubicación del puesto: la del votante 1.')).toBeInTheDocument();
+
+    await usuario.click(screen.getByRole('button', { name: 'Agregar 2 votantes al padrón' }));
+    expect(api.addVoters).toHaveBeenCalledWith('jwt-admin', [
+      {
+        cedula: '1000000010', fullName: 'Ana Gómez', pollingPlace: 'Escuela Nueva', votingTable: 'Mesa 1',
+        pais: 'Colombia', departamento: '11', municipio: '11001', localidad: 'La Candelaria', zona: 'urbana',
+      },
+      { cedula: '1000000011', fullName: 'Luis Peña', pollingPlace: 'escuela nueva', votingTable: 'Mesa 1' },
+    ]);
+  });
+
+  it('el listado dice dónde queda el puesto de cada votante', async () => {
+    api.listVoters.mockResolvedValue({
+      voters: [{ id: 1, cedula: '1000000010', full_name: 'Ana Gómez', polling_place: 'Puesto Norte', voting_table: 'Mesa 2', is_active: true, has_pin: false }],
+      total: 1,
+      registered: 1,
+    });
+    await abrir('Padrón');
+    const celda = (await screen.findByText('Chía (Cundinamarca), zona rural', { selector: '.ubicacion-celda' })).closest('td');
+    expect(celda).toHaveTextContent('Puesto NorteChía (Cundinamarca), zona rural');
+  });
+
   it('muestra los PIN generados una sola vez, y el listado solo dice si tiene PIN', async () => {
     api.addVoters.mockResolvedValue({ inserted: 1, duplicates: [], accessCodes: [{ cedula: '1000000010', pin: '482913' }] });
     api.listVoters
@@ -347,7 +396,10 @@ describe('Padrón', () => {
   });
 
   it('los filtros consultan al servicio: la búsqueda al pulsar Buscar, el resto al elegirlos; y se limpian', async () => {
-    api.listPadronPlaces.mockResolvedValue({ places: [{ pollingPlace: 'Puesto Central', votingTables: ['Mesa 1', 'Mesa 2'] }] });
+    api.listPuestos.mockResolvedValue({ puestos: [
+      { pollingPlace: 'Puesto Central', votingTables: ['Mesa 1', 'Mesa 2'], voters: 12, ubicacion: TUNJA },
+      { pollingPlace: 'Puesto Vacío', votingTables: [], voters: 0, ubicacion: CHIA },
+    ] });
     api.listVoters.mockResolvedValue({ voters: [], total: 0, registered: 12 });
     const usuario = await abrir('Padrón');
     await screen.findByText('12 votantes');
@@ -359,6 +411,8 @@ describe('Padrón', () => {
     expect(api.listVoters).toHaveBeenLastCalledWith('jwt-admin', expect.objectContaining({ q: 'gómez' }));
 
     expect(screen.getByLabelText('Mesa', { selector: 'select' })).toBeDisabled();
+    // Los puestos sin votantes no se ofrecen para filtrar.
+    expect(within(screen.getByLabelText('Puesto', { selector: 'select' })).queryByText('Puesto Vacío')).not.toBeInTheDocument();
     await usuario.selectOptions(screen.getByLabelText('Puesto', { selector: 'select' }), 'Puesto Central');
     await usuario.selectOptions(screen.getByLabelText('Mesa', { selector: 'select' }), 'Mesa 2');
     await usuario.selectOptions(screen.getByLabelText('PIN'), 'vencido');

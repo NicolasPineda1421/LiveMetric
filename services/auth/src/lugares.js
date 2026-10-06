@@ -38,22 +38,50 @@ function juradoCubre(jurado, votante) {
 
 const enOrden = (a, b) => a.localeCompare(b, 'es', { numeric: true, sensitivity: 'base' });
 
-// Los puestos del padrón (votantes activos), cada uno con sus mesas, tal
-// como están escritos en él. Si el mismo puesto o mesa aparece escrito de
-// dos formas, queda una sola.
-async function lugaresDelPadron(pool) {
-  const { rows } = await pool.query('SELECT DISTINCT polling_place, voting_table FROM voters WHERE is_active');
+// La ubicación de un puesto, de su fila en puestos_votacion (migración 009).
+const ubicacionDeFila = (fila) => ({
+  id: fila.id,
+  pais: fila.pais,
+  codigoMunicipio: fila.codigo_municipio,
+  departamento: fila.departamento,
+  municipio: fila.municipio,
+  localidad: fila.localidad,
+  zona: fila.zona,
+});
+
+// Los puestos del padrón (votantes activos), cada uno con sus mesas tal
+// como están escritos en él, cuántos votantes tiene y su ubicación (null si
+// todavía no la tiene). Si el mismo puesto o mesa aparece escrito de dos
+// formas, queda una sola. Con { todos: true } están también los puestos con
+// ubicación que ya no tienen votantes.
+async function lugaresDelPadron(pool, { todos = false } = {}) {
+  const [padron, ubicaciones] = await Promise.all([
+    pool.query('SELECT polling_place, voting_table, count(*)::int AS votantes FROM voters WHERE is_active GROUP BY polling_place, voting_table'),
+    pool.query('SELECT * FROM puestos_votacion'),
+  ]);
+  const ubicacionDe = new Map(ubicaciones.rows.map((fila) => [fila.clave, fila]));
   const puestos = new Map();
-  for (const fila of rows) {
+  for (const fila of padron.rows) {
     const puesto = decryptField(fila.polling_place);
     const mesa = decryptField(fila.voting_table);
     const clave = normalizarPuesto(puesto);
-    if (!puestos.has(clave)) puestos.set(clave, { pollingPlace: puesto, mesas: new Map() });
-    const mesas = puestos.get(clave).mesas;
-    if (!mesas.has(normalizarMesa(mesa))) mesas.set(normalizarMesa(mesa), mesa);
+    if (!puestos.has(clave)) puestos.set(clave, { pollingPlace: puesto, mesas: new Map(), votantes: 0 });
+    const actual = puestos.get(clave);
+    actual.votantes += fila.votantes;
+    if (!actual.mesas.has(normalizarMesa(mesa))) actual.mesas.set(normalizarMesa(mesa), mesa);
   }
-  return [...puestos.values()]
-    .map((p) => ({ pollingPlace: p.pollingPlace, votingTables: [...p.mesas.values()].sort(enOrden) }))
+  if (todos) {
+    for (const fila of ubicaciones.rows) {
+      if (!puestos.has(fila.clave)) puestos.set(fila.clave, { pollingPlace: fila.nombre, mesas: new Map(), votantes: 0 });
+    }
+  }
+  return [...puestos.entries()]
+    .map(([clave, p]) => ({
+      pollingPlace: p.pollingPlace,
+      votingTables: [...p.mesas.values()].sort(enOrden),
+      voters: p.votantes,
+      ubicacion: ubicacionDe.has(clave) ? ubicacionDeFila(ubicacionDe.get(clave)) : null,
+    }))
     .sort((a, b) => enOrden(a.pollingPlace, b.pollingPlace));
 }
 
@@ -77,7 +105,7 @@ function ubicarEnPadron(lugares, pollingPlace, votingTable) {
 function lugarCanonico(lugares, pollingPlace, votingTable) {
   let puesto = lugares.find((p) => mismoPuesto(p.pollingPlace, pollingPlace));
   if (!puesto) {
-    puesto = { pollingPlace, votingTables: [] };
+    puesto = { pollingPlace, votingTables: [], ubicacion: null };
     lugares.push(puesto);
   }
   let mesa = puesto.votingTables.find((m) => mismaMesa(m, votingTable));
@@ -89,5 +117,5 @@ function lugarCanonico(lugares, pollingPlace, votingTable) {
 }
 
 module.exports = {
-  normalizarPuesto, normalizarMesa, mismoPuesto, mismaMesa, juradoCubre, lugaresDelPadron, ubicarEnPadron, lugarCanonico,
+  normalizarPuesto, normalizarMesa, mismoPuesto, mismaMesa, juradoCubre, lugaresDelPadron, ubicarEnPadron, lugarCanonico, ubicacionDeFila,
 };

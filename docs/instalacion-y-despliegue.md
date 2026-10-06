@@ -146,7 +146,7 @@ El requisito común es [Docker Desktop](https://www.docker.com/products/docker-d
 
 | Elemento | Valor |
 |---|---|
-| Padrón de demostración | cédulas `1000000001` a `1000000005`, en "Puesto Central" (Mesa 1 y 2) y "Puesto Norte" (Mesa 1), cifradas por `auth-service` al arrancar. Entran **sin PIN**: para votar con ellas, genéralo en **Padrón** ("Regenerar PIN"); se muestra una sola vez. |
+| Padrón de demostración | cédulas `1000000001` a `1000000005`, en "Puesto Central" (Mesa 1 y 2; Bogotá, La Candelaria, zona urbana) y "Puesto Norte" (Mesa 1; Chía, Cundinamarca, zona rural), cifradas por `auth-service` al arrancar. Entran **sin PIN**: para votar con ellas, genéralo en **Padrón** ("Regenerar PIN"); se muestra una sola vez. |
 | Plantillas | "Elección de ejemplo" (3 opciones) y "Elección Presidencial de Ejemplo" (3 candidatos numerados) |
 | Administrador | ninguno: el primero lo pide el script de arranque (ver [Primer administrador](#primer-administrador)) |
 
@@ -154,15 +154,16 @@ El requisito común es [Docker Desktop](https://www.docker.com/products/docker-d
 
 1. Entra a **http://localhost:3000** → "Administrador" → con tu cuenta.
 2. En **Padrón**, genera el PIN de las cédulas de demostración que vayas a usar ("Regenerar PIN"; anótalo, se muestra una sola vez). El PIN vence 24 horas después de generarlo (`PIN_VIGENCIA_HORAS` en el `.env`); hasta entonces sirve haya o no una votación abierta. Marca **Voto asistido** en una de ellas (por ejemplo, `1000000002`, de la Mesa 1). En **Usuarios**, crea un **jurado de mesa** eligiendo del padrón `Puesto Central` y `Mesa 1` (o *Todas las mesas del puesto*); también puedes crear más administradores o auditores.
-3. En **Plantillas**, usa "Elección Presidencial de Ejemplo" o crea una nueva con candidatos (número, nombre y foto).
-4. En **Elecciones**, instancia una con una ventana corta (2–3 minutos) para ver el ciclo completo.
-5. En una ventana de incógnito → "Votante" → cédula `1000000001` con el PIN que generaste. La primera vez aparece un QR: escanéalo con **Microsoft Authenticator** o **Google Authenticator** en tu celular y escribe el código de 6 dígitos → vota. Repite con `1000000003` (otra mesa) para tener votos en más de una mesa.
-6. **Voto asistido:** entra como el jurado (pestaña "Administrador / Auditor / Jurado"; la primera vez registra su autenticador) y verás su mesa y a la votante asistida. En otra ventana de incógnito, entra con `1000000002` y su PIN: la pantalla pide la autorización del jurado; escribe su usuario y el código de su app → vota.
-7. En **Elecciones** puedes pulsar "Detener" para cerrarla antes de tiempo.
-8. En **Resultados**: mientras está activa, solo cuántas personas votaron, en vivo (los votos por opción no se publican antes del acta); tras cerrarla, el indicador de veracidad del acta ("✓ Acta verificada": firma digital válida, sin modificaciones y con los votos guardados coincidiendo), el ganador y el desglose por mesa. El PDF del acta lleva el mismo veredicto en el encabezado.
-9. En **Escrutinio**, "Verificar actas" muestra acta por acta si su contenido, la cadena y la firma digital están en orden.
-10. En **Reportes**, arma un tablero con widgets: resultados, participación, proyección, momento de definición, integridad del acta, accesos sospechosos, etc. Se exporta a PDF.
-11. En **Auditoría**, revisa todos los intentos de ingreso, exitosos y fallidos, los registros de autenticadores y cada voto asistido con el jurado que lo autorizó.
+3. En **Puestos**, mira dónde queda cada puesto (departamento, municipio, localidad y zona). Un puesto nuevo se registra con su ubicación al agregarle votantes en **Padrón**.
+4. En **Plantillas**, usa "Elección Presidencial de Ejemplo" o crea una nueva con candidatos (número, nombre y foto).
+5. En **Elecciones**, instancia una con una ventana corta (2–3 minutos) para ver el ciclo completo.
+6. En una ventana de incógnito → "Votante" → cédula `1000000001` con el PIN que generaste. La primera vez aparece un QR: escanéalo con **Microsoft Authenticator** o **Google Authenticator** en tu celular y escribe el código de 6 dígitos → vota. Repite con `1000000003` (otra mesa) para tener votos en más de una mesa.
+7. **Voto asistido:** entra como el jurado (pestaña "Administrador / Auditor / Jurado"; la primera vez registra su autenticador) y verás su mesa y a la votante asistida. En otra ventana de incógnito, entra con `1000000002` y su PIN: la pantalla pide la autorización del jurado; escribe su usuario y el código de su app → vota.
+8. En **Elecciones** puedes pulsar "Detener" para cerrarla antes de tiempo.
+9. En **Resultados**: mientras está activa, solo cuántas personas votaron, en vivo (los votos por opción no se publican antes del acta); tras cerrarla, el indicador de veracidad del acta ("✓ Acta verificada": firma digital válida, sin modificaciones y con los votos guardados coincidiendo), el ganador y el desglose por mesa. El PDF del acta lleva el mismo veredicto en el encabezado.
+10. En **Escrutinio**, "Verificar actas" muestra acta por acta si su contenido, la cadena y la firma digital están en orden.
+11. En **Reportes**, arma un tablero con widgets: resultados, participación, proyección, momento de definición, integridad del acta, accesos sospechosos, etc. Se exporta a PDF.
+12. En **Auditoría**, revisa todos los intentos de ingreso, exitosos y fallidos, los registros de autenticadores y cada voto asistido con el jurado que lo autorizó.
 
 ## Flujo por línea de comandos
 
@@ -228,6 +229,8 @@ Lo primero, casi siempre: `./scripts/start.sh estado` (qué contenedor no está 
 | El votante cambió o perdió el celular | El código está en la app del celular anterior | En **Padrón**, **Restablecer autenticador**: en su próximo ingreso lo registra de nuevo. Para un jurado, lo mismo en **Usuarios** |
 | En el voto asistido: "Ese jurado no es de la mesa ni del puesto de este votante" | El jurado está asignado a otra mesa u otro puesto que el votante. Las mayúsculas, las tildes y escribir "1" en vez de "Mesa 1" no cuentan: es otra mesa de verdad, o un puesto mal escrito al crear el jurado | En **Usuarios**, **Cambiar mesa** del jurado, eligiendo el puesto y la mesa del padrón (o *Todas las mesas del puesto*) |
 | La votante asistida no aparece en el panel del jurado | No está marcada como asistida, o es de otra mesa u otro puesto que el jurado | Marca **Voto asistido** en **Padrón**, y revisa en **Usuarios** el puesto y la mesa del jurado (**Cambiar mesa**) |
+| Al agregar votantes: "el puesto «…» todavía no tiene ubicación" | El puesto es nuevo y ninguna fila trae su ubicación, o ya estaba en el padrón antes de que existiera la ubicación (migración 009) | En el formulario, completa la ubicación que aparece debajo del puesto; en un archivo, agrega las columnas Departamento, Municipio y Zona en al menos una fila del puesto; o pónsela en **Puestos** («Poner ubicación») |
+| "el puesto «…» está en … y aquí dice …" | Ese nombre ya es de un puesto de otro municipio (o de otra zona): el nombre identifica a un solo puesto en todo el país | Si es otro puesto, dale un nombre distinto ("Colegio Central - Duitama"); si la ubicación registrada está mal, corrígela en **Puestos** («Cambiar ubicación») |
 | El votante recibe "Tu PIN venció" | Pasaron las 24 horas desde que se generó su PIN (o las de `PIN_VIGENCIA_HORAS`) | En **Padrón**, **Regenerar PIN**, y entregárselo. Conviene generar los PIN poco antes de la elección, o aumentar `PIN_VIGENCIA_HORAS` en el `.env` (de 1 a 2160) y reiniciar `auth-service` |
 | Un votante recibe "Cédula o PIN incorrectos" con los datos correctos | Su cédula no tiene PIN (en **Padrón** figura "Sin asignar"), o el PIN se regeneró | Genera el PIN desde **Padrón** y entrégaselo. El mensaje es el mismo en todos los casos a propósito |
 | "Demasiados intentos. Intenta de nuevo más tarde." al ingresar como votante | Desde ese equipo (esa IP) hubo 8 intentos fallidos en 15 minutos: el sistema lo toma como alguien adivinando PINs y bloquea la IP, también para los PIN correctos. Los ingresos correctos no cuentan, así que un puesto con un solo equipo puede atender a todos sus votantes | Esperar a que pasen los 15 minutos. Si fue un error de digitación repetido, revisar con el votante su cédula y su PIN (o regenerarlo en **Padrón**); si no, revisar el reporte de **Accesos sospechosos** |

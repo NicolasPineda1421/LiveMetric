@@ -38,6 +38,7 @@ El `.env` nunca se commitea (está en `.gitignore`) ni se comparte: cada persona
 | `services/<servicio>/src/__tests__/` | Pruebas unitarias y de integración |
 | `services/frontend/src/` | La SPA de React: `pages/`, `components/`, y `api.js` (el cliente HTTP) |
 | `db/init.sql` y `db/migrations/` | Esquema completo y migraciones para bases anteriores |
+| `services/auth/src/data/divipola.json` | Departamentos y municipios del DANE (Divipola), con su código, para la ubicación de los puestos (`divipola.js`). Se descargó de datos.gov.co (conjunto `gdxc-w37w`); si el DANE crea un municipio, se agrega aquí y el panel lo recibe por `GET /admin/divipola` |
 | `scripts/lib/` | Piezas compartidas: generación del `.env`, base desechable de las pruebas, reglas de ESLint, presentación de los scripts |
 
 ## 4. Modo desarrollo

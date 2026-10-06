@@ -64,6 +64,29 @@ CREATE TABLE IF NOT EXISTS voters (
 
 CREATE INDEX IF NOT EXISTS idx_voters_cedula ON voters(cedula);
 
+-- Puestos de votación con su ubicación (migración 009): país, departamento
+-- y municipio de la Divipola del DANE (código del municipio y nombres
+-- oficiales), localidad opcional y zona urbana o rural. "clave" es el nombre
+-- sin mayúsculas, tildes ni espacios de más (ver services/auth/src/lugares.js):
+-- un nombre es un solo puesto en todo el país. Sin cifrar: dice dónde queda
+-- un puesto, no quién vota en él.
+CREATE TABLE IF NOT EXISTS puestos_votacion (
+    id                SERIAL PRIMARY KEY,
+    nombre            VARCHAR(150) NOT NULL,
+    clave             VARCHAR(150) NOT NULL UNIQUE,
+    pais              VARCHAR(60)  NOT NULL DEFAULT 'Colombia',
+    codigo_municipio  CHAR(5)      NOT NULL,
+    departamento      VARCHAR(80)  NOT NULL,
+    municipio         VARCHAR(80)  NOT NULL,
+    localidad         VARCHAR(80),
+    zona              VARCHAR(6)   NOT NULL,
+    created_by        INTEGER REFERENCES admins(id) ON DELETE SET NULL,
+    created_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT puestos_zona_check CHECK (zona IN ('urbana', 'rural')),
+    CONSTRAINT puestos_codigo_municipio_check CHECK (codigo_municipio ~ '^[0-9]{5}$')
+);
+
 -- ---------------------------------------------------------------------------
 -- Plantillas: separan "la pregunta" de "cuándo se vota". Pueden ser
 -- "generic" (una pregunta con opciones de texto libre, como antes) o
@@ -300,6 +323,13 @@ FROM (VALUES
     ('1000000005', 'Votante Demo Cinco',   'Puesto Norte',   'Mesa 1')
 ) AS v(cedula, full_name, polling_place, voting_table)
 ON CONFLICT (cedula) DO NOTHING;
+
+-- La ubicación de esos dos puestos: uno urbano y uno rural.
+INSERT INTO puestos_votacion (nombre, clave, codigo_municipio, departamento, municipio, localidad, zona)
+VALUES
+    ('Puesto Central', 'puesto central', '11001', 'Bogotá, D.C.', 'Bogotá, D.C.', 'La Candelaria', 'urbana'),
+    ('Puesto Norte',   'puesto norte',   '25175', 'Cundinamarca', 'Chía',         NULL,            'rural')
+ON CONFLICT (clave) DO NOTHING;
 
 -- Plantilla genérica de demostración (formato libre, como antes).
 INSERT INTO election_templates (id, name, description, template_type, created_by)

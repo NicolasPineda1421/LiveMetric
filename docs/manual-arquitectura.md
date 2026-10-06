@@ -65,7 +65,7 @@ Estilo arquitectónico resumido:
 
 ### 3.2 Microservicio A — Auth
 
-**Responsabilidad:** dos flujos de login completamente distintos (administrador, auditor o jurado con usuario y contraseña; votante con cédula y un PIN de 6 dígitos que genera el administrador), el **segundo factor** de votantes y jurados (TOTP, RFC 6238: registro del autenticador con QR, verificación del código y la autorización del jurado en el voto asistido), gestión de identidad (crear administradores, auditores y jurados; cargar el padrón electoral cifrado; generar y regenerar PIN con su vencimiento; restablecer autenticadores; marcar el voto asistido) y el módulo de auditoría.
+**Responsabilidad:** dos flujos de login completamente distintos (administrador, auditor o jurado con usuario y contraseña; votante con cédula y un PIN de 6 dígitos que genera el administrador), el **segundo factor** de votantes y jurados (TOTP, RFC 6238: registro del autenticador con QR, verificación del código y la autorización del jurado en el voto asistido), gestión de identidad (crear administradores, auditores y jurados; cargar el padrón electoral cifrado; generar y regenerar PIN con su vencimiento; restablecer autenticadores; marcar el voto asistido), los **puestos de votación con su ubicación** (país, departamento y municipio de la Divipola del DANE, localidad y zona urbana o rural) y el módulo de auditoría.
 
 **Por qué es un servicio separado:** la autenticación es el único lugar del sistema que debe conocer el salt privado usado para pseudonimizar la cédula (`VOTER_ID_SALT`). Aislarlo minimiza la superficie de código que maneja ese secreto.
 
@@ -118,7 +118,7 @@ graph TB
     end
 
     subgraph Datos["Persistencia — red db-net (interna)"]
-        DB[("PostgreSQL<br/>elections · votes · voters<br/>scrutiny_ledger · audit_log")]
+        DB[("PostgreSQL<br/>elections · votes · voters<br/>puestos_votacion<br/>scrutiny_ledger · audit_log")]
     end
 
     FE -->|"POST /login/admin<br/>POST /login/voter"| AUTH
@@ -273,6 +273,7 @@ graph LR
         UC7(["Verificar las actas<br/>(hash, cadena y firma)"])
         UC8(["Crear administradores,<br/>auditores y jurados"])
         UC9(["Cargar padrón, generar PIN<br/>y marcar el voto asistido"])
+        UC20(["Ubicar los puestos de votación<br/>(departamento, municipio,<br/>localidad y zona)"])
         UC10(["Consultar log<br/>de auditoría"])
         UC15(["Armar tableros<br/>de reportes"])
         UC16(["Ver tableros<br/>de reportes"])
@@ -294,6 +295,7 @@ graph LR
     Admin --> UC7
     Admin --> UC8
     Admin --> UC9
+    Admin --> UC20
     Admin --> UC10
     Admin --> UC15
     Admin --> UC16
@@ -360,6 +362,7 @@ llegan los servicios que usan la base.
 | ADR-007 | Terminología del dominio: "elección", nunca "encuesta" | Mantener "poll/encuesta" como en la primera iteración del proyecto | El valor del sistema es la integridad electoral, no la recolección de opiniones; el lenguaje del código y la UI debe reflejar ese dominio para evitar decisiones de diseño "de encuesta" (ej. permitir cambiar el voto) que serían incorrectas en un contexto electoral |
 | ADR-008 | El Acta de Escrutinio se genera como PDF real (`pdfkit`) | Mostrar solo un JSON/tabla en el panel de administración | El escrutinio de una elección real termina en un documento firmable; un JSON en pantalla no cumple esa función simbólica ni práctica (no se puede archivar, imprimir ni entregar) |
 | ADR-009 | Cada acta se firma con Ed25519, además de encadenarse por hash | Solo la cadena de hashes (como hasta la v1.2.0) | La cadena detecta cambios sueltos, pero no a quien reescribe el acta y recalcula todos los hashes; la firma solo la puede producir quien tiene la clave privada (solo Scrutiny). Ed25519 viene en el módulo `crypto` de Node, sin dependencias nuevas, con claves y firmas cortas (32 y 64 bytes) |
+| ADR-010 | Cada puesto tiene su ubicación de la Divipola del DANE, y el nombre identifica al puesto en todo el país | Ubicación en texto libre, o identificar el puesto por nombre y municipio | Con el código del municipio, los reportes pueden agrupar por lugar sin depender de cómo se escribió, y un municipio de nombre repetido (Armenia, Florencia) no se confunde. Identificar el puesto por nombre y municipio obligaba a cambiar lo que viaja en el JWT del votante, en cada voto y en el acta; con el nombre único todo eso sigue igual, y una carga que repite un nombre en otro municipio se rechaza en vez de juntar dos puestos |
 
 ---
 
@@ -370,6 +373,8 @@ erDiagram
     ADMINS ||--o{ ELECTION_TEMPLATES : crea
     ADMINS ||--o{ ELECTIONS : crea
     ADMINS ||--o{ VOTERS : registra
+    ADMINS ||--o{ PUESTOS_VOTACION : registra
+    PUESTOS_VOTACION ||..o{ VOTERS : "ubica, por nombre"
     ELECTION_TEMPLATES ||--o{ TEMPLATE_OPTIONS : contiene
     ELECTION_TEMPLATES ||--o{ ELECTIONS : instancia
     ELECTIONS ||--o{ ELECTION_OPTIONS : contiene
@@ -398,6 +403,17 @@ erDiagram
         timestamp access_code_expires_at "vencimiento del PIN"
         string totp_secret "cifrado"
         bool assisted
+    }
+    PUESTOS_VOTACION {
+        int id PK
+        string nombre
+        string clave "nombre normalizado, único"
+        string pais
+        string codigo_municipio "Divipola del DANE"
+        string departamento
+        string municipio
+        string localidad "opcional"
+        string zona "urbana o rural"
     }
     ELECTION_TEMPLATES {
         int id PK
@@ -459,5 +475,7 @@ erDiagram
         jsonb metadata
     }
 ```
+
+*(`PUESTOS_VOTACION` se relaciona con `VOTERS` por el nombre normalizado del puesto, sin llave foránea: en `VOTERS` el puesto va cifrado, y la tabla de puestos no lo está, porque dice dónde queda un puesto, no quién vota en él.)*
 
 *(`AUDIT_LOG` no tiene llave foránea hacia otras tablas — es intencional: el log de auditoría no debe depender referencialmente de los registros que audita, para que siga existiendo aunque el recurso auditado cambie o se elimine.)*

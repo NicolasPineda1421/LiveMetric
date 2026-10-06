@@ -70,6 +70,15 @@ export const api = {
   listUsers: (token) => request('auth', '/admin/users', { token }),
   // Puestos del padrón con sus mesas: de ahí se elige el lugar de un jurado.
   listPadronPlaces: (token) => request('auth', '/admin/padron/lugares', { token }),
+  // Todos los puestos, con sus mesas, cuántos votantes tienen y su ubicación
+  // (null si todavía no la tienen).
+  listPuestos: (token) => request('auth', '/admin/puestos', { token }),
+  // ubicacion: { departamento, municipio, localidad, zona } (nombres o códigos del DANE).
+  savePuestoUbicacion: (token, pollingPlace, ubicacion) =>
+    request('auth', '/admin/puestos/ubicacion', { method: 'PUT', token, body: { pollingPlace, ...ubicacion } }),
+  deletePuesto: (token, puestoId) => request('auth', `/admin/puestos/${puestoId}`, { method: 'DELETE', token }),
+  // Departamentos y municipios del DANE (Divipola), con las otras formas de escribirlos.
+  getDivipola: (token) => request('auth', '/admin/divipola', { token }),
   // votingTable vacío: el jurado queda de todo el puesto.
   changeJuradoMesa: (token, userId, pollingPlace, votingTable) =>
     request('auth', `/admin/users/${userId}/mesa`, { method: 'PUT', token, body: { pollingPlace, votingTable } }),
@@ -77,6 +86,8 @@ export const api = {
     request('auth', `/admin/users/${userId}/reset-totp`, { method: 'POST', token }),
   // Agrega votantes (hasta 200 por vez): nunca modifica a uno que ya está.
   // Cada PIN vence un tiempo fijo después de generarse (pinExpiresAt, en la respuesta).
+  // Si su puesto todavía no tiene ubicación, cada votante la trae (pais,
+  // departamento, municipio, localidad, zona).
   // origen: 'archivo' en la carga masiva, para la auditoría.
   addVoters: (token, voters, origen) =>
     request('auth', '/admin/voters', { method: 'POST', token, body: { voters, origen } }),

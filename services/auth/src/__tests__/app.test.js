@@ -10,6 +10,7 @@ const request = require('supertest');
 const app = require('../app');
 const pool = require('../db');
 const { encryptField } = require('../voterCrypto');
+const { UBICACION } = require('./ubicacion');
 const totp = require('../totp');
 
 const RUN_ID = `CITEST_${Date.now()}`;
@@ -187,6 +188,7 @@ describe('POST /admin/voters/bulk + login de votante con PIN', () => {
             fullName: 'Votante de Prueba CI',
             pollingPlace: 'Puesto CI',
             votingTable: 'Mesa CI',
+            ...UBICACION,
           },
         ],
       });
@@ -209,6 +211,7 @@ describe('POST /admin/voters/bulk + login de votante con PIN', () => {
             fullName: 'Votante de Prueba CI (editado)',
             pollingPlace: 'Puesto CI',
             votingTable: 'Mesa CI',
+            ...UBICACION,
           },
         ],
       });
@@ -281,7 +284,7 @@ describe('Datos del padrón con caracteres especiales', () => {
     const carga = await request(app)
       .post('/admin/voters/bulk')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ voters: [{ cedula, fullName: "María O'Neil", pollingPlace: 'Colegio San José / Sede A&B', votingTable: 'Mesa 1/2' }] });
+      .send({ voters: [{ cedula, fullName: "María O'Neil", pollingPlace: 'Colegio San José / Sede A&B', votingTable: 'Mesa 1/2', ...UBICACION }] });
     expect(carga.status).toBe(201);
 
     const lista = await request(app).get('/admin/voters?limit=200').set('Authorization', `Bearer ${adminToken}`);

@@ -5,15 +5,19 @@
 // generados se los pasa a la pestaña a medida que llegan (onPines), que los
 // muestra y permite descargarlos; onCambio, al terminar, recarga el padrón.
 // Cada PIN vence un tiempo fijo después de generarse (avisoVigencia lo dice).
+// Cada puesto necesita su ubicación: la revisión usa el catálogo del DANE y
+// los puestos que ya existen, y dice qué puestos son nuevos y dónde quedan.
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import {
-  MAXIMO_BYTES, SEGUNDOS_POR_VOTANTE, TAMANO_LOTE, contarPorPuesto, decodificarTexto, enLotes, interpretarPadron,
-  nombreSeparador, plantillaCsv,
+  MAXIMO_BYTES, ORDEN_SIN_ENCABEZADOS, SEGUNDOS_POR_VOTANTE, TAMANO_LOTE, contarPorPuesto, decodificarTexto, enLotes,
+  interpretarPadron, nombreSeparador, plantillaCsv,
 } from '../utils/padronArchivo.js';
+import { describirUbicacion, ubicacionParaEnviar } from '../utils/ubicacion.js';
 import { descargarTexto } from '../utils/descargar.js';
 
 const FILAS_MOSTRADAS = 100;
+const PUESTOS_MOSTRADOS = 30;
 // Si el servicio responde 429 (límite de operaciones del panel), se espera
 // a que se renueve el cupo y se reintenta el mismo lote, hasta 5 veces.
 const REINTENTOS = 5;
@@ -47,7 +51,21 @@ export default function CargaPadron({ token, avisoVigencia, onPines, onCambio, o
   const [avance, setAvance] = useState({ hechos: 0, total: 0, espera: 0, inicio: 0 });
   const [deteniendo, setDeteniendo] = useState(false);
   const [resultado, setResultado] = useState(null);
+  // El catálogo del DANE y los puestos que ya existen, para revisar la
+  // ubicación de cada puesto antes de cargar.
+  const [contexto, setContexto] = useState(null);
+  const [errorContexto, setErrorContexto] = useState('');
   const detener = useRef(false);
+
+  function cargarContexto() {
+    setErrorContexto('');
+    return Promise.all([api.getDivipola(token), api.listPuestos(token)])
+      .then(([catalogo, { puestos }]) => setContexto({ catalogo, puestos }))
+      .catch(() => setErrorContexto('No se pudo traer la lista de municipios del DANE y de los puestos ya registrados.'));
+  }
+  useEffect(() => {
+    cargarContexto();
+  }, [token]);
 
   // Si el panel se cierra (otra pestaña, salir), la carga se detiene
   // después del lote en curso.
@@ -72,7 +90,7 @@ export default function CargaPadron({ token, avisoVigencia, onPines, onCambio, o
 
   function revisar(contenido, deDonde) {
     setError('');
-    const r = interpretarPadron(contenido);
+    const r = interpretarPadron(contenido, contexto);
     if (r.error) {
       setError(r.error);
       return;
@@ -137,7 +155,11 @@ export default function CargaPadron({ token, avisoVigencia, onPines, onCambio, o
       if (detener.current) break;
       try {
         const respuesta = await enviarLote(
-          lote.map(({ cedula, fullName, pollingPlace, votingTable, assisted }) => ({ cedula, fullName, pollingPlace, votingTable, assisted })),
+          lote.map(({ cedula, fullName, pollingPlace, votingTable, assisted, ubicacion, ubicacionNueva }) => ({
+            cedula, fullName, pollingPlace, votingTable, assisted,
+            // Solo si el puesto todavía no la tiene: la toma del archivo.
+            ...(ubicacionNueva ? ubicacionParaEnviar(ubicacion) : {}),
+          })),
         );
         // El tiempo de cada PIN corre desde que se generó: el de su lote.
         pines.push(...(respuesta.accessCodes || []).map((c) => ({ ...c, expiresAt: respuesta.pinExpiresAt })));
@@ -159,6 +181,8 @@ export default function CargaPadron({ token, avisoVigencia, onPines, onCambio, o
     });
     setPaso('listo');
     onCambio();
+    // Los puestos nuevos ya tienen su ubicación: el próximo archivo no la necesita.
+    cargarContexto();
   }
 
   if (paso === 'cargando') {
@@ -228,11 +252,12 @@ export default function CargaPadron({ token, avisoVigencia, onPines, onCambio, o
     const { votantes, errores, repetidas, encabezados, ignoradas, separador } = revision;
     const asistidos = votantes.filter((v) => v.assisted).length;
     const puestos = contarPorPuesto(votantes);
+    const nuevos = puestos.filter((p) => p.nuevo).length;
     return (
       <div className="carga-padron">
         <p className="carga-origen">
           <strong>{origen}</strong> · separador: {nombreSeparador(separador)} ·{' '}
-          {encabezados ? `columnas: ${encabezados.join(', ')}` : 'sin encabezados: cédula, nombre, puesto, mesa y voto asistido'}
+          {encabezados ? `columnas: ${encabezados.join(', ')}` : 'sin encabezados: en el orden de la plantilla'}
           {ignoradas.length > 0 && ` · no se usan: ${ignoradas.join(', ')}`}
         </p>
         <ul className="conteo-carga">
@@ -248,11 +273,33 @@ export default function CargaPadron({ token, avisoVigencia, onPines, onCambio, o
           )}
           {puestos.length > 0 && (
             <li>
-              {plural(puestos.length, 'puesto', 'puestos')}: {puestos.slice(0, 6).map((p) => `${p.puesto} (${numero(p.votantes)})`).join(', ')}
-              {puestos.length > 6 && ', …'}
+              {plural(puestos.length, 'puesto', 'puestos')}
+              {nuevos > 0 && `, ${plural(nuevos, 'se registra con la ubicación del archivo', 'se registran con la ubicación del archivo')}`}
             </li>
           )}
         </ul>
+
+        {puestos.length > 0 && (
+          <details className="detalle-carga" open={nuevos > 0}>
+            <summary>Puestos y su ubicación</summary>
+            <div className="tabla-desplazable">
+              <table className="table">
+                <thead><tr><th>Puesto</th><th>Ubicación</th><th>Votantes</th><th /></tr></thead>
+                <tbody>
+                  {puestos.slice(0, PUESTOS_MOSTRADOS).map((p) => (
+                    <tr key={p.puesto}>
+                      <td>{p.puesto}</td>
+                      <td>{describirUbicacion(p.ubicacion)}</td>
+                      <td>{numero(p.votantes)}</td>
+                      <td>{p.nuevo ? 'Se registra' : 'Ya registrado'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {puestos.length > PUESTOS_MOSTRADOS && <p className="field-hint-dark">Y {numero(puestos.length - PUESTOS_MOSTRADOS)} más.</p>}
+          </details>
+        )}
 
         {errores.length > 0 && (
           <details className="detalle-carga" open>
@@ -262,7 +309,7 @@ export default function CargaPadron({ token, avisoVigencia, onPines, onCambio, o
                 <thead><tr><th>Fila</th><th>Cédula</th><th>Qué corregir</th></tr></thead>
                 <tbody>
                   {errores.slice(0, FILAS_MOSTRADAS).map((e) => (
-                    <tr key={e.fila}><td>{e.fila}</td><td className="mono">{e.cedula}</td><td>{e.motivos.join('; ')}</td></tr>
+                    <tr key={e.fila}><td>{e.fila}</td><td className="mono sin-corte">{e.cedula}</td><td>{e.motivos.join('; ')}</td></tr>
                   ))}
                 </tbody>
               </table>
@@ -278,7 +325,7 @@ export default function CargaPadron({ token, avisoVigencia, onPines, onCambio, o
                 <thead><tr><th>Fila</th><th>Cédula</th><th>Ya estaba en la fila</th></tr></thead>
                 <tbody>
                   {repetidas.slice(0, FILAS_MOSTRADAS).map((r) => (
-                    <tr key={r.fila}><td>{r.fila}</td><td className="mono">{r.cedula}</td><td>{r.primera}</td></tr>
+                    <tr key={r.fila}><td>{r.fila}</td><td className="mono sin-corte">{r.cedula}</td><td>{r.primera}</td></tr>
                   ))}
                 </tbody>
               </table>
@@ -305,7 +352,8 @@ export default function CargaPadron({ token, avisoVigencia, onPines, onCambio, o
             {avisoVigencia}
             <p className="field-hint-dark">
               Las cédulas que ya estén en el padrón no se modifican: al final se dice cuáles eran. Un puesto o una mesa
-              escritos de otra forma («colegio andino», «2» por «Mesa 2») quedan como ya figuran. A cada votante nuevo se
+              escritos de otra forma («colegio andino», «2» por «Mesa 2») quedan como ya figuran, y un puesto nuevo, con la
+              ubicación del archivo. A cada votante nuevo se
               le genera su PIN, y eso toma un momento: {estimado(votantes.length * SEGUNDOS_POR_VOTANTE)} en total.
             </p>
           </>
@@ -327,10 +375,19 @@ export default function CargaPadron({ token, avisoVigencia, onPines, onCambio, o
   return (
     <div className="carga-padron">
       {error && <div className="error-banner">{error}</div>}
+      {errorContexto && (
+        <div className="error-banner">
+          {errorContexto}{' '}
+          <button type="button" className="link-button" onClick={cargarContexto}>Reintentar</button>
+        </div>
+      )}
       <p className="field-hint-dark carga-ayuda">
         Columnas: <strong>cédula, nombre completo, puesto y mesa</strong> y, si quieres, <strong>voto asistido</strong>{' '}
-        (sí o no). El nombre puede venir en dos columnas, nombres y apellidos. Con encabezados en la primera fila, en
-        cualquier orden; sin encabezados, en ese orden. Antes de cargar nada se muestra cómo quedó cada fila.
+        (sí o no). El nombre puede venir en dos columnas, nombres y apellidos. Cada puesto nuevo necesita además su{' '}
+        <strong>ubicación</strong>: <strong>departamento, municipio y zona</strong> (urbana o rural) y, si quieres,{' '}
+        <strong>localidad</strong> (en Bogotá, una de sus 20) y país (Colombia). Basta con escribirla en una de las filas
+        del puesto, y un puesto que ya la tiene no la necesita. Con encabezados en la primera fila, en cualquier orden;
+        sin encabezados, {ORDEN_SIN_ENCABEZADOS}, en ese orden. Antes de cargar nada se muestra cómo quedó cada fila.
       </p>
       <div className="carga-opciones">
         <label
@@ -343,18 +400,19 @@ export default function CargaPadron({ token, avisoVigencia, onPines, onCambio, o
           onDrop={(e) => {
             e.preventDefault();
             setArrastrando(false);
-            leerArchivo(e.dataTransfer.files[0]);
+            if (contexto) leerArchivo(e.dataTransfer.files[0]);
           }}
         >
           <input
             type="file"
             accept=".csv,.txt,text/csv,text/plain"
+            disabled={!contexto}
             onChange={(e) => {
               leerArchivo(e.target.files[0]);
               e.target.value = '';
             }}
           />
-          <span className="zona-titulo">Elegir un archivo CSV</span>
+          <span className="zona-titulo">{contexto ? 'Elegir un archivo CSV' : 'Cargando la lista de municipios…'}</span>
           <span className="field-hint-dark">
             o arrastrarlo aquí. De Excel: «Guardar como» → «CSV UTF-8». De Google Sheets: «Archivo» → «Descargar» → CSV.
           </span>
@@ -369,7 +427,7 @@ export default function CargaPadron({ token, avisoVigencia, onPines, onCambio, o
             placeholder="Selecciona las celdas en Excel, Google Sheets o LibreOffice, cópialas (Ctrl+C) y pégalas aquí (Ctrl+V)"
             onChange={(e) => setTexto(e.target.value)}
           />
-          <button type="button" className="btn btn-outline" disabled={!texto.trim()} onClick={() => revisar(texto, 'Las celdas pegadas')}>
+          <button type="button" className="btn btn-outline" disabled={!texto.trim() || !contexto} onClick={() => revisar(texto, 'Las celdas pegadas')}>
             Revisar
           </button>
         </div>

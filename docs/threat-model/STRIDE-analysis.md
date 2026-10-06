@@ -68,6 +68,12 @@ separados aquí por responsabilidad):
   (AES-256-GCM); `full_name` en texto plano; `access_code_hash` (bcrypt del
   PIN) y `access_code_expires_at` (su vencimiento); `totp_secret` (el
   secreto del autenticador, cifrado) y `assisted` (si vota asistido).
+- **Puestos (puestos_votacion)**: la ubicación de cada puesto de votación
+  (país, departamento, municipio con su código del DANE, localidad y zona
+  urbana o rural), sin cifrar: dice dónde queda un puesto, un dato público,
+  no quién vota en él. Solo el administrador la escribe, y cada cambio queda
+  en la auditoría con la ubicación anterior y la nueva
+  (`PUESTO_UBICACION_GUARDADA`).
 - **Elecciones y votos**: `elections`, `election_options`, `votes`
   (`voter_id_hash`, nunca la cédula).
 - **Acta de escrutinio**: `scrutiny_ledger`, append-only, hash SHA-256

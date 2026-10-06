@@ -7,6 +7,7 @@ const request = require('supertest');
 const app = require('../app');
 const pool = require('../db');
 const { encryptField } = require('../voterCrypto');
+const { conUbicacion } = require('./ubicacion');
 
 const RUN_ID = `CITEST_PAD_${Date.now()}`;
 const sufijo = Date.now().toString().slice(-7);
@@ -24,7 +25,7 @@ const conAdmin = (metodo, ruta) =>
   PEDIDOS[metodo](ruta) // eslint-disable-line security/detect-object-injection -- metodo es siempre un literal de estas pruebas
     .set('Authorization', `Bearer ${adminToken}`)
     .set('X-Forwarded-For', `198.18.0.${(ipAdmin++ % 250) + 1}`);
-const agregar = (voters, extra = {}) => conAdmin('post', '/admin/voters').send({ voters, ...extra });
+const agregar = (voters, extra = {}) => conAdmin('post', '/admin/voters').send({ voters: conUbicacion(voters), ...extra });
 const listar = (filtros = {}) => conAdmin('get', `/admin/voters?${new URLSearchParams({ limit: '200', pollingPlace: PUESTO, ...filtros })}`);
 const nombres = (res) => res.body.voters.map((v) => v.full_name).sort();
 

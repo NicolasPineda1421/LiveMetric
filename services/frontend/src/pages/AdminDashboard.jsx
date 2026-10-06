@@ -4,8 +4,11 @@ import { HIDDEN_RESULTS_NOTE } from '../components/widgets/dataAdapters.js';
 import { ownValue } from '../utils/ownValue.js';
 import BuscadorPadron from '../components/BuscadorPadron.jsx';
 import CargaPadron from '../components/CargaPadron.jsx';
+import UbicacionCampos, { SIN_UBICACION, ubicacionDeLosCampos } from '../components/UbicacionCampos.jsx';
 import { descargarTexto } from '../utils/descargar.js';
 import { pinesCsv } from '../utils/padronArchivo.js';
+import { clavePuesto, crearUbicador, describirUbicacion } from '../utils/ubicacion.js';
+import PuestosTab from './PuestosTab.jsx';
 import ReportsTab from './ReportsTab.jsx';
 
 const TABS = [
@@ -17,6 +20,7 @@ const TABS = [
   { id: 'scrutiny', label: 'Escrutinio' },
   { id: 'users', label: 'Usuarios' },
   { id: 'voters', label: 'Padrón' },
+  { id: 'puestos', label: 'Puestos' },
   { id: 'audit', label: 'Auditoría' },
 ];
 
@@ -52,8 +56,8 @@ export default function AdminDashboard({ session, onLogout }) {
         ))}
       </div>
 
-      {/* El Padrón tiene la tabla más ancha: usa más pantalla para no apretarla. */}
-      <div className={`content${tab === 'voters' ? ' content-ancho' : ''}`}>
+      {/* El Padrón y los Puestos tienen las tablas más anchas: usan más pantalla para no apretarlas. */}
+      <div className={`content${tab === 'voters' || tab === 'puestos' ? ' content-ancho' : ''}`}>
         {tab === 'overview' && <OverviewTab session={session} />}
         {tab === 'templates' && <TemplatesTab session={session} />}
         {tab === 'elections' && <ElectionsTab session={session} />}
@@ -62,6 +66,7 @@ export default function AdminDashboard({ session, onLogout }) {
         {tab === 'scrutiny' && <ScrutinyTab session={session} />}
         {tab === 'users' && <UsersTab session={session} />}
         {tab === 'voters' && <VotersTab session={session} onCargaEnCurso={(enCurso) => { cargando.current = enCurso; }} />}
+        {tab === 'puestos' && <PuestosTab session={session} />}
         {tab === 'audit' && <AuditTab session={session} />}
       </div>
     </div>
@@ -1004,15 +1009,38 @@ const SIN_FILTROS = { q: '', pollingPlace: '', votingTable: '', pin: '', totp: '
 const PIN_FILTRO = { vigente: 'Vigente', vencido: 'Vencido', sin_vencimiento: 'Sin vencimiento', sin_asignar: 'Sin asignar' };
 
 let siguienteFila = 1;
-// Una fila del formulario de alta. Puesto y mesa se copian de la anterior:
-// suelen agregarse varios votantes de la misma mesa seguidos.
+// Una fila del formulario de alta. Puesto, mesa y ubicación se copian de la
+// anterior: suelen agregarse varios votantes de la misma mesa seguidos.
 const filaNueva = (anterior = {}) => ({
   key: siguienteFila++,
   cedula: '',
   fullName: '',
   pollingPlace: anterior.pollingPlace || '',
   votingTable: anterior.votingTable || '',
+  ubicacion: anterior.ubicacion || SIN_UBICACION,
 });
+
+// Debajo de cada votante del formulario, la ubicación de su puesto: la que
+// ya tiene, o los campos para darle una si todavía no la tiene (solo en la
+// primera fila de ese puesto).
+function UbicacionDeLaFila({ fila, filas, puesto, pide, ubicador, onChange }) {
+  if (!fila.pollingPlace.trim()) return null;
+  if (puesto?.ubicacion) {
+    return <p className="ubicacion-puesto field-hint-dark">Ubicación del puesto: {describirUbicacion(puesto.ubicacion)}</p>;
+  }
+  if (!pide) {
+    const primera = filas.findIndex((f) => clavePuesto(f.pollingPlace) === clavePuesto(fila.pollingPlace));
+    return <p className="ubicacion-puesto field-hint-dark">Ubicación del puesto: la del votante {primera + 1}.</p>;
+  }
+  return (
+    <fieldset className="ubicacion-puesto">
+      <legend>{puesto ? 'Este puesto todavía no tiene ubicación' : 'Puesto nuevo: ¿dónde queda?'}</legend>
+      {ubicador
+        ? <UbicacionCampos ubicador={ubicador} valor={fila.ubicacion} onChange={onChange} idBase={`ubicacion-${fila.key}`} />
+        : <p className="field-hint-dark">Cargando la lista de municipios…</p>}
+    </fieldset>
+  );
+}
 
 // Los PIN que se listan en pantalla; todos van en el archivo para descargar.
 const PINES_MOSTRADOS = 50;
@@ -1034,6 +1062,8 @@ function VotersTab({ session, onCargaEnCurso }) {
   const [savingId, setSavingId] = useState(null);
   // Horas que vale cada PIN desde que se genera (las fija el servicio).
   const [pinVigenciaHoras, setPinVigenciaHoras] = useState(null);
+  // El catálogo del DANE, para la ubicación de un puesto nuevo.
+  const [ubicador, setUbicador] = useState(null);
 
   function load() {
     api.listVoters(session.token, { ...filtros, limit: VOTERS_PAGE_SIZE, offset: page * VOTERS_PAGE_SIZE })
@@ -1047,12 +1077,23 @@ function VotersTab({ session, onCargaEnCurso }) {
   }
   useEffect(load, [session.token, filtros, page]);
 
-  // Los puestos (para los filtros y las sugerencias del formulario) cambian
-  // solo al agregar o eliminar: no se piden en cada cambio de filtro.
+  // Los puestos (para los filtros, las sugerencias del formulario y la
+  // ubicación de cada uno) cambian solo al agregar o eliminar: no se piden
+  // en cada cambio de filtro.
   function loadPlaces() {
-    api.listPadronPlaces(session.token).then((d) => setPlaces(d.places || [])).catch(() => {});
+    api.listPuestos(session.token).then((d) => setPlaces(d.puestos || [])).catch(() => {});
   }
   useEffect(loadPlaces, [session.token]);
+  useEffect(() => {
+    api.getDivipola(session.token).then((catalogo) => setUbicador(crearUbicador(catalogo))).catch(() => {});
+  }, [session.token]);
+  const puestoPorClave = new Map(places.map((p) => [clavePuesto(p.pollingPlace), p]));
+  // La fila del formulario que lleva la ubicación de su puesto: la primera de
+  // un puesto que todavía no la tiene (las demás del mismo puesto, no).
+  const pideUbicacion = (fila, i) => {
+    const clave = clavePuesto(fila.pollingPlace);
+    return clave !== '' && !puestoPorClave.get(clave)?.ubicacion && filas.findIndex((f) => clavePuesto(f.pollingPlace) === clave) === i;
+  };
 
   // Cada PIN, con su vencimiento: el de la respuesta que lo generó.
   const conVencimiento = (codigos, vence) => (codigos || []).map((c) => ({ ...c, expiresAt: vence }));
@@ -1074,11 +1115,12 @@ function VotersTab({ session, onCargaEnCurso }) {
   async function submit(e) {
     e.preventDefault();
     limpiarMensajes();
-    const nuevos = filas.map(({ cedula, fullName, pollingPlace, votingTable }) => ({
-      cedula: cedula.trim(),
-      fullName: fullName.trim(),
-      pollingPlace: pollingPlace.trim(),
-      votingTable: votingTable.trim(),
+    const nuevos = filas.map((fila, i) => ({
+      cedula: fila.cedula.trim(),
+      fullName: fila.fullName.trim(),
+      pollingPlace: fila.pollingPlace.trim(),
+      votingTable: fila.votingTable.trim(),
+      ...(pideUbicacion(fila, i) && ubicador ? ubicacionDeLosCampos(fila.ubicacion, ubicador.pais) : {}),
     }));
     try {
       const result = await api.addVoters(session.token, nuevos);
@@ -1193,7 +1235,9 @@ function VotersTab({ session, onCargaEnCurso }) {
       <h2 className="section-title">Padrón electoral</h2>
       <p className="section-desc">
         Agrega a cada votante con su cédula, su nombre, su puesto de votación y su mesa. El puesto y la mesa identifican
-        dónde está habilitado y quedan asociados a cada voto que emita, para poder consolidar el escrutinio por mesa. A
+        dónde está habilitado y quedan asociados a cada voto que emita, para poder consolidar el escrutinio por mesa. Un
+        puesto nuevo se registra con su ubicación (departamento, municipio, localidad y zona urbana o rural), que después
+        se ve y se corrige en la pestaña «Puestos». A
         cada votante nuevo se le genera un PIN de acceso: es lo que usa para entrar a votar (junto a su cédula), no una
         contraseña que él mismo elige. Además, en su primer ingreso registra un autenticador (Microsoft o Google
         Authenticator) y desde ahí entra también con su código. Quien no pueda usar una app se marca para el{' '}
@@ -1267,6 +1311,14 @@ function VotersTab({ session, onCargaEnCurso }) {
                       Quitar
                     </button>
                   )}
+                  <UbicacionDeLaFila
+                    fila={fila}
+                    filas={filas}
+                    puesto={puestoPorClave.get(clavePuesto(fila.pollingPlace))}
+                    pide={pideUbicacion(fila, i)}
+                    ubicador={ubicador}
+                    onChange={(valor) => cambiarFila(fila.key, 'ubicacion', valor)}
+                  />
                 </fieldset>
               );
             })}
@@ -1355,7 +1407,7 @@ function VotersTab({ session, onCargaEnCurso }) {
             <label htmlFor="filtro-puesto">Puesto</label>
             <select id="filtro-puesto" value={filtros.pollingPlace} onChange={(e) => filtrar({ pollingPlace: e.target.value, votingTable: '' })}>
               <option value="">Todos</option>
-              {places.map((p) => <option key={p.pollingPlace} value={p.pollingPlace}>{p.pollingPlace}</option>)}
+              {places.filter((p) => p.voters > 0).map((p) => <option key={p.pollingPlace} value={p.pollingPlace}>{p.pollingPlace}</option>)}
             </select>
           </div>
           <div className="field-dark">
@@ -1413,7 +1465,10 @@ function VotersTab({ session, onCargaEnCurso }) {
                     <tr key={v.id}>
                       <td className="mono sin-corte">{v.cedula}</td>
                       <td>{v.full_name}</td>
-                      <td>{v.polling_place}</td>
+                      <td>
+                        {v.polling_place}
+                        <span className="ubicacion-celda">{describirUbicacion(puestoPorClave.get(clavePuesto(v.polling_place))?.ubicacion)}</span>
+                      </td>
                       <td>{v.voting_table}</td>
                       <td>{pinStatus(v, Date.now())}</td>
                       <td>{v.assisted ? 'No lo usa' : v.has_totp ? 'Registrado' : 'Pendiente'}</td>

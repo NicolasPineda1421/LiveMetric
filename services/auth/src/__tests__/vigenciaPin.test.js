@@ -15,6 +15,7 @@ const pool = require('../db');
 const { encryptField } = require('../voterCrypto');
 const totp = require('../totp');
 const { abrirVotacion, cerrarVotacion } = require('./votacion');
+const { UBICACION } = require('./ubicacion');
 const { leerHorasDeVigencia, vencimientoDelPin } = require('../vigenciaPin');
 
 const RUN_ID = `CITEST_VIG_${Date.now()}`;
@@ -125,7 +126,7 @@ describe('El tiempo del PIN corre desde que se genera', () => {
   const VEINTICUATRO_HORAS = 24 * HORA;
   // A un minuto, como mucho, de "esperado".
   const cerca = (fecha, esperado) => Math.abs(new Date(fecha).getTime() - esperado) < 60 * 1000;
-  const votante = (cedula) => ({ cedula, fullName: 'Votante de la carga', pollingPlace: 'Puesto CI', votingTable: 'Mesa 1' });
+  const votante = (cedula) => ({ cedula, fullName: 'Votante de la carga', pollingPlace: 'Puesto CI', votingTable: 'Mesa 1', ...UBICACION });
   const cargar = (cedula, extra = {}) => conAdmin('post', '/admin/voters/bulk').send({ voters: [votante(cedula)], ...extra });
 
   it('al cargar el padrón vence 24 horas después, aunque la elección programada sea más adelante; el listado dice cuánto vale', async () => {

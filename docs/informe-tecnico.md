@@ -40,6 +40,7 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 - **Elecciones programadas.** Plantillas genéricas o presidenciales (con número, nombre y foto de cada candidato), que se abren y cierran solas según su horario o se detienen a mano.
 - **Voto único por identidad.** El doble voto se impide por la identidad del votante, no por su navegador. El padrón se guarda cifrado con AES-256-GCM.
 - **Padrón de miles de votantes.** Se carga uno por uno o, de una vez, desde un archivo CSV o desde las celdas copiadas de una hoja de cálculo: antes de cargar se muestra cómo quedó cada fila y qué corregir, y al final los PIN generados se descargan en una lista.
+- **Puestos con su ubicación.** Cada puesto de votación tiene país, departamento y municipio (de la Divipola del DANE), localidad y zona urbana o rural. Se registra con su primer votante y se corrige en una pestaña propia.
 - **Doble factor para votar.** El votante entra con su PIN y con el código de su app autenticadora (Microsoft o Google Authenticator), que registra en su primer ingreso. Quien no puede usar una app vota asistido: lo autoriza el jurado de su mesa con su propio autenticador, después de cotejar su cédula en persona. Cada PIN vence 24 horas después de generarlo; votar solo se puede dentro del horario de la elección.
 - **Escrutinio independiente.** Al cerrar, un servicio aparte recuenta los votos desde cero, consolida por mesa, determina el ganador, encadena el acta con hashes SHA-256 y la **firma digitalmente** con Ed25519. El acta también se descarga en PDF.
 - **Sin resultados parciales.** Mientras la elección está abierta, en vivo solo se ve cuántas personas votaron. Los votos por candidato u opción se publican cuando el escrutinio certifica el acta: antes, el sistema no los entrega a nadie, tampoco al administrador ni pidiéndolos directamente a la API.
@@ -263,6 +264,7 @@ graph LR
         UC7(["Verificar las actas"])
         UC8(["Crear administradores<br/>y auditores"])
         UC9(["Cargar padrón<br/>y generar PIN"])
+        UC18(["Ubicar los puestos<br/>de votación"])
         UC10(["Consultar auditoría"])
         UC15(["Armar tableros"])
         UC16(["Ver tableros"])
@@ -273,7 +275,7 @@ graph LR
         UC14(["Certificar y firmar el acta"])
     end
 
-    Admin --> UC1 & UC2 & UC3 & UC4 & UC5 & UC6 & UC7 & UC8 & UC9 & UC10 & UC15 & UC16
+    Admin --> UC1 & UC2 & UC3 & UC4 & UC5 & UC6 & UC7 & UC8 & UC9 & UC18 & UC10 & UC15 & UC16
     Auditor --> UC1 & UC5 & UC16
     Votante --> UC1 & UC11 & UC12 & UC17
     Reloj --> UC13 & UC14
@@ -287,6 +289,7 @@ graph LR
 erDiagram
     ADMINS ||--o{ ELECTION_TEMPLATES : crea
     ADMINS ||--o{ VOTERS : registra
+    PUESTOS_VOTACION ||..o{ VOTERS : "ubica, por nombre"
     ELECTION_TEMPLATES ||--o{ TEMPLATE_OPTIONS : contiene
     ELECTION_TEMPLATES ||--o{ ELECTIONS : instancia
     ELECTIONS ||--o{ ELECTION_OPTIONS : contiene
@@ -309,6 +312,13 @@ erDiagram
         timestamp access_code_expires_at "vencimiento del PIN"
         string totp_secret "cifrado"
         bool assisted }
+    PUESTOS_VOTACION { int id PK
+        string clave "nombre normalizado, único"
+        string codigo_municipio "Divipola del DANE"
+        string departamento
+        string municipio
+        string localidad "opcional"
+        string zona "urbana o rural" }
     ELECTIONS { int id PK
         string title
         string status
@@ -330,7 +340,7 @@ erDiagram
         jsonb metadata }
 ```
 
-*Figura 7. Modelo de datos (resumen). `votes` nunca guarda la cédula, solo su hash con un salt que solo conoce Auth.*
+*Figura 7. Modelo de datos (resumen). `votes` nunca guarda la cédula, solo su hash con un salt que solo conoce Auth. `puestos_votacion` se une al padrón por el nombre normalizado del puesto, que en `voters` va cifrado.*
 
 ### 2.7 Contenerización
 
@@ -819,6 +829,7 @@ Un hallazgo no siempre sale de una herramienta automática: algunos aparecieron 
 | El primer administrador aceptaba contraseñas débiles (solo exigía 10 caracteres: `1234567890` o `Admin2026!` pasaban), y si el script fallaba, el arranque seguía y terminaba con "LiveMetric está arriba" sin ningún administrador | Prueba del equipo con el despliegue | Alta (control total del sistema con una contraseña adivinable) | Resuelto | Política de contraseñas común al arranque y a la pestaña Usuarios (`politicaContrasena.js`); el script explica por qué una contraseña no sirve y la vuelve a pedir (tres intentos); si no se crea, el arranque lo avisa al final. `cambiarContrasena.js` reemplaza las contraseñas creadas antes |
 | Con los filtros nuevos del padrón, filtrar varias veces dejaba al administrador sin cupo para eliminar o regenerar un PIN (`429`): consultas y cambios compartían el límite de 20 operaciones por minuto | Prueba en el navegador | Baja (disponibilidad del panel) | Resuelto | Límites separados: 60 consultas y 20 cambios por minuto, con una prueba que filtra 25 veces y después elimina. Los puestos del padrón se piden al abrir la pestaña, no en cada filtro |
 | La carga masiva por API (`/admin/voters/bulk`) declaraba hasta 5000 votantes, pero el límite de 10 kB por pedido la dejaba en unas decenas; y desde el panel, el padrón se cargaba votante por votante | Revisión funcional del equipo | Baja (operación) | Resuelto | Carga desde un CSV o desde celdas pegadas, validada en el navegador y mandada en lotes de 100. Las dos rutas que agregan votantes aceptan 256 kB (200 votantes) y leen el cuerpo después de comprobar la sesión; la lista de PIN se descarga con las fórmulas neutralizadas (amenazas 20 a 22) |
+| Los puestos de votación eran solo un nombre: no se sabía dónde quedaba cada uno ni se podía agrupar por municipio o zona, y dos puestos de municipios distintos con el mismo nombre se juntaban en uno | Revisión funcional del equipo | Baja (operación) | Resuelto | Cada puesto tiene país, departamento y municipio de la Divipola del DANE (código y nombre oficial), localidad y zona urbana o rural (migración 009). Se registra con su primer votante, en el formulario o en el archivo, con las mismas reglas en el panel y en el servicio; un nombre repetido en otro municipio se rechaza en vez de juntar dos puestos. Los puestos anteriores se completan en la pestaña **Puestos** |
 | Un jurado creado con la mesa escrita "1" no podía autorizar a los votantes de la "Mesa 1": el puesto y la mesa se escribían a mano y se comparaban letra por letra | Prueba del equipo con el contenedor global | Media (el voto asistido quedaba bloqueado) | Resuelto | Al crear un jurado, el puesto y la mesa se eligen del padrón, con la opción *Todas las mesas del puesto*; se comparan sin distinguir mayúsculas, tildes ni el prefijo "Mesa" (`lugares.js`), así que los jurados ya creados funcionan sin recrearlos, y el administrador puede **Cambiar mesa** |
 | El PIN del votante no vencía: uno filtrado o viejo servía en cualquier elección futura | Revisión funcional del equipo | Media | Resuelto | El PIN vence 24 horas después de generarlo (`PIN_VIGENCIA_HORAS`, de 1 hora a 90 días), comprobado en los dos pasos del ingreso (migraciones `007_vencimiento_pin.sql` y `008_pin_sin_vencimiento.sql`, que le pone fecha a los PIN anteriores). Una versión también limitaba el ingreso a la ventana de la votación; el equipo la quitó, porque obligaba a programar una elección para registrar el autenticador, y votar ya está limitado al horario de la elección. Otra dejaba elegir la fecha de vencimiento al generarlo (por defecto, el cierre de la elección); el equipo prefirió un tiempo fijo que corre desde que se genera |
 | Con la elección abierta, el administrador y el auditor veían los votos de cada opción y quién iba ganando (la API los entregaba), y un resultado parcial puede influir en quien todavía no votó | Revisión funcional del equipo | Media (integridad del proceso electoral) | Resuelto | Analytics solo publica el total de votos hasta que existe el acta certificada: los votos por opción, la concentración y el momento de definición no salen del servicio antes. Se aplica en la API, no solo en la pantalla, con pruebas que lo comprueban |
@@ -984,6 +995,7 @@ Además, Falco corre con `rule_matching=all`, porque por defecto sus reglas gen�
 - **Rotación de claves.** Un script para rotar la clave del padrón y un registro de claves públicas anteriores, para que la rotación de la clave de firma no invalide las actas viejas.
 - **Monitoreo.** Métricas de negocio con `prom-client`, notificaciones con Alertmanager y retención de registros según la normativa aplicable.
 - **Operación.** Respaldos automáticos y cifrados de la base.
+- **Puestos.** Reportes de participación por departamento, municipio y zona, y puestos de votación en el exterior (el país ya se guarda).
 - **Dependencias.** Mantener las dependencias y las imágenes base al día antes de cada versión, aunque no haya CVE.
 
 ## Anexo. Enlaces y reproducción

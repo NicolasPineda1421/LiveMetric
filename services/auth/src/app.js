@@ -14,7 +14,11 @@ const { encryptField, decryptField } = require('./voterCrypto');
 const totp = require('./totp');
 const { evaluarContrasena, mensajeContrasenaDebil, MINIMO_CONTRASENA, MAXIMO_CONTRASENA } = require('./politicaContrasena');
 const { leerHorasDeVigencia, vencimientoDelPin, VIGENCIA_MAXIMA_HORAS } = require('./vigenciaPin');
-const { juradoCubre, lugaresDelPadron, ubicarEnPadron, lugarCanonico, normalizarPuesto, mismoPuesto, mismaMesa } = require('./lugares');
+const {
+  juradoCubre, lugaresDelPadron, ubicarEnPadron, lugarCanonico, normalizarPuesto, mismoPuesto, mismaMesa, ubicacionDeFila,
+} = require('./lugares');
+const { catalogoParaElPanel, traeUbicacion, resolverUbicacion, describirUbicacion } = require('./divipola');
+const { ubicarPuestosDelPedido, guardarUbicaciones } = require('./puestos');
 
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -755,6 +759,133 @@ app.get('/admin/padron/lugares', requireAdmin, adminReadLimiter, async (_req, re
   }
 });
 
+// La ubicación del puesto de cada votante (todo opcional aquí: hace falta
+// solo si su puesto todavía no la tiene; ver puestos.js). El departamento y
+// el municipio pueden ir con su nombre o con su código del DANE.
+const reglasDeUbicacion = (prefijo) => [
+  body(`${prefijo}pais`).optional({ values: 'null' }).isString().isLength({ max: 60 }),
+  body(`${prefijo}departamento`).optional({ values: 'null' }).isString().isLength({ max: 80 }),
+  body(`${prefijo}municipio`).optional({ values: 'null' }).isString().isLength({ max: 80 }),
+  body(`${prefijo}localidad`).optional({ values: 'null' }).isString().isLength({ max: 80 }),
+  body(`${prefijo}zona`).optional({ values: 'null' }).isString().isLength({ max: 30 }),
+];
+const datosDeUbicacion = ({ pais, departamento, municipio, localidad, zona }) => ({ pais, departamento, municipio, localidad, zona });
+
+// El puesto y la mesa de cada votante de un pedido como ya figuran en el
+// padrón (lugarCanonico), y la ubicación de los puestos que todavía no la
+// tienen (puestos.js): { canonicos, nuevas } o { error } para responder 400.
+async function lugaresDelPedido(voters) {
+  const lugares = await lugaresDelPadron(pool, { todos: true });
+  const canonicos = voters.map((v) => lugarCanonico(lugares, v.pollingPlace, v.votingTable));
+  const { error, nuevas } = ubicarPuestosDelPedido(voters.map((v, i) => ({
+    // eslint-disable-next-line security/detect-object-injection -- i es el índice numérico de voters, paralelo a canonicos
+    puesto: lugares.find((p) => p.pollingPlace === canonicos[i].pollingPlace),
+    datos: datosDeUbicacion(v),
+  })));
+  return { error, canonicos, nuevas };
+}
+
+/* ============================================================
+ * PUESTOS DE VOTACIÓN Y SU UBICACIÓN (migración 009)
+ * ============================================================
+ *
+ * Cada puesto tiene país, departamento, municipio, localidad (opcional) y
+ * zona urbana o rural. Se registra al agregar a su primer votante (ver
+ * puestos.js) y se corrige aquí. El departamento y el municipio salen de la
+ * Divipola del DANE (divipola.js), que el panel pide para sus listas.
+ */
+app.get('/admin/divipola', requireAdmin, adminReadLimiter, (_req, res) => {
+  res.set('Cache-Control', 'private, max-age=86400');
+  return res.status(200).json(catalogoParaElPanel());
+});
+
+// Todos los puestos: los del padrón (con sus mesas y cuántos votantes
+// tienen) y los que tienen ubicación pero ya no tienen votantes.
+app.get('/admin/puestos', requireAdmin, adminReadLimiter, async (_req, res) => {
+  try {
+    return res.status(200).json({ puestos: await lugaresDelPadron(pool, { todos: true }) });
+  } catch (err) {
+    console.error('Error en GET /admin/puestos:', err.message);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// Agrega o corrige la ubicación de un puesto que ya existe (en el padrón o
+// con ubicación). La localidad vacía la quita.
+app.put(
+  '/admin/puestos/ubicacion',
+  requireAdmin,
+  adminOpsLimiter,
+  [body('pollingPlace').isString().trim().isLength({ min: 2, max: 150 }), ...reglasDeUbicacion('')],
+  async (req, res) => {
+    if (!validationResult(req).isEmpty()) return res.status(400).json({ error: 'Indica el puesto y su ubicación' });
+    if (!traeUbicacion(req.body)) return res.status(400).json({ error: 'Indica el departamento, el municipio y la zona (urbana o rural) del puesto.' });
+    const { ubicacion: u, motivos } = resolverUbicacion(datosDeUbicacion(req.body));
+    if (motivos) return res.status(400).json({ error: `${motivos.join('; ')}.`.replace(/^./, (c) => c.toUpperCase()) });
+    try {
+      const puesto = (await lugaresDelPadron(pool, { todos: true })).find((p) => mismoPuesto(p.pollingPlace, req.body.pollingPlace));
+      if (!puesto) return res.status(404).json({ error: 'Ese puesto no está en el padrón' });
+      const guardado = await pool.query(
+        `INSERT INTO puestos_votacion (nombre, clave, pais, codigo_municipio, departamento, municipio, localidad, zona, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (clave) DO UPDATE SET
+           pais = EXCLUDED.pais, codigo_municipio = EXCLUDED.codigo_municipio, departamento = EXCLUDED.departamento,
+           municipio = EXCLUDED.municipio, localidad = EXCLUDED.localidad, zona = EXCLUDED.zona, updated_at = now()
+         RETURNING *`,
+        [puesto.pollingPlace, normalizarPuesto(puesto.pollingPlace), u.pais, u.codigoMunicipio, u.departamento, u.municipio, u.localidad, u.zona, req.user.sub]
+      );
+      const ubicacion = ubicacionDeFila(guardado.rows[0]);
+      await recordAuditEvent({
+        eventType: 'PUESTO_UBICACION_GUARDADA',
+        actorType: 'admin',
+        actorRef: req.user.username,
+        req,
+        metadata: {
+          pollingPlace: puesto.pollingPlace,
+          antes: puesto.ubicacion ? describirUbicacion(puesto.ubicacion) : null,
+          ahora: describirUbicacion(ubicacion),
+          codigoMunicipio: ubicacion.codigoMunicipio,
+        },
+      });
+      return res.status(200).json({ pollingPlace: puesto.pollingPlace, ubicacion });
+    } catch (err) {
+      console.error('Error en PUT /admin/puestos/ubicacion:', err.message);
+      return res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  }
+);
+
+// Quita un puesto que ya no tiene votantes (con votantes, se eliminan o se
+// mueven primero).
+app.delete(
+  '/admin/puestos/:id',
+  requireAdmin,
+  adminOpsLimiter,
+  [param('id').isInt({ min: 1 }).toInt()],
+  async (req, res) => {
+    if (!validationResult(req).isEmpty()) return res.status(400).json({ error: 'id de puesto inválido' });
+    try {
+      const puesto = (await lugaresDelPadron(pool, { todos: true })).find((p) => p.ubicacion?.id === req.params.id);
+      if (!puesto) return res.status(404).json({ error: 'Puesto no encontrado' });
+      if (puesto.voters > 0) {
+        return res.status(409).json({ error: `El puesto «${puesto.pollingPlace}» tiene ${puesto.voters} votante${puesto.voters === 1 ? '' : 's'}: no se puede quitar.` });
+      }
+      await pool.query('DELETE FROM puestos_votacion WHERE id = $1', [req.params.id]);
+      await recordAuditEvent({
+        eventType: 'PUESTO_ELIMINADO',
+        actorType: 'admin',
+        actorRef: req.user.username,
+        req,
+        metadata: { pollingPlace: puesto.pollingPlace, ubicacion: describirUbicacion(puesto.ubicacion) },
+      });
+      return res.status(204).send();
+    } catch (err) {
+      console.error('Error en DELETE /admin/puestos/:id:', err.message);
+      return res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  }
+);
+
 // Cambia el puesto y la mesa de un jurado (sin mesa: todo el puesto).
 app.put(
   '/admin/users/:id/mesa',
@@ -823,7 +954,8 @@ app.post(
 );
 
 // Carga masiva del padrón electoral. Se acepta un arreglo JSON de
-// {cedula, fullName, pollingPlace, votingTable}; usa UPSERT (ON CONFLICT)
+// {cedula, fullName, pollingPlace, votingTable} y, si el puesto todavía no
+// tiene ubicación, la de su puesto (ver puestos.js); usa UPSERT (ON CONFLICT)
 // para poder reintentar cargas parciales sin duplicar votantes ya existentes.
 // A cada votante NUEVO se le genera un PIN de acceso (nunca a uno que ya
 // existía: no se le pisa el PIN por corregirle, p.ej., el nombre). Los PIN
@@ -847,6 +979,7 @@ app.post(
     body('voters.*.fullName').trim().isLength({ min: 3, max: 200 }),
     body('voters.*.pollingPlace').trim().isLength({ min: 2, max: 150 }),
     body('voters.*.votingTable').trim().isLength({ min: 1, max: 50 }),
+    ...reglasDeUbicacion('voters.*.'),
   ],
   async (req, res) => {
     const errors = validationResult(req);
@@ -858,6 +991,15 @@ app.post(
     }
 
     const { voters } = req.body;
+    let pedido;
+    try {
+      pedido = await lugaresDelPedido(voters);
+    } catch (err) {
+      console.error('Error en /admin/voters/bulk:', err.message);
+      return res.status(500).json({ error: 'Error interno del servidor' });
+    }
+    if (pedido.error) return res.status(400).json({ error: pedido.error });
+    const { canonicos, nuevas } = pedido;
 
     // Hashing de bcrypt es intensivo en CPU: se hace en paralelo ANTES de la
     // transacción (no dentro del loop secuencial), para que cargar cientos
@@ -874,10 +1016,11 @@ app.post(
 
     try {
       await client.query('BEGIN');
+      await guardarUbicaciones(client, nuevas, req.user.sub);
 
-      /* eslint-disable security/detect-object-injection -- i es el índice numérico de voters, pins y pinHashes, arreglos paralelos del mismo largo armados arriba */
+      /* eslint-disable security/detect-object-injection -- i es el índice numérico de voters, canonicos, pins y pinHashes, arreglos paralelos del mismo largo armados arriba */
       for (let i = 0; i < voters.length; i += 1) {
-        const v = voters[i];
+        const v = { ...voters[i], ...canonicos[i] };
         // cedula/polling_place/voting_table van cifrados (ver voterCrypto.js);
         // full_name se guarda tal cual, en texto plano.
         const result = await client.query(
@@ -914,7 +1057,7 @@ app.post(
         actorType: 'admin',
         actorRef: req.user.username,
         req,
-        metadata: { totalReceived: voters.length, inserted, updated, pinExpiresAt },
+        metadata: { totalReceived: voters.length, inserted, updated, pinExpiresAt, puestosUbicados: nuevas.map(({ puesto }) => puesto.pollingPlace) },
       });
 
       return res.status(201).json({ totalReceived: voters.length, inserted, updated, accessCodes, pinExpiresAt });
@@ -1116,6 +1259,11 @@ const VOTER_FIELD_LABELS = {
   pollingPlace: 'falta el puesto de votación',
   votingTable: 'falta la mesa',
   assisted: 'el voto asistido debe ser sí o no',
+  pais: 'el país es demasiado largo',
+  departamento: 'el departamento es demasiado largo',
+  municipio: 'el municipio es demasiado largo',
+  localidad: 'la localidad es demasiado larga',
+  zona: 'en zona escribe urbana o rural',
 };
 
 // "voters[2].cedula" -> { fila: 3, campo: 'cedula' }: qué votante y qué dato
@@ -1138,6 +1286,7 @@ app.post(
     body('voters.*.pollingPlace').isString().trim().isLength({ min: 2, max: 150 }),
     body('voters.*.votingTable').isString().trim().isLength({ min: 1, max: 50 }),
     body('voters.*.assisted').optional().isBoolean({ strict: true }),
+    ...reglasDeUbicacion('voters.*.'),
     body('origen').optional().isIn(['formulario', 'archivo']),
   ],
   async (req, res) => {
@@ -1156,7 +1305,17 @@ app.post(
     const repetida = cedulas.find((c, i) => cedulas.indexOf(c) !== i);
     if (repetida) return res.status(400).json({ error: `La cédula ${repetida} está dos veces en el formulario.` });
 
-    const lugares = await lugaresDelPadron(pool);
+    // El puesto, la mesa y la ubicación de cada puesto, antes de generar ningún PIN.
+    let pedido;
+    try {
+      pedido = await lugaresDelPedido(voters);
+    } catch (err) {
+      console.error('Error en POST /admin/voters:', err.message);
+      return res.status(500).json({ error: 'Error interno del servidor' });
+    }
+    if (pedido.error) return res.status(400).json({ error: pedido.error });
+    const { canonicos, nuevas } = pedido;
+
     const pins = voters.map(() => generateAccessCode());
     const pinExpiresAt = vencimientoDeUnPinNuevo();
     const pinHashes = await Promise.all(pins.map((pin) => bcrypt.hash(pin, 10)));
@@ -1166,8 +1325,10 @@ app.post(
     const duplicates = [];
     try {
       await client.query('BEGIN');
+      await guardarUbicaciones(client, nuevas, req.user.sub);
       for (const [i, v] of voters.entries()) {
-        const { pollingPlace, votingTable } = lugarCanonico(lugares, v.pollingPlace, v.votingTable);
+        // eslint-disable-next-line security/detect-object-injection -- i es el índice numérico de voters, paralelo a canonicos
+        const { pollingPlace, votingTable } = canonicos[i];
         const result = await client.query(
           `INSERT INTO voters (cedula, full_name, polling_place, voting_table, access_code_hash, access_code_expires_at, created_by, assisted)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -1206,6 +1367,7 @@ app.post(
         assisted: voters.filter((v) => v.assisted === true).length,
         pinExpiresAt,
         via: req.body.origen || 'formulario',
+        puestosUbicados: nuevas.map(({ puesto }) => puesto.pollingPlace),
       },
     });
     return res.status(201).json({ inserted: accessCodes.length, duplicates, accessCodes, pinExpiresAt });

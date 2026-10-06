@@ -15,6 +15,7 @@ const request = require('supertest');
 const app = require('../app');
 const pool = require('../db');
 const { encryptField, decryptField } = require('../voterCrypto');
+const { conUbicacion } = require('./ubicacion');
 const totp = require('../totp');
 
 const RUN_ID = `CITEST_2F_${Date.now()}`;
@@ -69,12 +70,12 @@ beforeAll(async () => {
   adminToken = (await post('/login/admin', ADMIN)).body.token;
 
   const carga = await conToken('post', '/admin/voters/bulk', adminToken).send({
-    voters: [
+    voters: conUbicacion([
       { cedula: CEDULAS.conApp, fullName: 'Votante Con App', pollingPlace: PUESTO, votingTable: 'Mesa 1' },
       { cedula: CEDULAS.doble, fullName: 'Votante Doble Registro', pollingPlace: PUESTO, votingTable: 'Mesa 1' },
       { cedula: CEDULAS.asistida, fullName: 'Votante Asistida', pollingPlace: PUESTO, votingTable: 'Mesa 1' },
       { cedula: CEDULAS.otraMesa, fullName: 'Votante Otra Mesa', pollingPlace: PUESTO, votingTable: 'Mesa 2' },
-    ],
+    ]),
   });
   for (const { cedula, pin } of carga.body.accessCodes) pins.set(cedula, pin);
 
@@ -350,7 +351,12 @@ describe('Puesto y mesa del jurado', () => {
   it('el administrador ve los puestos del padrón con sus mesas', async () => {
     const res = await conToken('get', '/admin/padron/lugares', adminToken);
     expect(res.status).toBe(200);
-    expect(res.body.places).toContainEqual({ pollingPlace: PUESTO, votingTables: ['Mesa 1', 'Mesa 2'] });
+    expect(res.body.places).toContainEqual({
+      pollingPlace: PUESTO,
+      votingTables: ['Mesa 1', 'Mesa 2'],
+      voters: 4,
+      ubicacion: expect.objectContaining({ municipio: 'Tunja', departamento: 'Boyacá', codigoMunicipio: '15001', zona: 'urbana' }),
+    });
   });
 
   it('al crearlo, el puesto y la mesa se guardan como figuran en el padrón, aunque se escriban distinto', async () => {

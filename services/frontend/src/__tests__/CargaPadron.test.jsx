@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import AdminDashboard from '../pages/AdminDashboard.jsx';
 import { api } from '../api.js';
 import { reiniciarApiFalsa } from './apiFalsa.js';
+import { CATALOGO, PUESTOS } from './catalogoDePrueba.js';
 
 jest.mock('../api.js', () => require('./apiFalsa.js').crearApiFalsa());
 
@@ -27,7 +28,8 @@ let descargas;
 beforeEach(() => {
   reiniciarApiFalsa(api);
   api.listVoters.mockResolvedValue({ voters: [], total: 0, registered: 0 });
-  api.listPadronPlaces.mockResolvedValue({ places: [] });
+  api.listPuestos.mockResolvedValue({ puestos: PUESTOS });
+  api.getDivipola.mockResolvedValue(CATALOGO);
   jest.spyOn(window, 'confirm').mockReturnValue(true);
   descargas = [];
   window.URL.createObjectURL = jest.fn((blob) => {
@@ -53,6 +55,8 @@ async function abrirCarga() {
   render(<AdminDashboard session={SESION} onLogout={jest.fn()} />);
   await usuario.click(screen.getByRole('button', { name: 'Padrón' }));
   await usuario.click(screen.getByRole('button', { name: 'Varios desde un archivo o Excel' }));
+  // Con el catálogo del DANE y los puestos ya traídos se puede revisar.
+  await screen.findByText('Elegir un archivo CSV');
   return usuario;
 }
 
@@ -117,7 +121,53 @@ describe('Revisar antes de cargar', () => {
     const usuario = await abrirCarga();
     await usuario.click(screen.getByRole('button', { name: 'Descargar la plantilla (CSV)' }));
     expect(descargas[0].nombre).toBe('plantilla-padron.csv');
-    expect(await textoDe(descargas[0].blob)).toMatch(/^Cédula;Nombre completo;Puesto de votación;Mesa;Voto asistido\r\n/);
+    expect(await textoDe(descargas[0].blob)).toMatch(/^Cédula;Nombre completo;Puesto de votación;Mesa;Voto asistido;País;Departamento;Municipio;Localidad;Zona\r\n/);
+  });
+});
+
+describe('Ubicación de los puestos', () => {
+  it('un puesto nuevo toma la ubicación de una de sus filas, y se manda con cada votante de ese puesto', async () => {
+    api.addVoters.mockImplementation((_t, lote) => Promise.resolve(respuesta(lote)));
+    const usuario = await abrirCarga();
+    await pegar(usuario, [
+      fila('Cédula', 'Nombre', 'Puesto', 'Mesa', 'Departamento', 'Ciudad', 'Localidad', 'Zona'),
+      fila('1000000001', 'Ana Gómez', 'escuela nueva', 'Mesa 1', '', '', '', ''),
+      fila('1000000002', 'Luis Peña', 'Escuela Nueva', 'Mesa 1', 'Bogotá', 'bogota', 'candelaria', 'urbano'),
+      fila('1000000003', 'Eva Ruiz', 'Sede', 'Mesa 1', '', '', '', ''),
+    ]);
+
+    expect(screen.getByText('2 puestos, 1 se registra con la ubicación del archivo')).toBeInTheDocument();
+    const tabla = screen.getByText('Puestos y su ubicación').closest('details');
+    expect(within(tabla).getByText('escuela nueva').closest('tr')).toHaveTextContent('Bogotá, D.C., La Candelaria, zona urbana2Se registra');
+    expect(within(tabla).getByText('Sede').closest('tr')).toHaveTextContent('Tunja (Boyacá), zona urbana1Ya registrado');
+
+    await usuario.click(screen.getByRole('button', { name: 'Cargar 3 votantes al padrón' }));
+    const bogota = { pais: 'Colombia', departamento: '11', municipio: '11001', localidad: 'La Candelaria', zona: 'urbana' };
+    expect(api.addVoters).toHaveBeenCalledWith('jwt-admin', [
+      { cedula: '1000000001', fullName: 'Ana Gómez', pollingPlace: 'escuela nueva', votingTable: 'Mesa 1', assisted: false, ...bogota },
+      { cedula: '1000000002', fullName: 'Luis Peña', pollingPlace: 'Escuela Nueva', votingTable: 'Mesa 1', assisted: false, ...bogota },
+      { cedula: '1000000003', fullName: 'Eva Ruiz', pollingPlace: 'Sede', votingTable: 'Mesa 1', assisted: false },
+    ], 'archivo');
+    await screen.findByText('Se agregaron 3 votantes al padrón.');
+    // Al abrir el Padrón y la carga, y otra vez cada uno después de cargar: los puestos nuevos ya tienen ubicación.
+    expect(api.listPuestos).toHaveBeenCalledTimes(4);
+  });
+
+  it('las filas de un puesto sin ubicación, o con una que no existe o que no es la suya, no se cargan', async () => {
+    const usuario = await abrirCarga();
+    await pegar(usuario, [
+      fila('Cédula', 'Nombre', 'Puesto', 'Mesa', 'Departamento', 'Municipio', 'Zona'),
+      fila('1000000001', 'Ana Gómez', 'Puesto Sin Datos', 'Mesa 1', '', '', ''),
+      fila('1000000002', 'Luis Peña', 'Otro Puesto', 'Mesa 1', 'Boyacá', 'Medellín', 'urbana'),
+      fila('1000000003', 'Eva Ruiz', 'Sede', 'Mesa 1', 'Boyacá', 'Duitama', 'urbana'),
+      fila('1000000004', 'Rosa Díaz', 'Sede', 'Mesa 1', 'Boyacá', 'Tunja', 'urbana'),
+    ]);
+
+    expect(screen.getByText('1 votante listo')).toBeInTheDocument();
+    const errores = screen.getByText('Filas con errores').closest('details');
+    expect(within(errores).getByText(/^el puesto es nuevo: falta su ubicación/).closest('tr')).toHaveTextContent(/^21000000001/);
+    expect(within(errores).getByText('no hay un municipio «Medellín» en Boyacá')).toBeInTheDocument();
+    expect(within(errores).getByText(/^el puesto «Sede» ya está en Tunja \(Boyacá\), zona urbana, y esta fila dice Duitama \(Boyacá\), zona urbana/)).toBeInTheDocument();
   });
 });
 

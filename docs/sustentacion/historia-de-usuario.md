@@ -42,7 +42,7 @@ Todas corren en el job `unit-tests` del pipeline en cada push. Durante la operac
 1. **Instalación de demostración.** Levantar una instalación nueva con `./scripts/start.sh` (o `scripts\start.bat`) y crear su administrador cuando el script lo pida. El paso 5 cambia el acta de forma **permanente**: no usar una instalación con datos que importen. Para volver a empezar: `./scripts/start.sh borrar` (borra la base; el `.env` queda).
 2. **Plantilla.** En **Plantillas**, crear una genérica con tres opciones.
 3. **Padrón y autenticadores.**
-   - En **Padrón**, agregar tres votantes con el formulario y anotar los PIN que muestra (solo se ven esa vez). Cada PIN vale 24 horas desde que se genera: conviene hacerlo el día de la sustentación (o regenerarlos esa mañana).
+   - En **Padrón**, agregar tres votantes con el formulario y anotar los PIN que muestra (solo se ven esa vez). Cada PIN vale 24 horas desde que se genera: conviene hacerlo el día de la sustentación (o regenerarlos esa mañana). Si el puesto es nuevo, el formulario pide su ubicación (departamento, municipio, localidad y zona); con "Puesto Central", de la demostración, ya la tiene.
    - Ingresar una vez con cada votante para registrar su autenticador: escanear el QR con Microsoft Authenticator o Google Authenticator en un celular (pueden quedar las tres cuentas en el mismo) y salir. Así, en la demostración, cada ingreso es cédula, PIN y código.
    - **Opcional, voto asistido:** marcar a uno de los tres como **Voto asistido**, crear en **Usuarios** el jurado de su mesa y registrar el autenticador del jurado.
 4. **Ventanas abiertas.**

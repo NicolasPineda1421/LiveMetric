@@ -34,7 +34,7 @@ it('el administrador ve todas las pestañas de gestión', async () => {
   render(<App />);
   await ingresar(usuario, 'admin');
   expect(await screen.findByText('Admin: persona')).toBeInTheDocument();
-  expect(pestanas()).toEqual(['Resumen', 'Plantillas', 'Elecciones', 'Resultados', 'Reportes', 'Escrutinio', 'Usuarios', 'Padrón', 'Auditoría']);
+  expect(pestanas()).toEqual(['Resumen', 'Plantillas', 'Elecciones', 'Resultados', 'Reportes', 'Escrutinio', 'Usuarios', 'Padrón', 'Puestos', 'Auditoría']);
 });
 
 it('el auditor solo ve resultados y reportes: ninguna pestaña de gestión', async () => {

@@ -4,6 +4,7 @@
 // servicio (POST /admin/voters), para mostrar qué corregir ANTES de cargar
 // nada. También arma la plantilla y la lista de PIN para descargar.
 // Funciones puras: no tocan la pantalla.
+import { clavePuesto, crearUbicador, describirUbicacion, mismaUbicacion, traeUbicacion } from './ubicacion.js';
 
 export const MAXIMO_BYTES = 10 * 1024 * 1024;
 export const MAXIMO_VOTANTES = 50000;
@@ -91,6 +92,12 @@ const ENCABEZADOS = {
   puesto: ['puesto', 'puesto de votacion', 'puesto votacion', 'lugar', 'lugar de votacion', 'sede'],
   mesa: ['mesa', 'mesa de votacion', 'numero de mesa', 'no mesa', 'nro mesa', 'n mesa'],
   asistido: ['asistido', 'asistida', 'voto asistido', 'requiere asistencia', 'asistencia'],
+  // La ubicación del puesto (hace falta solo si el puesto todavía no la tiene).
+  pais: ['pais'],
+  departamento: ['departamento', 'depto', 'dpto', 'departamento del puesto'],
+  municipio: ['municipio', 'ciudad', 'ciudad o municipio', 'municipio o ciudad', 'municipio del puesto'],
+  localidad: ['localidad', 'comuna', 'localidad o comuna', 'comuna o localidad', 'corregimiento'],
+  zona: ['zona', 'area', 'urbana o rural', 'zona urbana o rural', 'tipo de zona', 'zona del puesto'],
 };
 const CAMPO_DE = new Map(Object.entries(ENCABEZADOS).flatMap(([campo, nombres]) => nombres.map((n) => [n, campo])));
 
@@ -147,10 +154,73 @@ const columnaUsada = (campos, i) => campos.at(i) !== null && campos.indexOf(camp
 
 const NOMBRE_COLUMNA = { cedula: 'la cédula', nombre: 'el nombre', puesto: 'el puesto', mesa: 'la mesa' };
 
+// El orden de la plantilla, y el de las columnas sin encabezados.
+const COLUMNAS_DE_LA_PLANTILLA = ['cedula', 'nombre', 'puesto', 'mesa', 'asistido', 'pais', 'departamento', 'municipio', 'localidad', 'zona'];
+export const ORDEN_SIN_ENCABEZADOS = '4 columnas (cédula, nombre, puesto y mesa), 5 (y voto asistido) o 10 '
+  + '(y la ubicación del puesto: país, departamento, municipio, localidad y zona)';
+
+// La ubicación del puesto de cada fila, con las reglas del servicio
+// (services/auth/src/puestos.js): un puesto que ya la tiene no la necesita
+// (y si una fila dice otra, es un error); uno que no la tiene la toma de las
+// filas que la traen, en cualquier orden, y si ninguna la trae, sus filas no
+// se pueden cargar. Cada votante queda con "ubicacion" (la de su puesto) y
+// "ubicacionNueva" (si hay que mandarla: el puesto todavía no la tiene).
+function ubicarPuestos(leidas, { catalogo, puestos = [] }) {
+  const ubicador = crearUbicador(catalogo);
+  const existentes = new Map(puestos.map((p) => [clavePuesto(p.pollingPlace), p]));
+  const nuevas = new Map();
+  const conPuesto = leidas.filter((l) => l.votante.pollingPlace);
+  for (const l of conPuesto) {
+    if (!traeUbicacion(l.datosUbicacion)) continue;
+    const clave = clavePuesto(l.votante.pollingPlace);
+    const { ubicacion, motivos } = ubicador.resolver(l.datosUbicacion);
+    if (motivos) {
+      l.motivos.push(...motivos);
+      l.ubicacionMal = true;
+      continue;
+    }
+    const existente = existentes.get(clave);
+    if (existente?.ubicacion) {
+      if (!mismaUbicacion(existente.ubicacion, ubicacion)) {
+        l.motivos.push(`el puesto «${existente.pollingPlace}» ya está en ${describirUbicacion(existente.ubicacion)}, y esta fila dice `
+          + `${describirUbicacion(ubicacion)}: si es otro puesto, dale otro nombre; si la ubicación está mal, corrígela en la pestaña «Puestos»`);
+        l.ubicacionMal = true;
+      }
+      continue;
+    }
+    const anterior = nuevas.get(clave);
+    const mismoLugar = anterior && anterior.ubicacion.codigoMunicipio === ubicacion.codigoMunicipio && anterior.ubicacion.zona === ubicacion.zona;
+    if (!anterior || (anterior.ubicacion.localidad === null && mismoLugar)) nuevas.set(clave, { ubicacion, fila: l.numero });
+    else if (!mismaUbicacion(anterior.ubicacion, ubicacion)) {
+      l.motivos.push(`el puesto está en ${describirUbicacion(anterior.ubicacion)} en la fila ${anterior.fila}, y esta fila dice `
+        + `${describirUbicacion(ubicacion)}: si son dos puestos distintos, dales nombres distintos`);
+      l.ubicacionMal = true;
+    }
+  }
+  for (const l of conPuesto) {
+    const clave = clavePuesto(l.votante.pollingPlace);
+    const existente = existentes.get(clave);
+    if (existente?.ubicacion) {
+      l.votante.ubicacion = existente.ubicacion;
+      l.votante.ubicacionNueva = false;
+    } else if (nuevas.has(clave)) {
+      l.votante.ubicacion = nuevas.get(clave).ubicacion;
+      l.votante.ubicacionNueva = true;
+    } else if (!l.ubicacionMal) {
+      l.motivos.push(existente
+        ? `el puesto «${existente.pollingPlace}» todavía no tiene ubicación: agrega su departamento, su municipio y su zona (urbana o rural) en alguna de sus filas, o pónsela en la pestaña «Puestos»`
+        : 'el puesto es nuevo: falta su ubicación (departamento, municipio y zona urbana o rural) en alguna de sus filas');
+    }
+  }
+}
+
 // Del texto completo (archivo o celdas pegadas) a los votantes que se
 // pueden cargar, las filas con errores y las cédulas repetidas. "fila" es el
 // número de fila como se ve en la hoja de cálculo (el encabezado es la 1).
-export function interpretarPadron(texto) {
+// contexto: { catalogo, puestos }, el catálogo del DANE y los puestos que ya
+// existen (con su ubicación o sin ella), para revisar la ubicación de cada
+// puesto como el servicio (ver ubicarPuestos). Sin catálogo no se revisa.
+export function interpretarPadron(texto, contexto = {}) {
   const separador = detectarSeparador(texto);
   // Las filas en blanco no cuentan, pero sí ocupan su número.
   const filas = leerFilas(texto.replace(/^\uFEFF/, ''), separador)
@@ -181,30 +251,40 @@ export function interpretarPadron(texto) {
       if (espacios(c) !== '') (columnaUsada(campos, i) ? resultado.encabezados : resultado.ignoradas).push(espacios(c));
     });
   } else {
-    if (primera.celdas.length < 4) {
+    // Sin encabezados, en el orden de la plantilla: las 4 o 5 primeras, o
+    // las 10 con la ubicación del puesto.
+    const columnas = primera.celdas.length - [...primera.celdas].reverse().findIndex((c) => c.trim() !== '');
+    if (columnas < 4 || (columnas > 5 && columnas < 10)) {
       return {
         ...resultado,
-        error: 'Cada fila necesita al menos 4 columnas: cédula, nombre, puesto y mesa (y, si quieres, voto asistido). '
-          + 'Si el archivo tiene encabezados, la primera fila debe decir, por ejemplo: Cédula, Nombre, Puesto, Mesa.',
+        error: `Sin encabezados, cada fila lleva ${ORDEN_SIN_ENCABEZADOS}. `
+          + 'Para usar otro orden, agrega una primera fila con los nombres de las columnas (por ejemplo: Cédula, Nombre, Puesto, Mesa, Departamento, Municipio, Zona).',
       };
     }
-    ['cedula', 'nombre', 'puesto', 'mesa', 'asistido'].forEach((campo, i) => columna.set(campo, i));
+    COLUMNAS_DE_LA_PLANTILLA.forEach((campo, i) => columna.set(campo, i));
   }
 
   const celda = (celdas, campo) => (columna.has(campo) ? celdas[columna.get(campo)] ?? '' : '');
-  const vistas = new Map();
-  for (const { numero, celdas } of filas) {
-    if (conEncabezados && numero === primera.numero) continue;
-    const nombre = columna.has('nombre')
-      ? celda(celdas, 'nombre')
-      : `${celda(celdas, 'nombres')} ${celda(celdas, 'apellidos')}`;
-    const { motivos, votante } = validarFila({
-      cedula: celda(celdas, 'cedula'),
-      nombre,
-      puesto: celda(celdas, 'puesto'),
-      mesa: celda(celdas, 'mesa'),
-      asistido: celda(celdas, 'asistido'),
+  const leidas = filas
+    .filter(({ numero }) => !(conEncabezados && numero === primera.numero))
+    .map(({ numero, celdas }) => {
+      const nombre = columna.has('nombre')
+        ? celda(celdas, 'nombre')
+        : `${celda(celdas, 'nombres')} ${celda(celdas, 'apellidos')}`;
+      const { motivos, votante } = validarFila({
+        cedula: celda(celdas, 'cedula'),
+        nombre,
+        puesto: celda(celdas, 'puesto'),
+        mesa: celda(celdas, 'mesa'),
+        asistido: celda(celdas, 'asistido'),
+      });
+      const datosUbicacion = Object.fromEntries(['pais', 'departamento', 'municipio', 'localidad', 'zona'].map((campo) => [campo, celda(celdas, campo)]));
+      return { numero, celdas, motivos, votante, datosUbicacion };
     });
+  if (contexto.catalogo) ubicarPuestos(leidas, contexto);
+
+  const vistas = new Map();
+  for (const { numero, celdas, motivos, votante } of leidas) {
     if (motivos.length > 0) resultado.errores.push({ fila: numero, cedula: espacios(celda(celdas, 'cedula')), motivos });
     else if (vistas.has(votante.cedula)) resultado.repetidas.push({ fila: numero, cedula: votante.cedula, primera: vistas.get(votante.cedula) });
     else {
@@ -226,14 +306,15 @@ export function enLotes(lista, tamano = TAMANO_LOTE) {
 }
 
 // Cuántos votantes hay por puesto, para revisar de un vistazo que el
-// archivo es el correcto. Como en el servicio, "Colegio Andino" y "colegio
+// archivo es el correcto, con su ubicación y si es nuevo (su ubicación
+// sale del archivo). Como en el servicio, "Colegio Andino" y "colegio
 // andino" son el mismo puesto: se cuenta junto, con la primera forma en
 // que aparece.
 export function contarPorPuesto(votantes) {
   const cuenta = new Map();
   for (const v of votantes) {
-    const clave = simplificar(v.pollingPlace);
-    const actual = cuenta.get(clave) || { puesto: v.pollingPlace, votantes: 0 };
+    const clave = clavePuesto(v.pollingPlace);
+    const actual = cuenta.get(clave) || { puesto: v.pollingPlace, votantes: 0, ubicacion: v.ubicacion || null, nuevo: Boolean(v.ubicacionNueva) };
     cuenta.set(clave, { ...actual, votantes: actual.votantes + 1 });
   }
   return [...cuenta.values()].sort((a, b) => b.votantes - a.votantes || a.puesto.localeCompare(b.puesto, 'es'));
@@ -258,10 +339,13 @@ function csv(filas) {
   return `\uFEFF${filas.map((fila) => fila.map(celda).join(';')).join('\r\n')}\r\n`;
 }
 
+// La ubicación del puesto basta en una de sus filas (en la segunda queda
+// vacía), y no hace falta si el puesto ya la tiene.
 export const plantillaCsv = () => csv([
-  ['Cédula', 'Nombre completo', 'Puesto de votación', 'Mesa', 'Voto asistido'],
-  ['1000000001', 'Ana María Gómez', 'Colegio Central', 'Mesa 1', 'no'],
-  ['1000000002', 'Luis Alberto Peña', 'Colegio Central', 'Mesa 2', 'sí'],
+  ['Cédula', 'Nombre completo', 'Puesto de votación', 'Mesa', 'Voto asistido', 'País', 'Departamento', 'Municipio', 'Localidad', 'Zona'],
+  ['1000000001', 'Ana María Gómez', 'Colegio Central', 'Mesa 1', 'no', 'Colombia', 'Boyacá', 'Tunja', 'Centro', 'urbana'],
+  ['1000000002', 'Luis Alberto Peña', 'Colegio Central', 'Mesa 2', 'sí', '', '', '', '', ''],
+  ['1000000003', 'Rosa Elena Díaz', 'Escuela Vereda El Salitre', 'Mesa 1', 'no', 'Colombia', 'Cundinamarca', 'Chía', '', 'rural'],
 ]);
 
 // Los PIN recién generados, para imprimirlos o repartirlos por mesa; "vence"

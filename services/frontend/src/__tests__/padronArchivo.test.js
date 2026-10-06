@@ -3,6 +3,7 @@
 import {
   celdaSegura, contarPorPuesto, decodificarTexto, detectarSeparador, enLotes, interpretarPadron, leerFilas, pinesCsv, plantillaCsv,
 } from '../utils/padronArchivo.js';
+import { CATALOGO, CHIA, TUNJA } from './catalogoDePrueba.js';
 
 const cedulas = (resultado) => resultado.votantes.map((v) => v.cedula);
 
@@ -52,7 +53,8 @@ describe('Columnas', () => {
 
   it('dice qué columna falta, o que faltan columnas', () => {
     expect(interpretarPadron('Cédula;Nombre;Puesto\n1;a;b').error).toBe('Falta la columna de la mesa. La primera fila dice: Cédula, Nombre, Puesto.');
-    expect(interpretarPadron('1000000001;Ana Gómez;Sede').error).toMatch(/^Cada fila necesita al menos 4 columnas/);
+    expect(interpretarPadron('1000000001;Ana Gómez;Sede').error).toMatch(/^Sin encabezados, cada fila lleva 4 columnas \(cédula, nombre, puesto y mesa\), 5 .* o 10 /);
+    expect(interpretarPadron('1;Ana Gómez;Sede;1;no;Colombia;Boyacá').error).toMatch(/^Sin encabezados/);
     expect(interpretarPadron('\n  \n').error).toBe('No hay ningún votante: el archivo o el texto está vacío.');
   });
 });
@@ -88,19 +90,76 @@ describe('Cada fila', () => {
   });
 });
 
+describe('Ubicación de los puestos', () => {
+  const CONTEXTO = { catalogo: CATALOGO, puestos: [{ pollingPlace: 'Sede Norte', ubicacion: TUNJA }, { pollingPlace: 'Puesto Viejo', ubicacion: null }] };
+  const leer = (lineas) => interpretarPadron(['Cédula;Nombre;Puesto;Mesa;Departamento;Municipio;Localidad;Zona', ...lineas].join('\n'), CONTEXTO);
+  const motivosDe = (r, fila) => r.errores.find((e) => e.fila === fila)?.motivos;
+
+  it('un puesto que ya la tiene no la necesita; uno nuevo la toma de cualquiera de sus filas', () => {
+    const r = leer([
+      '1000000001;Ana Gómez;sede norte;1;;;;',
+      '1000000002;Luis Peña;Escuela Nueva;1;;;;',
+      '1000000003;Eva Ruiz;ESCUELA NUEVA;1;Cundinamarca;Chia;;R',
+      '1000000004;Rosa Díaz;Escuela Nueva;2;Cundinamarca;Chía;Vereda Fagua;rural',
+    ]);
+    expect(r.errores).toEqual([]);
+    expect(r.votantes[0]).toMatchObject({ ubicacion: TUNJA, ubicacionNueva: false });
+    // La localidad la trae otra fila del mismo puesto, y vale para todas.
+    const escuela = { ...CHIA, localidad: 'Vereda Fagua' };
+    delete escuela.id;
+    expect(r.votantes.slice(1).map((v) => [v.ubicacion, v.ubicacionNueva])).toEqual(Array(3).fill([escuela, true]));
+  });
+
+  it('sin ubicación en ninguna de sus filas, las de un puesto nuevo o sin ubicación no se cargan', () => {
+    const r = leer(['1000000001;Ana Gómez;Escuela Nueva;1;;;;', '1000000002;Luis Peña;Puesto Viejo;1;;;;']);
+    expect(r.votantes).toEqual([]);
+    expect(motivosDe(r, 2)).toEqual(['el puesto es nuevo: falta su ubicación (departamento, municipio y zona urbana o rural) en alguna de sus filas']);
+    expect(motivosDe(r, 3)[0]).toMatch(/^el puesto «Puesto Viejo» todavía no tiene ubicación: agrega su departamento/);
+  });
+
+  it('dice qué está mal en la ubicación, y si no es la que el puesto ya tiene o la de otra fila', () => {
+    const r = leer([
+      '1000000001;Ana Gómez;Escuela Nueva;1;Boyacá;Medellín;;urbana',
+      '1000000002;Luis Peña;Sede Norte;1;Boyacá;Duitama;;urbana',
+      '1000000003;Eva Ruiz;Colegio Sur;1;Bogotá;Bogotá;Chapinerito;urbana',
+      '1000000004;Rosa Díaz;Colegio Este;1;Boyacá;Tunja;;urbana',
+      '1000000005;Juan Mora;Colegio Este;1;Boyacá;Tunja;;rural',
+    ]);
+    expect(motivosDe(r, 2)).toEqual(['no hay un municipio «Medellín» en Boyacá']);
+    expect(motivosDe(r, 3)[0]).toMatch(/^el puesto «Sede Norte» ya está en Tunja \(Boyacá\), zona urbana, y esta fila dice Duitama \(Boyacá\), zona urbana/);
+    expect(motivosDe(r, 4)).toEqual(['«Chapinerito» no es una de las 20 localidades de Bogotá, D.C.']);
+    expect(motivosDe(r, 6)[0]).toMatch(/^el puesto está en Tunja \(Boyacá\), zona urbana en la fila 5, y esta fila dice Tunja \(Boyacá\), zona rural/);
+    expect(r.votantes.map((v) => v.cedula)).toEqual(['1000000004']);
+  });
+
+  it('sin encabezados, con las 10 columnas de la plantilla', () => {
+    const r = interpretarPadron('1000000001\tAna Gómez\tEscuela Nueva\tMesa 1\tsí\tColombia\tBogotá\tBogotá\tCandelaria\turbana', CONTEXTO);
+    expect(r.errores).toEqual([]);
+    expect(r.votantes[0]).toMatchObject({ assisted: true, ubicacion: { codigoMunicipio: '11001', localidad: 'La Candelaria', zona: 'urbana' } });
+  });
+});
+
 describe('Lotes y resumen', () => {
   it('parte la lista en lotes y cuenta los votantes de cada puesto', () => {
     expect(enLotes([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
     const r = interpretarPadron('1000000001;Ana;Sede B;1\n1000000002;Luis;Sede Á;1\n1000000003;Eva;sede a;1');
-    expect(contarPorPuesto(r.votantes)).toEqual([{ puesto: 'Sede Á', votantes: 2 }, { puesto: 'Sede B', votantes: 1 }]);
+    expect(contarPorPuesto(r.votantes)).toEqual([
+      { puesto: 'Sede Á', votantes: 2, ubicacion: null, nuevo: false },
+      { puesto: 'Sede B', votantes: 1, ubicacion: null, nuevo: false },
+    ]);
   });
 });
 
 describe('Archivos para descargar', () => {
-  it('la plantilla se puede volver a cargar tal cual', () => {
-    const r = interpretarPadron(plantillaCsv());
+  it('la plantilla se puede volver a cargar tal cual: sus dos puestos se registran con su ubicación', () => {
+    const r = interpretarPadron(plantillaCsv(), { catalogo: CATALOGO, puestos: [] });
     expect(r.error).toBeNull();
-    expect(r.votantes.map((v) => [v.cedula, v.assisted])).toEqual([['1000000001', false], ['1000000002', true]]);
+    expect(r.errores).toEqual([]);
+    expect(r.votantes.map((v) => [v.cedula, v.assisted])).toEqual([['1000000001', false], ['1000000002', true], ['1000000003', false]]);
+    expect(contarPorPuesto(r.votantes).map((p) => [p.puesto, p.votantes, p.nuevo, p.ubicacion.municipio])).toEqual([
+      ['Colegio Central', 2, true, 'Tunja'],
+      ['Escuela Vereda El Salitre', 1, true, 'Chía'],
+    ]);
   });
 
   it('la lista de PIN neutraliza las celdas que Excel tomaría como fórmulas', () => {
