@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import DashboardCanvas from '../components/DashboardCanvas.jsx';
 import { exportDashboardToPdf, buildIntro, slugify } from '../utils/exportDashboardPdf.js';
-import { WIDGET_TYPE_LABELS, DATA_SOURCE_LABELS } from '../components/widgets/labels.js';
+import { WIDGET_TYPE_LABELS, DATA_SOURCE_LABELS, PARTICIPATION_GROUPS } from '../components/widgets/labels.js';
 import { ownValue } from '../utils/ownValue.js';
 
 const ADVANCED_SOURCES = ['turnoutProjection', 'leadTimeline', 'integrity', 'suspiciousAccess'];
@@ -316,18 +316,28 @@ export default function ReportsTab({ session }) {
 function WidgetForm({ type, initial, onCancel, onSubmit }) {
   const sources = ownValue(WIDGET_DATA_SOURCES, type);
   const [dataSource, setDataSource] = useState(initial?.dataSource || sources[0]);
-  const [title, setTitle] = useState(initial?.title || ownValue(DATA_SOURCE_LABELS, dataSource));
+  const [groupBy, setGroupBy] = useState(initial?.params?.groupBy || 'polling_place');
+  // El título que se propone: el de la fuente o, en la participación, el de
+  // cómo se agrupa ("Participación por municipio").
+  const tituloPropuesto = (fuente, agrupacion) => (fuente === 'participation'
+    ? PARTICIPATION_GROUPS.find((g) => g.value === agrupacion)?.title
+    : null) || ownValue(DATA_SOURCE_LABELS, fuente);
+  const [title, setTitle] = useState(initial?.title || tituloPropuesto(dataSource, groupBy));
   // Al crear un widget nuevo, el título sigue a la fuente de datos elegida
-  // (así dice "Participación por puesto/mesa" y no el genérico "Gráfico de
+  // (así dice "Participación por municipio" y no el genérico "Gráfico de
   // torta"). Al editar uno existente, o en cuanto la persona toque el campo
   // de título a mano, se deja de autocompletar para no pisar su elección.
   const [titleTouched, setTitleTouched] = useState(Boolean(initial));
   const [interval, setInterval_] = useState(initial?.params?.interval || 'hour');
-  const [groupBy, setGroupBy] = useState(initial?.params?.groupBy || 'polling_place');
 
   function handleDataSourceChange(newSource) {
     setDataSource(newSource);
-    if (!titleTouched) setTitle(ownValue(DATA_SOURCE_LABELS, newSource));
+    if (!titleTouched) setTitle(tituloPropuesto(newSource, groupBy));
+  }
+
+  function handleGroupByChange(agrupacion) {
+    setGroupBy(agrupacion);
+    if (!titleTouched) setTitle(tituloPropuesto(dataSource, agrupacion));
   }
 
   function submit(e) {
@@ -335,7 +345,7 @@ function WidgetForm({ type, initial, onCancel, onSubmit }) {
     const params = {};
     if (dataSource === 'timeseries' || dataSource === 'anomalies') params.interval = interval;
     if (dataSource === 'participation') params.groupBy = groupBy;
-    onSubmit({ title: title.trim() || ownValue(DATA_SOURCE_LABELS, dataSource), dataSource, params });
+    onSubmit({ title: title.trim() || tituloPropuesto(dataSource, groupBy), dataSource, params });
   }
 
   return (
@@ -362,9 +372,8 @@ function WidgetForm({ type, initial, onCancel, onSubmit }) {
       {dataSource === 'participation' && (
         <div className="field-dark">
           <label>Agrupar por</label>
-          <select value={groupBy} onChange={(e) => setGroupBy(e.target.value)}>
-            <option value="polling_place">Puesto de votación</option>
-            <option value="voting_table">Mesa</option>
+          <select value={groupBy} onChange={(e) => handleGroupByChange(e.target.value)}>
+            {PARTICIPATION_GROUPS.map((g) => <option key={g.value} value={g.value}>{g.label}</option>)}
           </select>
         </div>
       )}

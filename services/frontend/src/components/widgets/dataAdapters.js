@@ -3,7 +3,9 @@
 // componente de gráfico necesite conocer la forma de cada fuente de datos.
 //
 //   kpi:   { label, value, tone?, note? } -> KpiCard
-//   items: [{ name, value }]             -> BarChartWidget / PieChartWidget
+//   items: [{ name, value, detail? }]    -> BarChartWidget / PieChartWidget
+//   unit?: '%' si los valores de items son porcentajes
+//   pieItems?: lo que reparte la torta, si no es lo mismo que las barras
 //   items + series: [{ key, label }]     -> LineChartWidget con varias series
 //   table: { columns: [...], rows: [...], emptyMessage? } -> TableWidget
 //   emptyMessage?: lo que muestran los gráficos cuando no hay items
@@ -82,19 +84,36 @@ export function adaptForWidgets(dataSource, raw) {
       };
     }
 
+    // Las barras muestran el % de participación de cada grupo, que se puede
+    // comparar entre puestos (o municipios) de tamaños distintos; los votos
+    // y los habilitados, al pasar el mouse y en la tabla. La torta reparte
+    // los votos emitidos entre los grupos.
     case 'participation': {
       const groups = raw.groups || [];
-      const items = groups.map((g) => ({ name: g.group || '(sin dato)', value: g.votesCast }));
       const totalRegistered = groups.reduce((s, g) => s + (g.registered || 0), 0);
       const totalCast = groups.reduce((s, g) => s + (g.votesCast || 0), 0);
       const pct = totalRegistered ? ((totalCast / totalRegistered) * 100).toFixed(1) : '0.0';
+      const nombre = (g) => g.group || '(sin dato)';
+      const porcentaje = (g) => (g.registered ? Math.round(Math.min(1, g.votesCast / g.registered) * 1000) / 10 : 0);
+      // Sin votos todavía, un gráfico con todo en cero no dice nada (y parece roto).
+      const sinVotos = 'Todavía no hay votos en esta elección: la participación aparece con el primero.';
       return {
         kpi: { label: 'Participación general', value: `${pct}%` },
-        items,
+        items: totalCast === 0 ? [] : groups.map((g) => ({
+          name: nombre(g),
+          value: porcentaje(g),
+          detail: `${g.votesCast.toLocaleString('es-CO')} de ${g.registered.toLocaleString('es-CO')} habilitados`,
+        })),
+        unit: '%',
+        pieItems: groups
+          .filter((g) => g.votesCast > 0)
+          .map((g) => ({ name: nombre(g), value: g.votesCast }))
+          .sort((a, b) => b.value - a.value),
+        emptyMessage: totalCast === 0 ? sinVotos : undefined,
         table: {
           columns: ['Grupo', 'Votantes registrados', 'Votos emitidos', '% participación'],
           rows: groups.map((g) => [
-            g.group || '(sin dato)',
+            nombre(g),
             g.registered,
             g.votesCast,
             g.registered ? `${((g.votesCast / g.registered) * 100).toFixed(1)}%` : '—',

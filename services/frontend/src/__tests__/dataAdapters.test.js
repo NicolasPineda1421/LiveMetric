@@ -112,6 +112,30 @@ describe('resultados y participación', () => {
     expect(adaptForWidgets('participation', { groups: [] }).kpi.value).toBe('0.0%');
   });
 
+  it('participation: las barras, en % de cada grupo con el detalle; la torta, los votos de mayor a menor', () => {
+    const datos = adaptForWidgets('participation', {
+      groups: [
+        { group: 'Colegio Andino', registered: 80, votesCast: 20 },
+        { group: 'Escuela El Salitre', registered: 30, votesCast: 27 },
+        { group: 'Puesto Norte', registered: 1200, votesCast: 0 },
+      ],
+    });
+    expect(datos.unit).toBe('%');
+    expect(datos.items).toEqual([
+      { name: 'Colegio Andino', value: 25, detail: '20 de 80 habilitados' },
+      { name: 'Escuela El Salitre', value: 90, detail: '27 de 30 habilitados' },
+      { name: 'Puesto Norte', value: 0, detail: '0 de 1.200 habilitados' },
+    ]);
+    expect(datos.pieItems).toEqual([{ name: 'Escuela El Salitre', value: 27 }, { name: 'Colegio Andino', value: 20 }]);
+  });
+
+  it('participation: sin votos todavía, el gráfico lo dice en lugar de mostrar todo en cero', () => {
+    const datos = adaptForWidgets('participation', { groups: [{ group: 'Colegio Andino', registered: 80, votesCast: 0 }] });
+    expect(datos.items).toEqual([]);
+    expect(datos.emptyMessage).toMatch(/^Todavía no hay votos en esta elección/);
+    expect(datos.table.rows).toEqual([['Colegio Andino', 80, 0, '0.0%']]);
+  });
+
   it('concentration: porcentaje de cada opción, y "—" si no hay votos', () => {
     const conVotos = adaptForWidgets('concentration', { concentration: { hhi: 5000, level: 'alta' }, results: [{ label: 'A', votes: 3 }, { label: 'B', votes: 1 }] });
     expect(conVotos.kpi.value).toBe('5000 (alta)');

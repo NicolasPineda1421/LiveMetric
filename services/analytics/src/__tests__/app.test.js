@@ -198,6 +198,72 @@ describe('GET /api/elections/:id/metrics/participation', () => {
     expect(res.body.groupBy).toBe('voting_table');
   });
 
+  describe('con puestos de distintos municipios y la misma "Mesa 1"', () => {
+    const { encryptField } = require('../voterCrypto');
+    const s = Date.now().toString().slice(-7);
+    const NORTE = `Colegio Norte ${s}`;
+    const SUR = `Escuela Sur ${s}`;
+    const SIN_LUGAR = `Puesto Sin Lugar ${s}`;
+    const padron = [[NORTE, 'Mesa 1'], [NORTE, 'Mesa 1'], [NORTE, 'Mesa 1'], [NORTE, 'Mesa 2'], [SUR, 'Mesa 1'], [SUR, 'Mesa 1'], [SIN_LUGAR, 'Mesa 1']];
+    const cedulas = padron.map((_, i) => `CI-PART-${s}-${i}`);
+    const participacion = async (groupBy) => (await request(app)
+      .get(`/api/elections/${electionId}/metrics/participation?groupBy=${groupBy}`)
+      .set('Authorization', `Bearer ${adminToken}`)).body;
+    const grupo = (body, nombre) => body.groups.find((g) => g.group === nombre);
+
+    beforeAll(async () => {
+      for (const [i, [puesto, mesa]] of padron.entries()) {
+        await pool.query('INSERT INTO voters (cedula, full_name, polling_place, voting_table) VALUES ($1, $2, $3, $4)', [
+          // eslint-disable-next-line security/detect-object-injection -- i es el índice de padron, paralelo a cedulas
+          encryptField(cedulas[i]), 'Votante de Prueba CI', encryptField(puesto), encryptField(mesa),
+        ]);
+      }
+      await pool.query(
+        `INSERT INTO puestos_votacion (nombre, clave, codigo_municipio, departamento, municipio, zona) VALUES
+           ($1, $2, '15001', 'Boyacá', 'Tunja', 'urbana'), ($3, $4, '15238', 'Boyacá', 'Duitama', 'rural')`,
+        [NORTE, NORTE.toLowerCase(), SUR, SUR.toLowerCase()]
+      );
+      for (const [puesto, n] of [[NORTE, 2], [SUR, 1]]) {
+        for (let i = 0; i < n; i += 1) {
+          await pool.query(
+            `INSERT INTO votes (election_id, option_id, voter_id_hash, polling_place, voting_table) VALUES ($1, $2, $3, $4, 'Mesa 1')`,
+            [electionId, optionIds[0], `${s}${puesto.length}${i}`.padEnd(64, '0'), puesto]
+          );
+        }
+      }
+    });
+
+    afterAll(async () => {
+      await pool.query('DELETE FROM voters WHERE cedula = ANY($1)', [cedulas.map(encryptField)]);
+      await pool.query('DELETE FROM puestos_votacion WHERE clave = ANY($1)', [[NORTE.toLowerCase(), SUR.toLowerCase()]]);
+      await pool.query('DELETE FROM votes WHERE election_id = $1 AND polling_place = ANY($2)', [electionId, [NORTE, SUR]]);
+    });
+
+    it('por mesa, cada mesa con su puesto: no se juntan las "Mesa 1" de dos puestos', async () => {
+      const body = await participacion('voting_table');
+      expect(grupo(body, `${NORTE} · Mesa 1`)).toEqual({ group: `${NORTE} · Mesa 1`, registered: 3, votesCast: 2 });
+      expect(grupo(body, `${NORTE} · Mesa 2`)).toEqual({ group: `${NORTE} · Mesa 2`, registered: 1, votesCast: 0 });
+      expect(grupo(body, `${SUR} · Mesa 1`)).toEqual({ group: `${SUR} · Mesa 1`, registered: 2, votesCast: 1 });
+    });
+
+    it('por departamento y por municipio, con la ubicación de cada puesto; los que no la tienen, al final', async () => {
+      const departamentos = await participacion('departamento');
+      expect(departamentos.groupBy).toBe('departamento');
+      expect(grupo(departamentos, 'Boyacá')).toEqual({ group: 'Boyacá', registered: 6, votesCast: 3 });
+      const municipios = await participacion('municipio');
+      expect(grupo(municipios, 'Tunja (Boyacá)')).toEqual({ group: 'Tunja (Boyacá)', registered: 4, votesCast: 2 });
+      expect(grupo(municipios, 'Duitama (Boyacá)')).toEqual({ group: 'Duitama (Boyacá)', registered: 2, votesCast: 1 });
+      expect(municipios.groups.at(-1).group).toBe('Sin ubicación');
+      expect(grupo(municipios, 'Sin ubicación').registered).toBeGreaterThanOrEqual(1);
+      expect((await participacion('zona')).groups.map((g) => g.group)).toEqual(expect.arrayContaining(['Rural', 'Urbana']));
+    });
+
+    it('las mesas con votos cuentan cada puesto por separado', async () => {
+      const res = await request(app).get(`/api/elections/${electionId}/metrics/operational`).set('Authorization', `Bearer ${adminToken}`);
+      expect(res.body.tablesWithVotes).toBe(2);
+    });
+  });
+
   it('rechaza un groupBy fuera de la whitelist con 400', async () => {
     const res = await request(app)
       .get(`/api/elections/${electionId}/metrics/participation?groupBy=algo_invalido`)

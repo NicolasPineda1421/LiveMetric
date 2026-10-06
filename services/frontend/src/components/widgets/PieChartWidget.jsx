@@ -1,6 +1,7 @@
 import React from 'react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 import { colorAt, foldToOther, MUTED_INK, PRINT_MUTED_INK } from './palette.js';
+import { recortar } from './barras.js';
 
 export default function PieChartWidget({ items, printMode, emptyMessage }) {
   const total = (items || []).reduce((sum, i) => sum + (i.value || 0), 0);
@@ -29,6 +30,8 @@ export default function PieChartWidget({ items, printMode, emptyMessage }) {
           verticalAlign="bottom"
           height={36}
           wrapperStyle={{ fontSize: 11, color: printMode ? PRINT_MUTED_INK : MUTED_INK }}
+          // Un nombre largo (un puesto, un municipio) no desarma la leyenda: el completo, al pasar el mouse.
+          formatter={(nombre) => recortar(nombre, 22)}
         />
       </PieChart>
     </ResponsiveContainer>

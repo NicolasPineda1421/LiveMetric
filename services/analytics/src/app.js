@@ -9,6 +9,7 @@ const { requireRole } = require('./middleware/auth');
 const { decryptField } = require('./voterCrypto');
 const actaKeys = require('./actaKeys');
 const { projectTurnout, leadTimeline, buildIntegrityReport, detectSuspiciousAccess } = require('./advancedStats');
+const { AGRUPACIONES, agruparParticipacion } = require('./agrupacion');
 
 const app = express();
 
@@ -240,57 +241,48 @@ app.get(
   })
 );
 
-// Participación por puesto de votación o por mesa: votos emitidos en esta
-// elección vs. total de votantes activos del padrón en ese grupo.
+// Participación: votos emitidos en esta elección vs. votantes activos del
+// padrón, por puesto, por mesa de cada puesto, o por departamento,
+// municipio o zona del puesto (ver agrupacion.js).
 app.get(
   '/api/elections/:id/metrics/participation',
   [
     param('id').isInt({ min: 1 }).toInt(),
-    query('groupBy').optional().isIn(['polling_place', 'voting_table']),
+    query('groupBy').optional().isIn(AGRUPACIONES),
   ],
   asyncRoute('/api/elections/:id/metrics/participation', async (req, res) => {
     if (!validateOr400(req, res, 'Parámetros inválidos')) return;
-    // Whitelist explícito: el nombre de columna nunca viaja tal cual desde
-    // el request hacia el SQL, solo el valor ya validado por el whitelist.
-    const column = req.query.groupBy === 'voting_table' ? 'voting_table' : 'polling_place';
+    const agrupacion = req.query.groupBy || 'polling_place';
 
-    // "voters.<column>" está cifrado (ver voterCrypto.js) pero
-    // "votes.<column>" no (es un snapshot propio tomado al votar, fuera
-    // del alcance del cifrado del padrón) — por eso ya no se puede hacer
-    // el cruce en una sola consulta SQL comparando cifrado con texto
-    // plano. Se agrupa cada lado por separado y se combina acá, tras
-    // descifrar las etiquetas de "voters_grp".
-    const [votersGrp, votesGrp] = await Promise.all([
+    // "voters" guarda puesto y mesa cifrados (ver voterCrypto.js) y "votes"
+    // no (es un snapshot propio tomado al votar, fuera del alcance del
+    // cifrado del padrón): no se pueden cruzar en una sola consulta. Se
+    // cuenta cada lado por puesto y mesa, y se agrupa acá, tras descifrar
+    // las etiquetas del padrón. La ubicación de cada puesto no va cifrada.
+    const [padron, votos, puestos] = await Promise.all([
       pool.query(
-        `SELECT ${column} AS grp, COUNT(*)::int AS registered
+        `SELECT polling_place, voting_table, COUNT(*)::int AS registered
            FROM voters
           WHERE is_active = true
-          GROUP BY ${column}`
+          GROUP BY polling_place, voting_table`
       ),
       pool.query(
-        `SELECT ${column} AS grp, COUNT(*)::int AS votes_cast
+        `SELECT polling_place, voting_table, COUNT(*)::int AS votes_cast
            FROM votes
           WHERE election_id = $1
-          GROUP BY ${column}`,
+          GROUP BY polling_place, voting_table`,
         [req.params.id]
       ),
+      pool.query('SELECT clave, departamento, municipio, codigo_municipio, zona FROM puestos_votacion'),
     ]);
 
-    const registeredByGroup = new Map();
-    for (const row of votersGrp.rows) {
-      const label = decryptField(row.grp);
-      registeredByGroup.set(label, (registeredByGroup.get(label) || 0) + row.registered);
-    }
-    const votesCastByGroup = new Map(votesGrp.rows.map((r) => [r.grp, r.votes_cast]));
-
-    const allLabels = new Set([...registeredByGroup.keys(), ...votesCastByGroup.keys()]);
-    const groups = [...allLabels].sort().map((label) => ({
-      group: label,
-      registered: registeredByGroup.get(label) || 0,
-      votesCast: votesCastByGroup.get(label) || 0,
-    }));
-
-    return res.status(200).json({ electionId: req.params.id, groupBy: column, groups });
+    const groups = agruparParticipacion(
+      agrupacion,
+      padron.rows.map((r) => ({ puesto: decryptField(r.polling_place), mesa: decryptField(r.voting_table), registered: r.registered })),
+      votos.rows.map((r) => ({ puesto: r.polling_place, mesa: r.voting_table, votesCast: r.votes_cast })),
+      new Map(puestos.rows.map((p) => [p.clave, p]))
+    );
+    return res.status(200).json({ electionId: req.params.id, groupBy: agrupacion, groups });
   })
 );
 
@@ -314,8 +306,9 @@ app.get(
     const metrics = await pool.query(
       `SELECT
           (SELECT COUNT(*) FROM votes WHERE election_id = $1)::int AS total_votes,
-          (SELECT COUNT(DISTINCT voting_table) FROM votes WHERE election_id = $1)::int AS tables_with_votes,
-          (SELECT COUNT(DISTINCT voting_table) FROM voters WHERE is_active = true)::int AS total_tables,
+          -- Una mesa es un puesto y una mesa: la "Mesa 1" de dos puestos son dos.
+          (SELECT COUNT(DISTINCT (polling_place, voting_table)) FROM votes WHERE election_id = $1)::int AS tables_with_votes,
+          (SELECT COUNT(DISTINCT (polling_place, voting_table)) FROM voters WHERE is_active = true)::int AS total_tables,
           (SELECT COUNT(*) FROM voters WHERE is_active = true)::int AS total_registered,
           GREATEST(
             EXTRACT(EPOCH FROM (LEAST(now(), $3::timestamptz) - $2::timestamptz)) / 60.0,

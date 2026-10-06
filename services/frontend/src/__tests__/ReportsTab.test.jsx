@@ -22,9 +22,10 @@ async function abrir({ tableros = [] } = {}) {
   return usuario;
 }
 
-async function agregar(usuario, tipo, { fuente, titulo } = {}) {
+async function agregar(usuario, tipo, { fuente, agrupar, titulo } = {}) {
   await usuario.click(screen.getByRole('button', { name: `+ ${tipo}` }));
   if (fuente) await usuario.selectOptions(campo('Fuente de datos'), fuente);
+  if (agrupar) await usuario.selectOptions(campo('Agrupar por'), agrupar);
   if (titulo) {
     await usuario.clear(campo('Título del widget'));
     await usuario.type(campo('Título del widget'), titulo);
@@ -46,12 +47,15 @@ it('arma un tablero nuevo y lo guarda con sus widgets y fuentes', async () => {
   await usuario.type(nombreDelTablero(), 'Seguimiento');
   await agregar(usuario, 'Tarjeta KPI');
   await agregar(usuario, 'Tabla', { fuente: 'participation' });
+  await agregar(usuario, 'Gráfico de barras', { fuente: 'participation', agrupar: 'municipio' });
   await usuario.click(screen.getByRole('button', { name: 'Guardar tablero' }));
 
   expect(api.createDashboard).toHaveBeenCalledWith('jwt-admin', '3', 'Seguimiento', expect.any(Object));
   expect(guardado()).toEqual([
     expect.objectContaining({ type: 'kpi', dataSource: 'results', title: 'Resultados', params: {} }),
-    expect.objectContaining({ type: 'table', dataSource: 'participation', title: 'Participación por puesto/mesa', params: { groupBy: 'polling_place' } }),
+    expect.objectContaining({ type: 'table', dataSource: 'participation', title: 'Participación por puesto', params: { groupBy: 'polling_place' } }),
+    // El título propuesto sigue a cómo se agrupa.
+    expect.objectContaining({ type: 'bar', dataSource: 'participation', title: 'Participación por municipio', params: { groupBy: 'municipio' } }),
   ]);
   expect(await screen.findByText('Tablero guardado correctamente.')).toBeInTheDocument();
   // Guardado, ya tiene id: aparecen exportar y borrar.

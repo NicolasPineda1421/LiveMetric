@@ -12,7 +12,7 @@ export const WIDGET_TYPE_LABELS = {
 export const DATA_SOURCE_LABELS = {
   results: 'Resultados',
   timeseries: 'Evolución de votos en el tiempo',
-  participation: 'Participación por puesto/mesa',
+  participation: 'Participación por puesto, mesa o lugar',
   operational: 'Operación del sistema',
   audit: 'Auditoría',
   concentration: 'Concentración de votos (HHI)',
@@ -23,3 +23,13 @@ export const DATA_SOURCE_LABELS = {
   integrity: 'Integridad del acta',
   suspiciousAccess: 'Accesos sospechosos',
 };
+
+// Cómo se puede agrupar la participación (groupBy de analytics-service), y
+// el título que propone el panel para cada una.
+export const PARTICIPATION_GROUPS = [
+  { value: 'polling_place', label: 'Puesto de votación', title: 'Participación por puesto' },
+  { value: 'voting_table', label: 'Mesa (de cada puesto)', title: 'Participación por mesa' },
+  { value: 'municipio', label: 'Municipio', title: 'Participación por municipio' },
+  { value: 'departamento', label: 'Departamento', title: 'Participación por departamento' },
+  { value: 'zona', label: 'Zona (urbana o rural)', title: 'Participación por zona' },
+];

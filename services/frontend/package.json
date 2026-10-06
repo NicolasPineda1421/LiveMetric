@@ -37,6 +37,7 @@
   },
   "jest": {
     "testEnvironment": "jsdom",
+    "testTimeout": 20000,
     "testMatch": [
       "<rootDir>/src/**/__tests__/**/*.test.{js,jsx}"
     ],

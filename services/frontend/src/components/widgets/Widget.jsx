@@ -44,11 +44,12 @@ function renderByType(type, shaped, printMode) {
     case 'kpi':
       return <KpiCard kpi={shaped.kpi} />;
     case 'bar':
-      return <BarChartWidget items={shaped.items} printMode={printMode} emptyMessage={shaped.emptyMessage} />;
+      return <BarChartWidget items={shaped.items} unit={shaped.unit} printMode={printMode} emptyMessage={shaped.emptyMessage} />;
     case 'line':
       return <LineChartWidget items={shaped.items} series={shaped.series} unit={shaped.unit} printMode={printMode} emptyMessage={shaped.emptyMessage} />;
     case 'pie':
-      return <PieChartWidget items={shaped.items} printMode={printMode} emptyMessage={shaped.emptyMessage} />;
+      // pieItems, si la fuente reparte en la torta otra cosa que en las barras (participación: % en las barras, votos en la torta).
+      return <PieChartWidget items={shaped.pieItems || shaped.items} printMode={printMode} emptyMessage={shaped.emptyMessage} />;
     case 'table':
       return <TableWidget table={shaped.table} />;
     default:

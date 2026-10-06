@@ -494,6 +494,26 @@ participación, métricas operativas, de integridad y de accesos sospechosos.
 
 Los tableros se pueden **exportar a PDF**.
 
+**Participación por lugar.** Un widget de participación se agrupa (en **Agrupar por**)
+por **puesto de votación**, por **mesa** (cada mesa con su puesto: "Colegio Central ·
+Mesa 1"), por **municipio**, por **departamento** o por **zona** (urbana o rural), con
+la ubicación de cada puesto (sección 4.5). El título se propone según la agrupación
+("Participación por municipio"). En el gráfico de barras, cada barra es el **porcentaje
+de participación** del grupo, que se puede comparar entre puestos de distinto tamaño; al
+pasar el mouse aparecen el nombre completo y los votos ("12 de 40 habilitados"), y la
+tabla trae los números. En la torta, en cambio, se ve cómo se reparten los votos entre
+los grupos. Mientras no hay votos, el gráfico lo dice en lugar de mostrar todo en cero.
+
+Con pocas categorías de nombre corto (las opciones de una elección), el gráfico de barras
+va en columnas. Con muchas o de nombre largo (los puestos o las mesas de un padrón
+grande), las barras van horizontales, de mayor a menor, con el nombre a la izquierda
+(recortado si no entra; completo al pasar el mouse) y el valor al final de cada una. Si
+no entran en el widget, se desplazan dentro de él; en el PDF van las 15 de mayor valor,
+con una nota de cuántas quedaron afuera.
+
+![Captura 37: Participación por puesto, por mesa y por municipio en barras horizontales ordenadas de mayor a menor, con el porcentaje al final de cada barra, y los votos repartidos por zona en una torta](img/37-reportes-participacion.png)
+*Captura 37. Participación por puesto, por mesa (cada mesa con su puesto; el widget se desplaza porque son más de las que entran) y por municipio, de mayor a menor y con el porcentaje al final de cada barra; a la derecha, abajo, cómo se reparten los votos entre zona urbana y rural.*
+
 ![Captura 17: Un tablero de reportes sobre la elección certificada: integridad del acta, participación, concentración del voto, resultados y evolución](img/17-reportes.png)
 *Captura 17. Un tablero de reportes sobre la elección certificada: integridad del acta, participación, concentración del voto, resultados y evolución.*
 
@@ -759,6 +779,7 @@ instalación de prueba ya borrada (además, cada código vence a los 30 segundos
 | 34 | `34-padron-archivo-revision.png` | Revisión antes de cargar: puestos con su ubicación, filas con errores y vista previa |
 | 35 | `35-padron-archivo-pines.png` | Resultado de la carga y descarga de los PIN (difuminados) |
 | 36 | `36-puestos.png` | Pestaña Puestos: la ubicación de cada puesto y el formulario para ponerla |
+| 37 | `37-reportes-participacion.png` | Participación por puesto, mesa, municipio y zona en los reportes |
 
 Las capturas 05 y 26 juntas muestran el control de acceso por rol: conviene usarlas también
 en el informe y en el video.

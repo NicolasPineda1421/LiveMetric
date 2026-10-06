@@ -840,3 +840,12 @@ p.ubicacion-puesto { margin: -0.3rem 0 0.8rem; }
 .sin-ubicacion { color: var(--color-text-muted); font-style: italic; }
 .fila-edicion td { background: var(--color-panel-raised); }
 .fila-edicion .acciones-padron { margin: 0.2rem 0 0.6rem; }
+
+/* Gráfico de barras con muchas categorías (puestos, mesas, municipios):
+   barras horizontales que se desplazan dentro del widget si no entran (ver
+   components/widgets/barras.js). */
+.barras-horizontales { height: 100%; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; }
+.barras-lienzo { flex: 1 0 auto; min-height: 0; }
+.barras-nota { flex-shrink: 0; margin: 0.2rem 0 0; font-size: 0.72rem; color: var(--color-text-muted); }
+.barras-tooltip { display: flex; flex-direction: column; gap: 0.15rem; background: #222e3b; border: 1px solid #303e4d; border-radius: 3px; padding: 0.4rem 0.55rem; font-size: 12px; color: #eae4d6; max-width: 260px; }
+.barras-tooltip-detalle { color: #93a0ad; }
