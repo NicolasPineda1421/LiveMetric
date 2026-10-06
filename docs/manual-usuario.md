@@ -411,7 +411,7 @@ conservan, porque son anónimos (no apuntan a su fila del padrón), así que el 
 cambia. Queda en **Auditoría** quién lo eliminó y cuándo, sin la cédula.
 
 ![Captura 13: El padrón filtrado por zona rural: los filtros por ubicación del puesto, cuántos coinciden, en qué departamentos votan y, para cada votante, dónde queda su puesto, su PIN, su autenticador y el botón Eliminar](img/13-padron-lista.png)
-*Captura 13. El padrón filtrado por zona rural: 63 de 1394 votantes, que votan en Cundinamarca (61) y Boyacá (2). Debajo de cada puesto, dónde queda; además, hasta cuándo vale el PIN de cada votante (o si no tiene), su autenticador, el voto asistido y el botón Eliminar.*
+*Captura 13. El padrón filtrado por zona rural: 152 de 548 votantes, que votan en Cundinamarca (60), Boyacá (32), Bogotá, D.C. (30) y Antioquia (30). Debajo de cada puesto, dónde queda; además, hasta cuándo vale el PIN de cada votante (o si no tiene), su autenticador, el voto asistido y el botón Eliminar.*
 
 ### 4.5 Puestos
 
@@ -589,8 +589,8 @@ asignados.
 Si no hay ninguna votación en curso, verá el mensaje *"No hay elecciones activas en este
 momento. Vuelve más tarde."*
 
-![Captura 22: El votante ve la elección abierta y su puesto y mesa](img/22-votante-elecciones.png)
-*Captura 22. El votante ve la elección abierta y su puesto y mesa.*
+![Captura 22: El votante ve las elecciones abiertas, con su puesto y su mesa arriba](img/22-votante-elecciones.png)
+*Captura 22. El votante ve las elecciones abiertas, con su puesto y su mesa arriba.*
 
 ### 5.2 Emitir el voto
 
@@ -634,8 +634,8 @@ No puede crear elecciones, ni cargar el padrón, ni crear usuarios. Esas opcione
 sencillamente no aparecen: la restricción no es que los botones estén ocultos, es que el
 servidor rechaza cualquier intento de usar esas funciones con una sesión de auditor.
 
-![Captura 26: El panel del auditor: solo dos pestañas, frente a las nueve del administrador (Captura 05)](img/26-panel-auditor.png)
-*Captura 26. El panel del auditor: solo dos pestañas, frente a las nueve del administrador (Captura 05).*
+![Captura 26: El panel del auditor: solo dos pestañas, frente a las diez del administrador (Captura 05)](img/26-panel-auditor.png)
+*Captura 26. El panel del auditor: solo dos pestañas, frente a las diez del administrador (Captura 05).*
 
 ---
 
