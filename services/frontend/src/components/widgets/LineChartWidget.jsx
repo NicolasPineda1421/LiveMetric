@@ -42,8 +42,8 @@ export default function LineChartWidget({ items, series, unit = '', printMode, e
           tickFormatter={(v) => `${v}${unit}`}
         />
         <Tooltip
-          contentStyle={{ background: '#222e3b', border: '1px solid #303e4d', borderRadius: 3, fontSize: 12 }}
-          labelStyle={{ color: '#eae4d6' }}
+          contentStyle={{ background: 'var(--color-panel-raised)', border: '1px solid var(--color-border-strong)', borderRadius: 6, fontSize: 12 }}
+          labelStyle={{ color: 'var(--color-text)' }}
           formatter={(v) => (v === null || v === undefined ? '—' : `${v}${unit}`)}
         />
         {multiple && <Legend wrapperStyle={{ fontSize: 11, color: tickStyle.fill }} verticalAlign="top" height={24} />}

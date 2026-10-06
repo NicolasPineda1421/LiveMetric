@@ -288,7 +288,7 @@ export function adaptForWidgets(dataSource, raw) {
       const votes = raw.votes;
       const check = (passed, okText, badText) => (passed ? `✔ ${okText}` : `✘ ${badText}`);
       // Veredicto: verde solo con la firma digital válida y todo lo demás
-      // en orden; un acta sin firma queda en el dorado de "atención".
+      // en orden; un acta sin firma queda sin tono, con el ⚠ de atención.
       const verdict = {
         integra: {
           value: '✔ Verificada',
@@ -347,7 +347,7 @@ export function adaptForWidgets(dataSource, raw) {
         kpi: {
           label: 'Alertas de acceso',
           value: alerts.length ? plural(alerts.length, 'alerta', 'alertas') : 'Sin alertas',
-          // Solo alertas medias: sin tono, queda en el dorado de "atención".
+          // Solo alertas medias: sin tono (el valor, en el color del texto).
           tone: hasHigh ? 'bad' : alerts.length ? undefined : 'ok',
           note: `${totals.failures} de ${totals.attempts} ingresos fallaron (${totals.failureRatePct}%) durante la elección.`,
         },

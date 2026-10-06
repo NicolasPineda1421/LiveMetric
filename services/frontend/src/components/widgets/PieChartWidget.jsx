@@ -12,7 +12,7 @@ export default function PieChartWidget({ items, printMode, emptyMessage }) {
   // corresponde la paleta categórica, con leyenda porque el color es la
   // única forma de distinguirlas (a diferencia de una barra con eje rotulado).
   const data = foldToOther(items);
-  const ringColor = printMode ? '#f9f9f7' : '#1b2530'; // separador = fondo de la tarjeta (claro u oscuro)
+  const ringColor = printMode ? '#f9f9f7' : '#1c2128'; // separador = fondo de la tarjeta (claro u oscuro)
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -23,8 +23,8 @@ export default function PieChartWidget({ items, printMode, emptyMessage }) {
           ))}
         </Pie>
         <Tooltip
-          contentStyle={{ background: '#222e3b', border: '1px solid #303e4d', borderRadius: 3, fontSize: 12 }}
-          labelStyle={{ color: '#eae4d6' }}
+          contentStyle={{ background: 'var(--color-panel-raised)', border: '1px solid var(--color-border-strong)', borderRadius: 6, fontSize: 12 }}
+          labelStyle={{ color: 'var(--color-text)' }}
         />
         <Legend
           verticalAlign="bottom"

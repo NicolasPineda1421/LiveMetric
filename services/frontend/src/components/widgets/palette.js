@@ -28,18 +28,20 @@ export const CATEGORICAL_LIGHT = [
   '#e34948', // 8 rojo
 ];
 
-// Métricas de una sola serie (evolución en el tiempo) usan el acento dorado
-// ya establecido en el resto de la UI, en vez de la paleta categórica (que
-// es para distinguir identidades, no una sola magnitud).
-export const SEQUENTIAL_ACCENT = '#c9a227';
+// Métricas de una sola serie (evolución en el tiempo, participación) usan el
+// azul de acento de la UI, que es también el primer color de la paleta
+// categórica (validada sobre la superficie de los widgets, #1c2128).
+export const SEQUENTIAL_ACCENT = '#3987e5';
 
-export const MUTED_INK = '#93a0ad';
-export const GRIDLINE = '#303e4d';
+// Tinta secundaria y grilla: las mismas variables que el resto del panel
+// (--color-text-muted y --color-border en styles.css).
+export const MUTED_INK = '#98a1ab';
+export const GRIDLINE = '#272d35';
 
 // Equivalentes para el PDF exportado (fondo blanco): tinta primaria/muted y
 // línea de grilla de la tabla "Chart chrome & ink" (columna Light) de la
-// skill de dataviz. El dorado de marca no llega a 3:1 sobre blanco, así que
-// en impreso se usa tinta oscura en vez de color para las marcas de una sola serie.
+// skill de dataviz. En impreso, las marcas de una sola serie van en tinta
+// oscura en vez de color.
 export const PRINT_INK = '#0b0b0b';
 export const PRINT_MUTED_INK = '#52514e';
 export const PRINT_GRIDLINE = '#e1e0d9';

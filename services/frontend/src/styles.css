@@ -1,33 +1,40 @@
 /* ==========================================================================
-   LiveMetric — sistema visual "libro de actas"
-   Paleta y tipografía inspiradas en un cuaderno electoral oficial: tinta
-   marina profunda, papel cálido y un sello dorado para lo certificado.
+   LiveMetric — sistema visual sobrio
+   Gris neutro oscuro, un solo acento azul (el mismo de los gráficos) y
+   tipografía del sistema. Los colores de estado (éxito, atención, error)
+   quedan solo para eso. Contraste AA en todo el texto: ver los valores en el
+   commit que introdujo este sistema.
    Sin dependencias externas (fuentes del sistema) para mantener el
    principio Local-First: nada se descarga de un CDN en tiempo de ejecución.
    ========================================================================== */
 
 :root {
-  --color-bg: #121820;
-  --color-panel: #1b2530;
-  --color-panel-raised: #222e3b;
-  --color-border: #303e4d;
-  --color-paper: #f3ede0;
-  --color-paper-dim: #d9d0bd;
-  --color-text: #eae4d6;
-  --color-text-muted: #93a0ad;
-  --color-accent: #c9a227;
-  --color-accent-soft: rgba(201, 162, 39, 0.14);
-  --color-success: #4f9d6e;
-  --color-success-soft: rgba(79, 157, 110, 0.14);
-  --color-danger: #c1502e;
-  --color-danger-soft: rgba(193, 80, 46, 0.14);
+  --color-bg: #0f1115;
+  --color-panel: #161a1f;
+  --color-panel-raised: #1c2128;
+  --color-border: #272d35;
+  --color-border-strong: #343b45;
+  --color-text: #e6e8eb;
+  --color-text-muted: #98a1ab;
+  --color-accent: #6da7ec;               /* texto, bordes y marcas de acento */
+  --color-accent-strong: #256abf;        /* fondo del botón principal (blanco encima: 5,4:1) */
+  --color-accent-strong-hover: #1c5cab;
+  --color-accent-soft: rgba(57, 135, 229, 0.12);
+  --color-success: #4caf7a;
+  --color-success-soft: rgba(76, 175, 122, 0.12);
+  --color-warning: #d6a536;
+  --color-warning-soft: rgba(214, 165, 54, 0.12);
+  --color-danger: #e0664f;
+  --color-danger-soft: rgba(224, 102, 79, 0.12);
 
-  --font-serif: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', serif;
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-display: var(--font-sans);
   --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
 
-  --radius: 3px;
-  --shadow-card: 0 1px 0 rgba(0, 0, 0, 0.4);
+  --radius: 6px;
+  --radius-lg: 10px;
+  --shadow-pop: 0 10px 28px rgba(0, 0, 0, 0.35);
+  --focus-ring: 0 0 0 3px rgba(57, 135, 229, 0.35);
 }
 
 * { box-sizing: border-box; }
@@ -45,6 +52,10 @@ body {
 }
 
 a { color: var(--color-accent); }
+
+/* Foco visible con teclado, en todo el panel. */
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; box-shadow: var(--focus-ring); border-color: var(--color-accent); }
 
 button {
   font-family: inherit;
@@ -67,7 +78,7 @@ input, select, textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.9rem 1.75rem;
+  padding: 0.8rem 1.75rem;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-panel);
 }
@@ -76,21 +87,24 @@ input, select, textarea {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  font-family: var(--font-serif);
-  font-size: 1.25rem;
-  letter-spacing: 0.01em;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .seal {
   width: 26px;
   height: 26px;
-  border-radius: 50%;
-  border: 1.5px solid var(--color-accent);
+  border-radius: 7px;
+  background: var(--color-accent-soft);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--color-accent);
-  font-size: 0.75rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
   flex-shrink: 0;
 }
 
@@ -101,9 +115,11 @@ input, select, textarea {
   border: none;
   color: var(--color-text-muted);
   text-decoration: underline;
+  text-decoration-color: var(--color-border-strong);
+  text-underline-offset: 3px;
   padding: 0;
 }
-.link-button:hover { color: var(--color-text); }
+.link-button:hover { color: var(--color-text); text-decoration-color: currentColor; }
 
 /* ---------- Login ---------- */
 
@@ -111,6 +127,7 @@ input, select, textarea {
   flex: 1;
   display: grid;
   grid-template-columns: 1.1fr 1fr;
+  min-height: 100vh;
 }
 
 @media (max-width: 860px) {
@@ -119,7 +136,7 @@ input, select, textarea {
 }
 
 .login-hero {
-  background: linear-gradient(165deg, #101620 0%, #182230 65%, #1c2735 100%);
+  background: var(--color-panel);
   padding: 4rem 3.5rem;
   display: flex;
   flex-direction: column;
@@ -128,12 +145,13 @@ input, select, textarea {
 }
 
 .login-hero h1 {
-  font-family: var(--font-serif);
-  font-size: 2.6rem;
-  line-height: 1.15;
+  font-family: var(--font-display);
+  font-size: 2.1rem;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
   max-width: 20ch;
-  margin: 0 0 1.1rem 0;
-  font-weight: 400;
+  margin: 0 0 1rem 0;
+  font-weight: 600;
 }
 
 .login-hero p {
@@ -164,16 +182,16 @@ input, select, textarea {
 .login-card {
   width: 100%;
   max-width: 380px;
-  background: var(--color-paper);
-  color: #1d1a12;
-  border-radius: var(--radius);
-  padding: 2.1rem 2rem;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  background: var(--color-panel);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 2rem 1.9rem;
 }
 
 .login-tabs {
   display: flex;
-  border-bottom: 1px solid var(--color-paper-dim);
+  border-bottom: 1px solid var(--color-border);
   margin-bottom: 1.5rem;
 }
 
@@ -183,13 +201,13 @@ input, select, textarea {
   border: none;
   padding: 0.6rem 0;
   font-size: 0.9rem;
-  color: #7a715a;
+  color: var(--color-text-muted);
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
 }
 
 .login-tab.active {
-  color: #1d1a12;
+  color: var(--color-text);
   border-bottom-color: var(--color-accent);
   font-weight: 600;
 }
@@ -199,41 +217,42 @@ input, select, textarea {
 .field label {
   display: block;
   font-size: 0.78rem;
-  color: #6b6350;
+  color: var(--color-text-muted);
   margin-bottom: 0.3rem;
 }
 
 .field input {
   width: 100%;
   padding: 0.6rem 0.7rem;
-  border: 1px solid var(--color-paper-dim);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius);
-  background: #fffdf8;
-  color: #1d1a12;
+  background: var(--color-panel-raised);
+  color: var(--color-text);
 }
 
 .field input:focus,
 .field select:focus,
 .field textarea:focus {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--focus-ring);
 }
 
-.field-hint { font-size: 0.76rem; color: #8a806a; margin-top: 0.3rem; }
+.field-hint { font-size: 0.76rem; color: var(--color-text-muted); margin-top: 0.3rem; }
 
 /* Segundo factor del ingreso: un paso por vez y con letra grande, también
    para quien usa poco el celular. */
-.segundo-factor-titulo { font-family: var(--font-serif); font-size: 1.35rem; margin: 0 0 0.5rem; color: #1d1a12; }
-.segundo-factor-texto { font-size: 0.98rem; line-height: 1.5; color: #3d3727; margin: 0 0 1rem; }
-.pasos-registro { padding-left: 1.2rem; margin: 0 0 0.8rem; font-size: 0.98rem; line-height: 1.5; color: #3d3727; }
+.segundo-factor-titulo { font-family: var(--font-display); font-size: 1.25rem; font-weight: 600; margin: 0 0 0.5rem; color: var(--color-text); }
+.segundo-factor-texto { font-size: 0.98rem; line-height: 1.5; color: var(--color-text); margin: 0 0 1rem; }
+.pasos-registro { padding-left: 1.2rem; margin: 0 0 0.8rem; font-size: 0.98rem; line-height: 1.5; color: var(--color-text); }
 .pasos-registro li { margin-bottom: 0.45rem; }
 .qr-registro { display: flex; justify-content: center; margin: 0.4rem 0 0.8rem; }
-.qr-registro svg { background: #fff; border-radius: var(--radius); }
-.clave-manual { font-size: 0.88rem; color: #6b6350; margin-bottom: 1rem; }
+.qr-registro svg { background: #fff; border-radius: var(--radius); padding: 6px; }
+.clave-manual { font-size: 0.88rem; color: var(--color-text-muted); margin-bottom: 1rem; }
 .clave-manual summary { cursor: pointer; }
-.clave-manual .mono { margin-top: 0.4rem; font-size: 1.05rem; letter-spacing: 0.08em; color: #1d1a12; word-break: break-all; }
+.clave-manual .mono { margin-top: 0.4rem; font-size: 1.05rem; letter-spacing: 0.08em; color: var(--color-text); word-break: break-all; }
 .field input.input-codigo { font-family: var(--font-mono); font-size: 1.7rem; letter-spacing: 0.35em; text-align: center; padding: 0.5rem; }
-.link-button.volver { display: block; margin: 1rem auto 0; color: #6b6350; }
+.link-button.volver { display: block; margin: 1rem auto 0; color: var(--color-text-muted); }
 .jurado-pasos { padding-left: 1.2rem; margin: 0; line-height: 1.6; color: var(--color-text-muted); }
 .jurado-pasos li { margin-bottom: 0.35rem; }
 /* Acciones de una fila (Padrón, Usuarios): siempre una al lado de la otra,
@@ -250,7 +269,7 @@ input, select, textarea {
 .editar-mesa { min-width: 280px; }
 
 /* Padrón: una fila del formulario por votante, y los filtros del listado */
-.fila-votante { border: 1px solid var(--color-border); border-radius: var(--radius); padding: 0.8rem 0.9rem 0.1rem; margin: 0 0 0.9rem; display: grid; grid-template-columns: 1fr 1.6fr 1.4fr 0.8fr auto; gap: 0 0.8rem; align-items: end; }
+.fila-votante { border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 0.8rem 0.9rem 0.1rem; margin: 0 0 0.9rem; display: grid; grid-template-columns: 1fr 1.6fr 1.4fr 0.8fr auto; gap: 0 0.8rem; align-items: end; }
 .fila-votante legend { font-size: 0.78rem; color: var(--color-text-muted); padding: 0 0.3rem; }
 .quitar-fila { margin-bottom: 1.2rem; }
 @media (max-width: 900px) { .fila-votante { grid-template-columns: 1fr 1fr; } }
@@ -264,8 +283,8 @@ input, select, textarea {
   position: absolute; top: calc(100% + 4px); left: 0; z-index: 30;
   min-width: max(100%, 420px); max-height: 340px; overflow-y: auto;
   list-style: none; margin: 0; padding: 0.3rem 0;
-  background: var(--color-panel-raised); border: 1px solid var(--color-border); border-radius: var(--radius);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  background: var(--color-panel-raised); border: 1px solid var(--color-border-strong); border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
 }
 .sugerencias li[role="option"] { display: grid; grid-template-columns: auto 1fr; column-gap: 0.8rem; padding: 0.45rem 0.8rem; cursor: pointer; font-size: 0.88rem; }
 .sugerencias li[role="option"].activa { background: var(--color-accent-soft); }
@@ -278,7 +297,7 @@ input, select, textarea {
 .modo-alta { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0 0 1rem; }
 .carga-ayuda { margin: 0 0 0.9rem; }
 .carga-opciones { display: grid; grid-template-columns: 1fr 1.4fr; gap: 0 1rem; align-items: start; }
-.zona-archivo { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.3rem; min-height: 9.5rem; padding: 1rem; margin-bottom: 0.9rem; text-align: center; border: 1px dashed var(--color-border); border-radius: var(--radius); background: var(--color-panel-raised); cursor: pointer; }
+.zona-archivo { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.3rem; min-height: 9.5rem; padding: 1rem; margin-bottom: 0.9rem; text-align: center; border: 1px dashed var(--color-border-strong); border-radius: var(--radius-lg); background: var(--color-panel-raised); cursor: pointer; }
 .zona-archivo:hover, .zona-archivo.arrastrando, .zona-archivo:focus-within { border-color: var(--color-accent); }
 .zona-archivo input[type='file'] { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .zona-titulo { color: var(--color-accent); font-weight: 600; }
@@ -294,7 +313,7 @@ input, select, textarea {
 .detalle-carga summary { cursor: pointer; font-size: 0.85rem; color: var(--color-text-muted); margin-bottom: 0.5rem; }
 .subtitulo-carga { font-size: 0.85rem; font-weight: 600; color: var(--color-text-muted); margin: 0.2rem 0 0.5rem; }
 .acciones-carga { display: flex; gap: 0.6rem; flex-wrap: wrap; }
-.avance-carga progress { width: 100%; height: 0.8rem; accent-color: var(--color-accent); }
+.avance-carga progress { width: 100%; height: 0.6rem; accent-color: var(--color-accent-strong); }
 .avance-carga p { margin: 0.4rem 0 0.5rem; }
 .lista-cedulas { font-size: 0.8rem; overflow-wrap: anywhere; }
 .aviso-vigencia { margin: 0 0 0.9rem; }
@@ -312,49 +331,49 @@ input, select, textarea {
   gap: 0.4rem;
   border: 1px solid transparent;
   border-radius: var(--radius);
-  padding: 0.55rem 1.1rem;
+  padding: 0.55rem 1.05rem;
   font-size: 0.9rem;
-  font-weight: 600;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  font-weight: 500;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.btn-primary { background: #1d1a12; color: var(--color-paper); width: 100%; }
-.btn-primary:hover { background: #33301f; }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+/* El principal (azul lleno): una acción por pantalla. */
+.btn-primary { background: var(--color-accent-strong); color: #fff; width: 100%; }
+.btn-primary:hover:not(:disabled) { background: var(--color-accent-strong-hover); }
 
-.btn-gold { background: var(--color-accent); color: #1d1a12; }
-.btn-gold:hover { background: #dcb434; }
+.btn-gold { background: var(--color-accent-strong); color: #fff; }
+.btn-gold:hover:not(:disabled) { background: var(--color-accent-strong-hover); }
 
 .btn-outline {
   background: transparent;
-  border-color: var(--color-border);
+  border-color: var(--color-border-strong);
   color: var(--color-text);
 }
-.btn-outline:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.btn-outline:hover:not(:disabled) { background: var(--color-panel-raised); border-color: var(--color-text-muted); }
 
 .btn-danger-outline {
   background: transparent;
-  border-color: var(--color-danger);
+  border-color: rgba(224, 102, 79, 0.5);
   color: var(--color-danger);
 }
+.btn-danger-outline:hover:not(:disabled) { background: var(--color-danger-soft); border-color: var(--color-danger); }
 
 .error-banner {
   background: var(--color-danger-soft);
-  border: 1px solid var(--color-danger);
-  color: #f0b7a3;
-  padding: 0.6rem 0.8rem;
+  border: 1px solid rgba(224, 102, 79, 0.35);
+  color: #f2b8ab;
+  padding: 0.65rem 0.85rem;
   border-radius: var(--radius);
   font-size: 0.85rem;
   margin-bottom: 1rem;
 }
 
-.error-banner.on-paper { color: #8a2e17; background: #fbe3da; border-color: #c1502e; }
-
 .success-banner {
   background: var(--color-success-soft);
-  border: 1px solid var(--color-success);
-  color: #bfe6cf;
-  padding: 0.6rem 0.8rem;
+  border: 1px solid rgba(76, 175, 122, 0.35);
+  color: #b5e3c8;
+  padding: 0.65rem 0.85rem;
   border-radius: var(--radius);
   font-size: 0.85rem;
   margin-bottom: 1rem;
@@ -369,6 +388,7 @@ input, select, textarea {
   gap: 0.25rem;
   padding: 0 1.75rem;
   border-bottom: 1px solid var(--color-border);
+  background: var(--color-panel);
   overflow-x: auto;
 }
 
@@ -376,21 +396,22 @@ input, select, textarea {
   background: none;
   border: none;
   color: var(--color-text-muted);
-  padding: 0.85rem 0.9rem;
+  padding: 0.75rem 0.85rem;
   font-size: 0.88rem;
   border-bottom: 2px solid transparent;
   white-space: nowrap;
 }
 
-.tab.active { color: var(--color-text); border-bottom-color: var(--color-accent); }
+.tab.active { color: var(--color-text); border-bottom-color: var(--color-accent); font-weight: 500; }
 .tab:hover:not(.active) { color: var(--color-text); }
 
 .content { flex: 1; padding: 1.75rem; max-width: 1080px; width: 100%; margin: 0 auto; }
 
 .section-title {
-  font-family: var(--font-serif);
-  font-size: 1.35rem;
-  font-weight: 400;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   margin: 0 0 0.3rem 0;
 }
 
@@ -399,14 +420,14 @@ input, select, textarea {
 .panel {
   background: var(--color-panel);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   padding: 1.4rem;
   margin-bottom: 1.25rem;
 }
 
-.panel h3 { margin-top: 0; font-family: var(--font-serif); font-weight: 400; font-size: 1.05rem; }
+.panel h3 { margin-top: 0; font-family: var(--font-display); font-weight: 600; font-size: 1rem; }
 
-.access-codes-panel { border-color: var(--color-accent); background: var(--color-accent-soft); }
+.access-codes-panel { border-color: rgba(57, 135, 229, 0.4); background: var(--color-accent-soft); }
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
@@ -416,11 +437,12 @@ input, select, textarea {
 .field-dark input, .field-dark select, .field-dark textarea {
   width: 100%;
   padding: 0.55rem 0.65rem;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius);
   background: var(--color-panel-raised);
   color: var(--color-text);
 }
+.field-dark input:disabled, .field-dark select:disabled { opacity: 0.55; }
 .field-dark { margin-bottom: 0.9rem; }
 
 .option-row { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
@@ -431,10 +453,12 @@ input, select, textarea {
   text-align: left;
   font-weight: 500;
   color: var(--color-text-muted);
-  font-size: 0.78rem;
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
   padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border-strong);
 }
+.table tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .table td { padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--color-border); vertical-align: top; }
 .table tr:last-child td { border-bottom: none; }
 
@@ -458,7 +482,7 @@ input, select, textarea {
   font-weight: 600;
   letter-spacing: 0.02em;
 }
-.badge-scheduled { background: rgba(147, 160, 173, 0.18); color: var(--color-text-muted); }
+.badge-scheduled { background: rgba(152, 161, 171, 0.14); color: var(--color-text-muted); }
 .badge-active { background: var(--color-accent-soft); color: var(--color-accent); }
 .badge-closed { background: var(--color-success-soft); color: var(--color-success); }
 
@@ -468,8 +492,8 @@ input, select, textarea {
 .tally-row { display: grid; grid-template-columns: 1fr auto; gap: 0.4rem; align-items: baseline; }
 .tally-label { font-size: 0.9rem; }
 .tally-votes { font-family: var(--font-mono); color: var(--color-text-muted); font-size: 0.85rem; }
-.tally-bar-track { grid-column: 1 / -1; height: 8px; background: var(--color-panel-raised); border-radius: 4px; overflow: hidden; }
-.tally-bar-fill { height: 100%; background: var(--color-accent); }
+.tally-bar-track { grid-column: 1 / -1; height: 6px; background: var(--color-panel-raised); border-radius: 3px; overflow: hidden; }
+.tally-bar-fill { height: 100%; background: var(--color-accent-strong); }
 
 .certified-stamp {
   display: inline-flex;
@@ -484,10 +508,10 @@ input, select, textarea {
 }
 
 /* Indicador de veracidad del acta (Resultados) y veredicto de cada acta
-   (Escrutinio): verde verificada, dorado sin firma, rojo alterada. */
+   (Escrutinio): verde verificada, ámbar sin firma, rojo alterada. */
 .acta-seal {
   border: 1px solid var(--color-border);
-  border-left-width: 4px;
+  border-left-width: 3px;
   background: var(--color-panel-raised);
   padding: 0.65rem 0.85rem;
   border-radius: var(--radius);
@@ -499,8 +523,8 @@ input, select, textarea {
 .acta-seal ul { margin: 0.35rem 0; padding-left: 1.1rem; }
 .acta-seal.tone-ok { border-color: var(--color-success); background: var(--color-success-soft); }
 .acta-seal.tone-ok strong { color: var(--color-success); }
-.acta-seal.tone-warn { border-color: var(--color-accent); background: var(--color-accent-soft); }
-.acta-seal.tone-warn strong { color: var(--color-accent); }
+.acta-seal.tone-warn { border-color: var(--color-warning); background: var(--color-warning-soft); }
+.acta-seal.tone-warn strong { color: var(--color-warning); }
 .acta-seal.tone-bad { border-color: var(--color-danger); background: var(--color-danger-soft); }
 .acta-seal.tone-bad strong { color: var(--color-danger); }
 
@@ -512,7 +536,7 @@ input, select, textarea {
   font-weight: 600;
 }
 .verdict.tone-ok { background: var(--color-success-soft); color: var(--color-success); }
-.verdict.tone-warn { background: var(--color-accent-soft); color: var(--color-accent); }
+.verdict.tone-warn { background: var(--color-warning-soft); color: var(--color-warning); }
 .verdict.tone-bad { background: var(--color-danger-soft); color: var(--color-danger); }
 .verdict-problems { margin: 0.35rem 0 0; padding-left: 1rem; font-size: 0.78rem; color: var(--color-text-muted); }
 
@@ -530,7 +554,7 @@ input, select, textarea {
 /* Total en vivo de Resultados: sin acta, solo cuántos votaron */
 .live-total { margin-top: 0.25rem; }
 .live-total-status { color: var(--color-text-muted); font-size: 0.85rem; }
-.live-total-value { font-family: var(--font-serif); font-size: 2.6rem; color: var(--color-accent); line-height: 1.1; margin-top: 0.5rem; }
+.live-total-value { font-family: var(--font-display); font-size: 2.4rem; font-weight: 600; letter-spacing: -0.02em; color: var(--color-text); line-height: 1.1; margin-top: 0.5rem; }
 .live-total-label { color: var(--color-text-muted); font-size: 0.9rem; }
 .live-total-note { margin-top: 0.8rem; font-size: 0.82rem; color: var(--color-text-muted); }
 
@@ -541,16 +565,16 @@ input, select, textarea {
 .ballot-card {
   background: var(--color-panel);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   padding: 1.4rem;
 }
 
-.ballot-title { font-family: var(--font-serif); font-size: 1.2rem; margin: 0 0 0.2rem 0; }
+.ballot-title { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; margin: 0 0 0.2rem 0; }
 .ballot-meta { color: var(--color-text-muted); font-size: 0.82rem; margin-bottom: 1rem; }
 
 .already-voted-note {
   background: var(--color-success-soft);
-  border: 1px solid var(--color-success);
+  border: 1px solid rgba(76, 175, 122, 0.35);
   color: var(--color-text);
   border-radius: var(--radius);
   padding: 0.65rem 0.8rem;
@@ -567,7 +591,7 @@ input, select, textarea {
   margin-bottom: 0.5rem;
   cursor: pointer;
 }
-.ballot-option:hover { border-color: var(--color-accent); }
+.ballot-option:hover { border-color: var(--color-border-strong); background: var(--color-panel-raised); }
 .ballot-option.selected { border-color: var(--color-accent); background: var(--color-accent-soft); }
 
 .ballot-option-number {
@@ -586,7 +610,7 @@ input, select, textarea {
   padding: 2rem;
 }
 .confirmation-screen .seal { width: 60px; height: 60px; font-size: 1.6rem; margin: 0 auto 1.2rem auto; }
-.confirmation-screen h1 { font-family: var(--font-serif); font-weight: 400; margin-bottom: 0.4rem; }
+.confirmation-screen h1 { font-family: var(--font-display); font-weight: 600; letter-spacing: -0.01em; margin-bottom: 0.4rem; }
 .confirmation-screen p { color: var(--color-text-muted); max-width: 40ch; }
 
 /* ---------- Candidatos / formato presidencial ---------- */
@@ -637,14 +661,14 @@ input, select, textarea {
   align-items: center;
   gap: 0.9rem;
   background: var(--color-accent-soft);
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius);
+  border: 1px solid rgba(57, 135, 229, 0.4);
+  border-radius: var(--radius-lg);
   padding: 0.9rem 1rem;
   margin-bottom: 1.1rem;
 }
 .winner-banner .candidate-photo, .winner-banner .candidate-photo-placeholder { width: 52px; height: 52px; }
 .winner-banner-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-accent); margin-bottom: 0.15rem; }
-.winner-banner-name { font-family: var(--font-serif); font-size: 1.15rem; }
+.winner-banner-name { font-family: var(--font-display); font-size: 1.1rem; font-weight: 600; }
 .winner-banner-votes { color: var(--color-text-muted); font-size: 0.85rem; margin-left: auto; text-align: right; }
 
 .template-type-toggle { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
@@ -680,11 +704,11 @@ input, select, textarea {
   cursor: pointer;
   white-space: nowrap;
 }
-.file-input-label:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.file-input-label:hover { border-color: var(--color-text-muted); color: var(--color-text); }
 
 .by-table-card {
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   padding: 0.9rem 1rem;
   margin-bottom: 0.75rem;
 }
@@ -742,7 +766,7 @@ input, select, textarea {
   margin-top: 1rem;
   padding: 1rem;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   background: var(--color-panel-raised);
 }
 
@@ -756,7 +780,7 @@ input, select, textarea {
   flex-direction: column;
   background: var(--color-panel-raised);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -770,7 +794,7 @@ input, select, textarea {
   flex-shrink: 0;
 }
 
-.widget-title { font-size: 0.85rem; color: var(--color-text); }
+.widget-title { font-size: 0.85rem; font-weight: 500; color: var(--color-text); }
 .widget-actions { display: flex; gap: 0.4rem; }
 .widget-actions .link-button { font-size: 0.9rem; }
 
@@ -790,7 +814,7 @@ input, select, textarea {
 
 .widget-kpi { height: 100%; display: flex; flex-direction: column; justify-content: center; }
 .widget-kpi-label { color: var(--color-text-muted); font-size: 0.8rem; margin-bottom: 0.3rem; }
-.widget-kpi-value { font-family: var(--font-serif); font-size: 2.1rem; color: var(--color-accent); line-height: 1; }
+.widget-kpi-value { font-family: var(--font-display); font-size: 2rem; font-weight: 600; letter-spacing: -0.02em; color: var(--color-text); line-height: 1.05; }
 /* Tono del valor cuando el KPI es un veredicto (acta íntegra/alterada,
    alertas de acceso): verde = bien, rojo = revisar ya. */
 .widget-kpi-value.tone-ok { color: var(--color-success); }
@@ -812,10 +836,13 @@ input, select, textarea {
   --color-panel: #ffffff;
   --color-panel-raised: #f9f9f7;
   --color-border: #e1e0d9;
+  --color-border-strong: #d0cfc7;
   --color-text: #0b0b0b;
   --color-text-muted: #52514e;
-  --color-accent: #8a6d1a;
-  --color-accent-soft: rgba(138, 109, 26, 0.12);
+  --color-accent: #1c5cab;
+  --color-accent-soft: rgba(42, 120, 214, 0.10);
+  --color-warning: #8a6200;
+  --color-warning-soft: rgba(237, 161, 0, 0.12);
   --color-success: #0ca30c;
   --color-success-soft: rgba(12, 163, 12, 0.10);
   --color-danger: #d03b3b;
@@ -833,7 +860,7 @@ p.ubicacion-puesto { margin: -0.3rem 0 0.8rem; }
 @media (max-width: 900px) { .ubicacion-campos { grid-template-columns: 1fr 1fr; } }
 .ubicacion-campos input[readonly] { opacity: 0.75; }
 .ubicacion-celda { display: block; font-size: 0.75rem; color: var(--color-text-muted); }
-.aviso-puestos { border: 1px solid var(--color-border); border-left: 4px solid var(--color-accent); background: var(--color-accent-soft); border-radius: var(--radius); padding: 0.7rem 0.9rem; margin: 0 0 1rem; font-size: 0.88rem; }
+.aviso-puestos { border: 1px solid rgba(214, 165, 54, 0.35); border-left: 3px solid var(--color-warning); background: var(--color-warning-soft); border-radius: var(--radius); padding: 0.7rem 0.9rem; margin: 0 0 1rem; font-size: 0.88rem; }
 .resumen-puestos { justify-content: space-between; flex-wrap: wrap; }
 .sin-ubicacion { color: var(--color-text-muted); font-style: italic; }
 .fila-edicion td { background: var(--color-panel-raised); }
@@ -845,8 +872,8 @@ p.ubicacion-puesto { margin: -0.3rem 0 0.8rem; }
 .barras-horizontales { height: 100%; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; }
 .barras-lienzo { flex: 1 0 auto; min-height: 0; }
 .barras-nota { flex-shrink: 0; margin: 0.2rem 0 0; font-size: 0.72rem; color: var(--color-text-muted); }
-.barras-tooltip { display: flex; flex-direction: column; gap: 0.15rem; background: #222e3b; border: 1px solid #303e4d; border-radius: 3px; padding: 0.4rem 0.55rem; font-size: 12px; color: #eae4d6; max-width: 260px; }
-.barras-tooltip-detalle { color: #93a0ad; }
+.barras-tooltip { display: flex; flex-direction: column; gap: 0.15rem; background: var(--color-panel-raised); border: 1px solid var(--color-border-strong); border-radius: var(--radius); padding: 0.45rem 0.6rem; font-size: 12px; color: var(--color-text); max-width: 260px; box-shadow: var(--shadow-pop); }
+.barras-tooltip-detalle { color: var(--color-text-muted); }
 
 /* Filtros por la ubicación del puesto (Padrón y Puestos), y en qué
    departamentos votan los del listado. */
