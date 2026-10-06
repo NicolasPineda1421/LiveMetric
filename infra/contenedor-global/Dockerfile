@@ -20,8 +20,11 @@ FROM docker:dind
 # este contenedor): bash para los scripts, Node.js/npm para npm audit, las
 # pruebas, los resumenes y generar el .env, y procps para "pgrep -P"
 # (cortar con Ctrl+C un paso en curso, ver scripts/lib/ui.sh). git, docker
-# compose y buildx ya vienen en la imagen base.
-RUN apk add --no-cache bash nodejs npm procps
+# compose y buildx ya vienen en la imagen base. icu-data-full: el Node de
+# Alpine trae solo el idioma inglés, y formatea 1200 como "1,200" aunque se
+# le pida es-CO; con los datos completos escribe "1.200", como el navegador
+# y como Node en GitHub Actions (las pruebas del panel lo comprueban).
+RUN apk add --no-cache bash nodejs npm procps icu-data-full
 
 WORKDIR /livemetric
 COPY . .
