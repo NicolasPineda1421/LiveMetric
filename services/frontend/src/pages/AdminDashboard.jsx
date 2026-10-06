@@ -4,10 +4,11 @@ import { HIDDEN_RESULTS_NOTE } from '../components/widgets/dataAdapters.js';
 import { ownValue } from '../utils/ownValue.js';
 import BuscadorPadron from '../components/BuscadorPadron.jsx';
 import CargaPadron from '../components/CargaPadron.jsx';
-import UbicacionCampos, { SIN_UBICACION, ubicacionDeLosCampos } from '../components/UbicacionCampos.jsx';
+import FiltrosUbicacion from '../components/FiltrosUbicacion.jsx';
+import UbicacionCampos, { CAMPOS_VACIOS, ubicacionDeLosCampos } from '../components/UbicacionCampos.jsx';
 import { descargarTexto } from '../utils/descargar.js';
 import { pinesCsv } from '../utils/padronArchivo.js';
-import { clavePuesto, crearUbicador, describirUbicacion } from '../utils/ubicacion.js';
+import { clavePuesto, crearUbicador, cumpleUbicacion, describirUbicacion, SIN_FILTRO_DE_UBICACION, SIN_UBICACION } from '../utils/ubicacion.js';
 import PuestosTab from './PuestosTab.jsx';
 import ReportsTab from './ReportsTab.jsx';
 
@@ -1005,7 +1006,7 @@ function pinStatus(v, ahora) {
 }
 
 const VOTERS_PAGE_SIZE = 50;
-const SIN_FILTROS = { q: '', pollingPlace: '', votingTable: '', pin: '', totp: '', assisted: '' };
+const SIN_FILTROS = { q: '', pollingPlace: '', votingTable: '', pin: '', totp: '', assisted: '', ...SIN_FILTRO_DE_UBICACION };
 const PIN_FILTRO = { vigente: 'Vigente', vencido: 'Vencido', sin_vencimiento: 'Sin vencimiento', sin_asignar: 'Sin asignar' };
 
 let siguienteFila = 1;
@@ -1017,7 +1018,7 @@ const filaNueva = (anterior = {}) => ({
   fullName: '',
   pollingPlace: anterior.pollingPlace || '',
   votingTable: anterior.votingTable || '',
-  ubicacion: anterior.ubicacion || SIN_UBICACION,
+  ubicacion: anterior.ubicacion || CAMPOS_VACIOS,
 });
 
 // Debajo de cada votante del formulario, la ubicación de su puesto: la que
@@ -1064,6 +1065,8 @@ function VotersTab({ session, onCargaEnCurso }) {
   const [pinVigenciaHoras, setPinVigenciaHoras] = useState(null);
   // El catálogo del DANE, para la ubicación de un puesto nuevo.
   const [ubicador, setUbicador] = useState(null);
+  // En qué departamentos votan los votantes del listado (con los filtros).
+  const [porDepartamento, setPorDepartamento] = useState([]);
 
   function load() {
     api.listVoters(session.token, { ...filtros, limit: VOTERS_PAGE_SIZE, offset: page * VOTERS_PAGE_SIZE })
@@ -1071,6 +1074,7 @@ function VotersTab({ session, onCargaEnCurso }) {
         setVoters(d.voters);
         setTotal(d.total ?? d.voters.length);
         setRegistered(d.registered ?? d.voters.length);
+        setPorDepartamento(d.porDepartamento || []);
         if (d.pinVigenciaHoras) setPinVigenciaHoras(d.pinVigenciaHoras);
       })
       .catch((e) => setError(e.message));
@@ -1106,6 +1110,10 @@ function VotersTab({ session, onCargaEnCurso }) {
     setPage(0);
   }
   const hayFiltros = Object.values(filtros).some(Boolean);
+  // Los puestos que se ofrecen para filtrar: los que tienen votantes, dentro
+  // de la ubicación elegida. Cambiar la ubicación borra el puesto y la mesa.
+  const puestosDelFiltro = places.filter((p) => p.voters > 0 && cumpleUbicacion(p.ubicacion, filtros));
+  const filtrarUbicacion = (cambios) => filtrar({ ...cambios, pollingPlace: '', votingTable: '' });
   const mesasDelFiltro = places.find((p) => p.pollingPlace === filtros.pollingPlace)?.votingTables || [];
 
   function cambiarFila(key, campo, valor) {
@@ -1407,7 +1415,7 @@ function VotersTab({ session, onCargaEnCurso }) {
             <label htmlFor="filtro-puesto">Puesto</label>
             <select id="filtro-puesto" value={filtros.pollingPlace} onChange={(e) => filtrar({ pollingPlace: e.target.value, votingTable: '' })}>
               <option value="">Todos</option>
-              {places.filter((p) => p.voters > 0).map((p) => <option key={p.pollingPlace} value={p.pollingPlace}>{p.pollingPlace}</option>)}
+              {puestosDelFiltro.map((p) => <option key={p.pollingPlace} value={p.pollingPlace}>{p.pollingPlace}</option>)}
             </select>
           </div>
           <div className="field-dark">
@@ -1441,12 +1449,39 @@ function VotersTab({ session, onCargaEnCurso }) {
             </select>
           </div>
         </form>
+        <fieldset className="filtros-ubicacion">
+          <legend>Ubicación del puesto</legend>
+          <FiltrosUbicacion
+            puestos={places.filter((p) => p.voters > 0)}
+            valor={filtros}
+            onChange={filtrarUbicacion}
+            idBase="filtro"
+          />
+        </fieldset>
         <div className="resumen-filtros">
           <span>{hayFiltros ? `${total} de ${registered} votantes` : `${registered} votante${registered === 1 ? '' : 's'}`}</span>
           {hayFiltros && (
             <button className="link-button" onClick={() => { setBusqueda(''); filtrar(SIN_FILTROS); }}>Limpiar filtros</button>
           )}
         </div>
+        {/* Dónde votan: un clic filtra por ese departamento. */}
+        {porDepartamento.length > 0 && (
+          <p className="votan-en">
+            <span>Votan en:</span>
+            {porDepartamento.map((d) => (
+              <button
+                key={d.codigo ?? 'sin'}
+                type="button"
+                className="link-button"
+                onClick={() => filtrarUbicacion(d.codigo
+                  ? { ...SIN_FILTRO_DE_UBICACION, departamento: d.codigo }
+                  : { ...SIN_FILTRO_DE_UBICACION, pais: SIN_UBICACION })}
+              >
+                {d.departamento ?? 'Sin ubicación'} ({d.votantes.toLocaleString('es-CO')})
+              </button>
+            ))}
+          </p>
+        )}
 
         {voters.length === 0 ? (
           <div className="empty-state">{hayFiltros ? 'Ningún votante coincide con los filtros.' : 'Sin votantes cargados todavía.'}</div>
@@ -1467,9 +1502,11 @@ function VotersTab({ session, onCargaEnCurso }) {
                       <td>{v.full_name}</td>
                       <td>
                         {v.polling_place}
-                        <span className="ubicacion-celda">{describirUbicacion(puestoPorClave.get(clavePuesto(v.polling_place))?.ubicacion)}</span>
+                        <span className="ubicacion-celda">
+                          {describirUbicacion(v.ubicacion ?? puestoPorClave.get(clavePuesto(v.polling_place))?.ubicacion)}
+                        </span>
                       </td>
-                      <td>{v.voting_table}</td>
+                      <td className="sin-corte">{v.voting_table}</td>
                       <td>{pinStatus(v, Date.now())}</td>
                       <td>{v.assisted ? 'No lo usa' : v.has_totp ? 'Registrado' : 'Pendiente'}</td>
                       <td>

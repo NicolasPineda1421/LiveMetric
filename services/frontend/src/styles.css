@@ -835,8 +835,6 @@ p.ubicacion-puesto { margin: -0.3rem 0 0.8rem; }
 .ubicacion-celda { display: block; font-size: 0.75rem; color: var(--color-text-muted); }
 .aviso-puestos { border: 1px solid var(--color-border); border-left: 4px solid var(--color-accent); background: var(--color-accent-soft); border-radius: var(--radius); padding: 0.7rem 0.9rem; margin: 0 0 1rem; font-size: 0.88rem; }
 .resumen-puestos { justify-content: space-between; flex-wrap: wrap; }
-.filtro-puestos { display: flex; gap: 0.5rem; align-items: center; margin: 0; }
-.filtro-puestos label { margin: 0; }
 .sin-ubicacion { color: var(--color-text-muted); font-style: italic; }
 .fila-edicion td { background: var(--color-panel-raised); }
 .fila-edicion .acciones-padron { margin: 0.2rem 0 0.6rem; }
@@ -849,3 +847,13 @@ p.ubicacion-puesto { margin: -0.3rem 0 0.8rem; }
 .barras-nota { flex-shrink: 0; margin: 0.2rem 0 0; font-size: 0.72rem; color: var(--color-text-muted); }
 .barras-tooltip { display: flex; flex-direction: column; gap: 0.15rem; background: #222e3b; border: 1px solid #303e4d; border-radius: 3px; padding: 0.4rem 0.55rem; font-size: 12px; color: #eae4d6; max-width: 260px; }
 .barras-tooltip-detalle { color: #93a0ad; }
+
+/* Filtros por la ubicación del puesto (Padrón y Puestos), y en qué
+   departamentos votan los del listado. */
+fieldset.filtros-ubicacion { border: 0; padding: 0; margin: 0; }
+fieldset.filtros-ubicacion legend { font-size: 0.78rem; color: var(--color-text-muted); padding: 0; margin-bottom: 0.2rem; }
+.filtros-ubicacion { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0 0.8rem; }
+fieldset.filtros-ubicacion { grid-template-columns: repeat(5, 1fr); }
+@media (max-width: 900px) { .filtros-ubicacion, fieldset.filtros-ubicacion { grid-template-columns: 1fr 1fr; } }
+.votan-en { display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; align-items: baseline; margin: -0.2rem 0 0.8rem; font-size: 0.82rem; color: var(--color-text-muted); }
+.votan-en .link-button { font-size: 0.82rem; }

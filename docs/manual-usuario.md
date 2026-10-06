@@ -382,8 +382,15 @@ Centro, zona urbana").
 cédula o nombre** (parte de la cédula o del nombre, sin importar mayúsculas ni tildes; se
 aplica con **Buscar**), **Puesto**, **Mesa** (las del puesto elegido), **PIN** (vigente,
 vencido, sin vencimiento o sin asignar), **Autenticador** (registrado o pendiente) y
-**Voto asistido**. Debajo se ve cuántos coinciden ("4 de 8 votantes") y **Limpiar
-filtros**. El listado muestra 50 votantes por página.
+**Voto asistido**. Debajo, en **Ubicación del puesto**, se filtra por **País**,
+**Departamento**, **Municipio**, **Localidad** y **Zona** (urbana o rural): las listas traen
+solo los lugares que tienen puestos, y cada una se ajusta a la anterior (elegido un
+departamento, solo sus municipios; elegido un municipio, solo sus localidades). El filtro
+**Puesto** ofrece entonces solo los puestos de esa ubicación, y **País → Sin ubicación**
+deja a los votantes de puestos que todavía no la tienen. Debajo se ve cuántos coinciden ("63
+de 1394 votantes"), **Limpiar filtros** y **Votan en**, que dice en qué departamentos votan
+los del listado y cuántos en cada uno ("Cundinamarca (61) · Boyacá (2)"); un clic en un
+departamento filtra por él. El listado muestra 50 votantes por página.
 
 **Autocompletar.** Mientras escribe en el buscador, desde el segundo carácter aparecen
 hasta 8 votantes que coinciden, con su cédula (la parte escrita resaltada), su nombre, su
@@ -400,16 +407,18 @@ confirmar. No se puede deshacer: ya no podrá ingresar. Los votos que ya emitió
 conservan, porque son anónimos (no apuntan a su fila del padrón), así que el acta no
 cambia. Queda en **Auditoría** quién lo eliminó y cuándo, sin la cédula.
 
-![Captura 13: El padrón filtrado por puesto y mesa: la ubicación del puesto, hasta cuándo vale el PIN de cada votante, su autenticador, el voto asistido y el botón Eliminar](img/13-padron-lista.png)
-*Captura 13. El padrón filtrado por puesto y mesa: debajo del puesto, dónde queda; hasta cuándo vale el PIN de cada votante (o si no tiene), su autenticador, el voto asistido y el botón Eliminar.*
+![Captura 13: El padrón filtrado por zona rural: los filtros por ubicación del puesto, cuántos coinciden, en qué departamentos votan y, para cada votante, dónde queda su puesto, su PIN, su autenticador y el botón Eliminar](img/13-padron-lista.png)
+*Captura 13. El padrón filtrado por zona rural: 63 de 1394 votantes, que votan en Cundinamarca (61) y Boyacá (2). Debajo de cada puesto, dónde queda; además, hasta cuándo vale el PIN de cada votante (o si no tiene), su autenticador, el voto asistido y el botón Eliminar.*
 
 ### 4.5 Puestos
 
 La pestaña **Puestos** lista cada puesto de votación con su **departamento**, su
 **municipio**, su **localidad**, su **zona** (urbana o rural), cuántas **mesas** y
 cuántos **votantes** tiene. Arriba dice cuántos puestos hay, en cuántos municipios y
-cuántos son urbanos y rurales; **Mostrar** filtra por departamento o deja solo los que no
-tienen ubicación.
+cuántos son urbanos y rurales. Los filtros **País**, **Departamento**, **Municipio**,
+**Localidad** y **Zona** funcionan como los del padrón (con **País → Sin ubicación**, solo
+los que no la tienen), y el resumen dice cuántos puestos y votantes quedan ("se muestran 2
+puestos, con 943 votantes").
 
 Un puesto se registra al agregar a su primer votante (con el formulario o desde un
 archivo), así que aquí no se crean puestos: se completa o se corrige su ubicación.
@@ -430,8 +439,8 @@ una de sus 20 localidades; en los demás municipios se escribe (comuna, corregim
 vereda). La **Zona** es *Urbana* o *Rural*. Cada cambio queda en **Auditoría**
 (`PUESTO_UBICACION_GUARDADA`, con la ubicación anterior y la nueva).
 
-![Captura 36: La pestaña Puestos: cada puesto con su departamento, municipio, localidad, zona, mesas y votantes; un puesto sin ubicación primero, con el aviso arriba, y el formulario para ponérsela](img/36-puestos.png)
-*Captura 36. La pestaña Puestos: cada puesto con su departamento, municipio, localidad, zona, mesas y votantes. El que todavía no tiene ubicación aparece primero, con el aviso arriba, y debajo el formulario para ponérsela.*
+![Captura 36: La pestaña Puestos: los filtros por ubicación, cada puesto con su departamento, municipio, localidad, zona, mesas y votantes; un puesto sin ubicación primero, con el aviso arriba, y el formulario para ponérsela](img/36-puestos.png)
+*Captura 36. La pestaña Puestos: arriba, los filtros por país, departamento, municipio, localidad y zona; cada puesto con su departamento, municipio, localidad, zona, mesas y votantes. El que todavía no tiene ubicación aparece primero, con el aviso arriba, y debajo el formulario para ponérsela.*
 
 ### 4.6 Usuarios
 
@@ -756,7 +765,7 @@ instalación de prueba ya borrada (además, cada código vence a los 30 segundos
 | 10 | `10-elecciones-lista.png` | Listado de elecciones |
 | 11 | `11-padron-carga.png` | Agregar votantes (formulario) |
 | 12 | `12-padron-pines.png` | PINes generados (difuminados), con la descarga |
-| 13 | `13-padron-lista.png` | Listado del padrón con la ubicación del puesto, filtros y Eliminar |
+| 13 | `13-padron-lista.png` | Listado del padrón filtrado por ubicación, con "Votan en" y Eliminar |
 | 14 | `14-usuarios.png` | Creación de usuarios y jurados (puesto y mesa del padrón) |
 | 15 | `15-resultados-vivo.png` | Total en vivo (sin votos por opción) |
 | 16 | `16-resultados-certificados.png` | Resultados certificados |

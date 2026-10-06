@@ -100,6 +100,60 @@ describe('Al agregar votantes', () => {
   });
 });
 
+describe('Filtrar el padrón por la ubicación del puesto', () => {
+  const MEDELLIN = { departamento: 'Antioquia', municipio: 'Medellín', localidad: 'Comuna 14 El Poblado', zona: 'urbana' };
+  const RURAL = { departamento: 'Antioquia', municipio: 'Medellín', localidad: 'Corregimiento Santa Elena', zona: 'rural' };
+  const listar = async (filtros) => (await conAdmin('get', `/admin/voters?${new URLSearchParams({ q: sufijo, limit: '200', ...filtros })}`)).body;
+  // Solo los puestos de estas pruebas (en este archivo hay otros, como el de la carga por API, en Medellín).
+  const nombres = (body) => body.voters.map((v) => v.polling_place).filter((n) => n.startsWith('Filtro')).sort();
+
+  beforeAll(async () => {
+    expect((await agregar([
+      votante(puesto('Filtro Poblado'), MEDELLIN), votante(puesto('Filtro Poblado')),
+      votante(puesto('Filtro Santa Elena'), RURAL),
+      votante(puesto('Filtro Tunja'), TUNJA),
+    ])).status).toBe(201);
+  });
+
+  it('cada votante va con la ubicación de su puesto, y se filtra por departamento, municipio, localidad o zona', async () => {
+    const antioquia = await listar({ departamento: '05' });
+    expect(nombres(antioquia)).toEqual([puesto('Filtro Poblado'), puesto('Filtro Poblado'), puesto('Filtro Santa Elena')]);
+    expect(antioquia.voters[0].ubicacion).toMatchObject({ departamento: 'Antioquia', municipio: 'Medellín', codigoMunicipio: '05001' });
+    expect(nombres(await listar({ municipio: '15001' }))).toContain(puesto('Filtro Tunja'));
+    expect(nombres(await listar({ municipio: '05001', zona: 'rural' }))).toEqual([puesto('Filtro Santa Elena')]);
+    expect(nombres(await listar({ localidad: 'comuna 14 el poblado' }))).toEqual([puesto('Filtro Poblado'), puesto('Filtro Poblado')]);
+    expect(nombres(await listar({ pais: 'Colombia', departamento: '05' }))).toHaveLength(3);
+  });
+
+  it('dice en qué departamentos votan los filtrados, de más a menos', async () => {
+    const body = await listar({ pollingPlace: '' });
+    const de = (codigo) => body.porDepartamento.find((d) => d.codigo === codigo);
+    expect(de('05')).toEqual({ codigo: '05', departamento: 'Antioquia', votantes: expect.any(Number) });
+    expect(de('05').votantes).toBeGreaterThanOrEqual(3);
+    const conUbicacion = body.porDepartamento.filter((d) => d.codigo !== null).map((d) => d.votantes);
+    expect(conUbicacion).toEqual([...conUbicacion].sort((a, b) => b - a));
+    const antioquia = await listar({ departamento: '05' });
+    expect(antioquia.porDepartamento).toEqual([{ codigo: '05', departamento: 'Antioquia', votantes: antioquia.total }]);
+  });
+
+  it('los votantes de un puesto sin ubicación se encuentran con país "sin ubicación"', async () => {
+    const SIN = puesto('Filtro Sin Ubicación');
+    await pool.query('INSERT INTO voters (cedula, full_name, polling_place, voting_table) VALUES ($1, $2, $3, $4)', [
+      encryptField(cedula()), 'Votante Sin Ubicación', encryptField(SIN), encryptField('Mesa 1'),
+    ]);
+    const body = await listar({ pais: 'sin_ubicacion' });
+    expect(nombres(body)).toContain(SIN);
+    expect(body.voters.every((v) => v.ubicacion === null)).toBe(true);
+    expect(body.porDepartamento.at(-1)).toMatchObject({ codigo: null, departamento: null });
+  });
+
+  it('un filtro de ubicación mal formado responde 400', async () => {
+    for (const filtro of [{ departamento: 'Antioquia' }, { municipio: '123' }, { zona: 'mixta' }]) {
+      expect((await conAdmin('get', `/admin/voters?${new URLSearchParams(filtro)}`)).status).toBe(400);
+    }
+  });
+});
+
 describe('Pestaña "Puestos"', () => {
   // Un puesto de antes de la migración 009: en el padrón, sin ubicación.
   const ANTIGUO = puesto('Puesto Antiguo');

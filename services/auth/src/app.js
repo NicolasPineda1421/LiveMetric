@@ -18,7 +18,7 @@ const {
   juradoCubre, lugaresDelPadron, ubicarEnPadron, lugarCanonico, normalizarPuesto, mismoPuesto, mismaMesa, ubicacionDeFila,
 } = require('./lugares');
 const { catalogoParaElPanel, traeUbicacion, resolverUbicacion, describirUbicacion } = require('./divipola');
-const { ubicarPuestosDelPedido, guardarUbicaciones } = require('./puestos');
+const { ubicarPuestosDelPedido, guardarUbicaciones, cumpleUbicacion, contarPorDepartamento } = require('./puestos');
 
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -1125,6 +1125,10 @@ app.post(
 //   pin        sin_asignar | vigente | vencido | sin_vencimiento
 //   totp       registrado | pendiente
 //   assisted   true | false
+//   pais, departamento, municipio, localidad, zona   la ubicación del
+//              puesto (ver cumpleUbicacion en puestos.js)
+// Cada votante va con la ubicación de su puesto, y porDepartamento dice
+// cuántos de los filtrados votan en cada departamento.
 const VOTER_FILTERS = {
   pin: ['sin_asignar', 'vigente', 'vencido', 'sin_vencimiento'],
   totp: ['registrado', 'pendiente'],
@@ -1148,32 +1152,47 @@ app.get(
     query('pin').optional({ values: 'falsy' }).isIn(VOTER_FILTERS.pin),
     query('totp').optional({ values: 'falsy' }).isIn(VOTER_FILTERS.totp),
     query('assisted').optional({ values: 'falsy' }).isIn(VOTER_FILTERS.assisted),
+    query('pais').optional({ values: 'falsy' }).isString().isLength({ max: 60 }),
+    query('departamento').optional({ values: 'falsy' }).isNumeric({ no_symbols: true }).isLength({ min: 2, max: 2 }),
+    query('municipio').optional({ values: 'falsy' }).isNumeric({ no_symbols: true }).isLength({ min: 5, max: 5 }),
+    query('localidad').optional({ values: 'falsy' }).isString().isLength({ max: 80 }),
+    query('zona').optional({ values: 'falsy' }).isIn(['urbana', 'rural']),
   ],
   async (req, res) => {
     if (!validationResult(req).isEmpty()) return res.status(400).json({ error: 'Filtro del padrón inválido' });
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
     const { q, pollingPlace, votingTable, pin, totp: totpFilter, assisted } = req.query;
+    const filtroUbicacion = (({ pais, departamento, municipio, localidad, zona }) => ({ pais, departamento, municipio, localidad, zona }))(req.query);
     const texto = q ? normalizarPuesto(q) : '';
 
     try {
-      const result = await pool.query(
-        `SELECT id, cedula, full_name, polling_place, voting_table, is_active,
-                (access_code_hash IS NOT NULL) AS has_pin, access_code_expires_at AS pin_expires_at,
-                (access_code_expires_at IS NOT NULL AND access_code_expires_at <= now()) AS pin_expired,
-                (totp_secret IS NOT NULL) AS has_totp,
-                assisted, created_at
-           FROM voters
-          ORDER BY id ASC`
-      );
+      const [result, puestos] = await Promise.all([
+        pool.query(
+          `SELECT id, cedula, full_name, polling_place, voting_table, is_active,
+                  (access_code_hash IS NOT NULL) AS has_pin, access_code_expires_at AS pin_expires_at,
+                  (access_code_expires_at IS NOT NULL AND access_code_expires_at <= now()) AS pin_expired,
+                  (totp_secret IS NOT NULL) AS has_totp,
+                  assisted, created_at
+             FROM voters
+            ORDER BY id ASC`
+        ),
+        pool.query('SELECT * FROM puestos_votacion'),
+      ]);
+      const ubicacionDe = new Map(puestos.rows.map((fila) => [fila.clave, ubicacionDeFila(fila)]));
       const filtered = result.rows
-        .map((v) => ({
-          ...v,
-          cedula: decryptField(v.cedula),
-          polling_place: decryptField(v.polling_place),
-          voting_table: decryptField(v.voting_table),
-          pin_state: pinState(v),
-        }))
+        .map((v) => {
+          const puesto = decryptField(v.polling_place);
+          return {
+            ...v,
+            cedula: decryptField(v.cedula),
+            polling_place: puesto,
+            voting_table: decryptField(v.voting_table),
+            pin_state: pinState(v),
+            ubicacion: ubicacionDe.get(normalizarPuesto(puesto)) || null,
+          };
+        })
+        .filter((v) => cumpleUbicacion(v.ubicacion, filtroUbicacion))
         .filter((v) => !texto || v.cedula.toLowerCase().includes(texto) || normalizarPuesto(v.full_name).includes(texto))
         .filter((v) => !pollingPlace || mismoPuesto(v.polling_place, pollingPlace))
         .filter((v) => !votingTable || mismaMesa(v.voting_table, votingTable))
@@ -1187,6 +1206,7 @@ app.get(
         total: filtered.length,
         registered: result.rows.length,
         voters,
+        porDepartamento: contarPorDepartamento(filtered.map((v) => v.ubicacion)),
         // Para que el panel diga cuánto vale cada PIN que se genere.
         pinVigenciaHoras: PIN_VIGENCIA_HORAS,
       });

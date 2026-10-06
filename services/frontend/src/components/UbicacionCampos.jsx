@@ -4,12 +4,12 @@
 // En Bogotá, la localidad es una de sus 20; en los demás municipios, libre.
 const enOrden = (a, b) => a.nombre.localeCompare(b.nombre, 'es');
 
-export const SIN_UBICACION = { departamento: '', municipio: '', localidad: '', zona: '' };
+export const CAMPOS_VACIOS = { departamento: '', municipio: '', localidad: '', zona: '' };
 
 // De una ubicación guardada a los valores de los campos.
 export const camposDeUbicacion = (u) => (u
   ? { departamento: u.codigoMunicipio.slice(0, 2), municipio: u.codigoMunicipio, localidad: u.localidad || '', zona: u.zona }
-  : SIN_UBICACION);
+  : CAMPOS_VACIOS);
 
 export default function UbicacionCampos({ ubicador, valor, onChange, idBase }) {
   const municipios = valor.departamento ? ubicador.municipiosDe(valor.departamento).sort(enOrden) : [];

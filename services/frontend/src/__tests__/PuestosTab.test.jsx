@@ -48,13 +48,19 @@ it('lista los puestos con su ubicación, primero los que no la tienen, y avisa c
   expect(within(filaDe('Puesto Cerrado')).getByRole('button', { name: 'Quitar' })).toBeInTheDocument();
 });
 
-it('filtra por departamento o por los que no tienen ubicación', async () => {
+it('filtra por país, departamento, municipio, localidad y zona, y dice cuántos se muestran', async () => {
   const usuario = await abrir();
-  await usuario.selectOptions(screen.getByLabelText('Mostrar'), 'Cundinamarca');
-  expect(screen.getAllByRole('row')).toHaveLength(2);
-  expect(filaDe('Escuela El Salitre')).toBeInTheDocument();
-  await usuario.selectOptions(screen.getByLabelText('Mostrar'), 'Sin ubicación');
-  expect(screen.getAllByRole('row').slice(1).map((f) => f.cells[0].textContent)).toEqual(['Puesto Antiguo']);
+  const filas = () => screen.getAllByRole('row').slice(1).map((f) => f.cells[0].textContent);
+  await usuario.selectOptions(screen.getByLabelText('Departamento'), 'Boyacá');
+  expect(filas()).toEqual(['Colegio Central', 'Puesto Cerrado']);
+  await usuario.selectOptions(screen.getByLabelText('Localidad'), 'Centro');
+  expect(filas()).toEqual(['Colegio Central']);
+  expect(screen.getByText(/se muestran 1 puesto, con 120 votantes$/)).toBeInTheDocument();
+  await usuario.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
+  await usuario.selectOptions(screen.getByLabelText('Zona'), 'Rural');
+  expect(filas()).toEqual(['Escuela El Salitre']);
+  await usuario.selectOptions(screen.getByLabelText('País'), 'Sin ubicación');
+  expect(filas()).toEqual(['Puesto Antiguo']);
 });
 
 it('le pone la ubicación a un puesto que no la tiene, con las listas del DANE', async () => {

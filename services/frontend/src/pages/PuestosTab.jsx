@@ -5,8 +5,9 @@
 // de la migración 009), se corrige, o se quita si ya no tiene votantes.
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
+import FiltrosUbicacion from '../components/FiltrosUbicacion.jsx';
 import UbicacionCampos, { camposDeUbicacion, ubicacionDeLosCampos } from '../components/UbicacionCampos.jsx';
-import { crearUbicador, describirUbicacion } from '../utils/ubicacion.js';
+import { crearUbicador, cumpleUbicacion, describirUbicacion, hayFiltroDeUbicacion, SIN_FILTRO_DE_UBICACION } from '../utils/ubicacion.js';
 
 const numero = (n) => n.toLocaleString('es-CO');
 const plural = (n, uno, varios) => `${numero(n)} ${n === 1 ? uno : varios}`;
@@ -21,7 +22,7 @@ const ordenar = (puestos) => [...puestos].sort((a, b) => Number(Boolean(a.ubicac
 export default function PuestosTab({ session }) {
   const [puestos, setPuestos] = useState(null);
   const [ubicador, setUbicador] = useState(null);
-  const [filtro, setFiltro] = useState('');
+  const [filtro, setFiltro] = useState(SIN_FILTRO_DE_UBICACION);
   const [editando, setEditando] = useState(null); // { pollingPlace, valor }
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
@@ -75,12 +76,8 @@ export default function PuestosTab({ session }) {
   const conUbicacion = todos.filter((p) => p.ubicacion);
   const municipios = new Set(conUbicacion.map((p) => p.ubicacion.codigoMunicipio)).size;
   const rurales = conUbicacion.filter((p) => p.ubicacion.zona === 'rural').length;
-  const departamentos = [...new Set(conUbicacion.map((p) => p.ubicacion.departamento))].sort(enOrden);
-  const mostrados = ordenar(todos.filter((p) => {
-    if (filtro === 'sin') return !p.ubicacion;
-    if (filtro) return p.ubicacion?.departamento === filtro;
-    return true;
-  }));
+  const mostrados = ordenar(todos.filter((p) => cumpleUbicacion(p.ubicacion, filtro)));
+  const votantesMostrados = mostrados.reduce((s, p) => s + p.voters, 0);
 
   return (
     <div>
@@ -105,20 +102,19 @@ export default function PuestosTab({ session }) {
       )}
 
       <div className="panel">
+        <div className="filtros-ubicacion filtros-puestos">
+          <FiltrosUbicacion puestos={todos} valor={filtro} onChange={(cambios) => setFiltro({ ...filtro, ...cambios })} idBase="filtro-puestos" />
+        </div>
         <div className="resumen-filtros resumen-puestos">
           <span>
             {puestos === null ? 'Cargando…' : `${plural(todos.length, 'puesto', 'puestos')}`}
             {conUbicacion.length > 0
               && ` en ${plural(municipios, 'municipio', 'municipios')} · ${plural(conUbicacion.length - rurales, 'urbano', 'urbanos')} y ${plural(rurales, 'rural', 'rurales')}`}
+            {hayFiltroDeUbicacion(filtro) && ` · se muestran ${plural(mostrados.length, 'puesto', 'puestos')}, con ${plural(votantesMostrados, 'votante', 'votantes')}`}
           </span>
-          <div className="field-dark filtro-puestos">
-            <label htmlFor="filtro-departamento">Mostrar</label>
-            <select id="filtro-departamento" value={filtro} onChange={(e) => setFiltro(e.target.value)}>
-              <option value="">Todos</option>
-              {sinUbicacion.length > 0 && <option value="sin">Sin ubicación</option>}
-              {departamentos.map((d) => <option key={d} value={d}>{d}</option>)}
-            </select>
-          </div>
+          {hayFiltroDeUbicacion(filtro) && (
+            <button className="link-button" onClick={() => setFiltro(SIN_FILTRO_DE_UBICACION)}>Limpiar filtros</button>
+          )}
         </div>
 
         {puestos !== null && todos.length === 0 ? (

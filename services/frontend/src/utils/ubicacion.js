@@ -121,3 +121,52 @@ export function crearUbicador(catalogo) {
 
   return { resolver, municipiosDe, localidadesDe, departamentos, pais, zonas: catalogo.zonas };
 }
+
+// Filtro por la ubicación del puesto, como en el servicio (cumpleUbicacion
+// de services/auth/src/puestos.js): { pais, departamento, municipio,
+// localidad, zona }, con los códigos del DANE; pais 'sin_ubicacion' son los
+// puestos que todavía no la tienen.
+export const SIN_UBICACION = 'sin_ubicacion';
+export const SIN_FILTRO_DE_UBICACION = { pais: '', departamento: '', municipio: '', localidad: '', zona: '' };
+export const hayFiltroDeUbicacion = (f) => Boolean(f.pais || f.departamento || f.municipio || f.localidad || f.zona);
+
+export function cumpleUbicacion(u, filtro = {}) {
+  const { pais, departamento, municipio, localidad, zona } = filtro;
+  if (pais === SIN_UBICACION) return !u;
+  if (!hayFiltroDeUbicacion(filtro)) return true;
+  if (!u) return false;
+  return (!pais || u.pais === pais)
+    && (!departamento || u.codigoMunicipio.slice(0, 2) === departamento)
+    && (!municipio || u.codigoMunicipio === municipio)
+    && (!localidad || clavePuesto(u.localidad) === clavePuesto(localidad))
+    && (!zona || u.zona === zona);
+}
+
+const porNombre = (a, b) => a.nombre.localeCompare(b.nombre, 'es', { numeric: true });
+const distintos = (lista, clave) => [...new Map(lista.map((x) => [clave(x), x])).values()];
+
+// Las opciones de cada filtro, de los puestos que hay (no de todo el país),
+// y cada una dentro de lo ya elegido: los municipios del departamento
+// elegido, las localidades de ese municipio.
+export function opcionesDeUbicacion(puestos, filtro) {
+  const ubicados = puestos.map((p) => p.ubicacion).filter(Boolean);
+  const delPais = ubicados.filter((u) => !filtro.pais || u.pais === filtro.pais);
+  const delDepartamento = delPais.filter((u) => !filtro.departamento || u.codigoMunicipio.slice(0, 2) === filtro.departamento);
+  const delMunicipio = delDepartamento.filter((u) => !filtro.municipio || u.codigoMunicipio === filtro.municipio);
+  return {
+    paises: [...new Set(ubicados.map((u) => u.pais))].sort(),
+    hayPuestosSinUbicacion: puestos.some((p) => !p.ubicacion),
+    departamentos: distintos(delPais, (u) => u.codigoMunicipio.slice(0, 2))
+      .map((u) => ({ codigo: u.codigoMunicipio.slice(0, 2), nombre: u.departamento }))
+      .sort(porNombre),
+    // Sin departamento elegido, el municipio va con el suyo: hay nombres repetidos.
+    municipios: distintos(delDepartamento, (u) => u.codigoMunicipio)
+      .map((u) => ({
+        codigo: u.codigoMunicipio,
+        nombre: filtro.departamento || u.codigoMunicipio === BOGOTA ? u.municipio : `${u.municipio} (${u.departamento})`,
+      }))
+      .sort(porNombre),
+    localidades: distintos(delMunicipio.filter((u) => u.localidad), (u) => clavePuesto(u.localidad)).map((u) => u.localidad)
+      .sort((a, b) => a.localeCompare(b, 'es', { numeric: true })),
+  };
+}

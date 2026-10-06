@@ -64,4 +64,34 @@ async function guardarUbicaciones(client, nuevas, adminId) {
   }
 }
 
-module.exports = { ubicarPuestosDelPedido, guardarUbicaciones };
+// Filtro del padrón por la ubicación del puesto (GET /admin/voters):
+// { pais, departamento, municipio, localidad, zona }, todos opcionales. El
+// departamento y el municipio van con su código del DANE; pais
+// 'sin_ubicacion' son los votantes de un puesto que todavía no la tiene.
+const SIN_UBICACION = 'sin_ubicacion';
+
+function cumpleUbicacion(u, { pais, departamento, municipio, localidad, zona } = {}) {
+  if (pais === SIN_UBICACION) return !u;
+  if (!pais && !departamento && !municipio && !localidad && !zona) return true;
+  if (!u) return false;
+  return (!pais || u.pais === pais)
+    && (!departamento || u.codigoMunicipio.slice(0, 2) === departamento)
+    && (!municipio || u.codigoMunicipio === municipio)
+    && (!localidad || normalizarPuesto(u.localidad) === normalizarPuesto(localidad))
+    && (!zona || u.zona === zona);
+}
+
+// En qué departamentos votan: [{ codigo, departamento, votantes }], de más
+// a menos votantes, con los que no tienen ubicación al final (codigo null).
+function contarPorDepartamento(ubicaciones) {
+  const cuenta = new Map();
+  for (const u of ubicaciones) {
+    const codigo = u ? u.codigoMunicipio.slice(0, 2) : null;
+    const actual = cuenta.get(codigo) || { codigo, departamento: u ? u.departamento : null, votantes: 0 };
+    actual.votantes += 1;
+    cuenta.set(codigo, actual);
+  }
+  return [...cuenta.values()].sort((a, b) => Number(a.codigo === null) - Number(b.codigo === null) || b.votantes - a.votantes);
+}
+
+module.exports = { ubicarPuestosDelPedido, guardarUbicaciones, cumpleUbicacion, contarPorDepartamento, SIN_UBICACION };

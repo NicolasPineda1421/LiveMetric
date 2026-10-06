@@ -420,6 +420,7 @@ describe('Padrón', () => {
     await usuario.selectOptions(screen.getByLabelText('Voto asistido'), 'true');
     expect(api.listVoters).toHaveBeenLastCalledWith('jwt-admin', {
       q: 'gómez', pollingPlace: 'Puesto Central', votingTable: 'Mesa 2', pin: 'vencido', totp: 'pendiente', assisted: 'true', limit: 50, offset: 0,
+      pais: '', departamento: '', municipio: '', localidad: '', zona: '',
     });
     expect(screen.getByText('0 de 12 votantes')).toBeInTheDocument();
     expect(screen.getByText('Ningún votante coincide con los filtros.')).toBeInTheDocument();
@@ -427,6 +428,49 @@ describe('Padrón', () => {
     await usuario.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
     expect(api.listVoters).toHaveBeenLastCalledWith('jwt-admin', expect.objectContaining({ q: '', pollingPlace: '', pin: '' }));
     expect(screen.getByLabelText('Buscar por cédula o nombre')).toHaveValue('');
+  });
+
+  it('filtra por la ubicación del puesto: las listas son las de los puestos que hay, y cada una dentro de la anterior', async () => {
+    api.listPuestos.mockResolvedValue({ puestos: [
+      { pollingPlace: 'Puesto Central', votingTables: ['Mesa 1'], voters: 12, ubicacion: TUNJA },
+      { pollingPlace: 'Escuela El Salitre', votingTables: ['Mesa 1'], voters: 5, ubicacion: { ...CHIA, localidad: 'Vereda Fagua' } },
+      { pollingPlace: 'Puesto Viejo', votingTables: ['Mesa 1'], voters: 2, ubicacion: null },
+    ] });
+    api.listVoters.mockResolvedValue({ voters: [], total: 0, registered: 19 });
+    const usuario = await abrir('Padrón');
+    await screen.findByText('19 votantes');
+    const filtros = screen.getByText('Ubicación del puesto', { selector: 'legend' }).closest('fieldset');
+    const opciones = (etiqueta) => within(within(filtros).getByLabelText(etiqueta)).getAllByRole('option').map((o) => o.textContent);
+    expect(opciones('País')).toEqual(['Todos', 'Colombia', 'Sin ubicación']);
+    expect(opciones('Departamento')).toEqual(['Todos', 'Boyacá', 'Cundinamarca']);
+    expect(opciones('Municipio')).toEqual(['Todos', 'Chía (Cundinamarca)', 'Tunja (Boyacá)']);
+
+    await usuario.selectOptions(within(filtros).getByLabelText('Departamento'), 'Cundinamarca');
+    expect(opciones('Municipio')).toEqual(['Todos', 'Chía']);
+    await usuario.selectOptions(within(filtros).getByLabelText('Municipio'), 'Chía');
+    expect(opciones('Localidad')).toEqual(['Todas', 'Vereda Fagua']);
+    await usuario.selectOptions(within(filtros).getByLabelText('Zona'), 'Rural');
+    expect(api.listVoters).toHaveBeenLastCalledWith('jwt-admin', expect.objectContaining({ departamento: '25', municipio: '25175', zona: 'rural', pollingPlace: '' }));
+    // El filtro de puesto ofrece solo los de esa ubicación.
+    expect(within(screen.getByLabelText('Puesto', { selector: 'select' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['Todos', 'Escuela El Salitre']);
+
+    await usuario.selectOptions(within(filtros).getByLabelText('País'), 'Sin ubicación');
+    expect(within(filtros).getByLabelText('Departamento')).toBeDisabled();
+    expect(api.listVoters).toHaveBeenLastCalledWith('jwt-admin', expect.objectContaining({ pais: 'sin_ubicacion', departamento: '', municipio: '', zona: '' }));
+  });
+
+  it('dice en qué departamentos votan los del listado, y un clic filtra por ese departamento', async () => {
+    api.listVoters.mockResolvedValue({
+      voters: [], total: 0, registered: 30,
+      porDepartamento: [{ codigo: '11', departamento: 'Bogotá, D.C.', votantes: 1194 }, { codigo: '15', departamento: 'Boyacá', votantes: 7 }, { codigo: null, departamento: null, votantes: 1 }],
+    });
+    const usuario = await abrir('Padrón');
+    const votanEn = (await screen.findByText('Votan en:')).closest('p');
+    expect(votanEn).toHaveTextContent('Votan en:Bogotá, D.C. (1.194)Boyacá (7)Sin ubicación (1)');
+    await usuario.click(within(votanEn).getByRole('button', { name: 'Boyacá (7)' }));
+    expect(api.listVoters).toHaveBeenLastCalledWith('jwt-admin', expect.objectContaining({ departamento: '15', pais: '' }));
+    await usuario.click(within(votanEn).getByRole('button', { name: 'Sin ubicación (1)' }));
+    expect(api.listVoters).toHaveBeenLastCalledWith('jwt-admin', expect.objectContaining({ pais: 'sin_ubicacion', departamento: '' }));
   });
 
   it('borrar el texto del buscador vuelve a mostrar a todos, sin pulsar Buscar', async () => {
