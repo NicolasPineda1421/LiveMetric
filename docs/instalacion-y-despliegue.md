@@ -152,13 +152,13 @@ El requisito común es [Docker Desktop](https://www.docker.com/products/docker-d
 
 ## Recorrido por la interfaz
 
-1. Entra a **http://localhost:3000** → "Administrador" → con tu cuenta.
+1. Entra a **http://localhost:3000** → "Ingresar como administrador, auditor o jurado" (debajo del ingreso de votantes) → con tu cuenta.
 2. En **Padrón**, genera el PIN de las cédulas de demostración que vayas a usar ("Regenerar PIN"; anótalo, se muestra una sola vez). El PIN vence 24 horas después de generarlo (`PIN_VIGENCIA_HORAS` en el `.env`); hasta entonces sirve haya o no una votación abierta. Marca **Voto asistido** en una de ellas (por ejemplo, `1000000002`, de la Mesa 1). En **Usuarios**, crea un **jurado de mesa** eligiendo del padrón `Puesto Central` y `Mesa 1` (o *Todas las mesas del puesto*); también puedes crear más administradores o auditores.
 3. En **Puestos**, mira dónde queda cada puesto (departamento, municipio, localidad y zona). Un puesto nuevo se registra con su ubicación al agregarle votantes en **Padrón**.
 4. En **Plantillas**, usa "Elección Presidencial de Ejemplo" o crea una nueva con candidatos (número, nombre y foto).
 5. En **Elecciones**, instancia una con una ventana corta (2–3 minutos) para ver el ciclo completo.
-6. En una ventana de incógnito → "Votante" → cédula `1000000001` con el PIN que generaste. La primera vez aparece un QR: escanéalo con **Microsoft Authenticator** o **Google Authenticator** en tu celular y escribe el código de 6 dígitos → vota. Repite con `1000000003` (otra mesa) para tener votos en más de una mesa.
-7. **Voto asistido:** entra como el jurado (pestaña "Administrador / Auditor / Jurado"; la primera vez registra su autenticador) y verás su mesa y a la votante asistida. En otra ventana de incógnito, entra con `1000000002` y su PIN: la pantalla pide la autorización del jurado; escribe su usuario y el código de su app → vota.
+6. En una ventana de incógnito, en el ingreso de votantes (lo primero que aparece) → cédula `1000000001` con el PIN que generaste. La primera vez aparece un QR: escanéalo con **Microsoft Authenticator** o **Google Authenticator** en tu celular y escribe el código de 6 dígitos → vota. Repite con `1000000003` (otra mesa) para tener votos en más de una mesa.
+7. **Voto asistido:** entra como el jurado (botón "Ingresar como administrador, auditor o jurado"; la primera vez registra su autenticador) y verás su mesa y a la votante asistida. En otra ventana de incógnito, entra con `1000000002` y su PIN: la pantalla pide la autorización del jurado; escribe su usuario y el código de su app → vota.
 8. En **Elecciones** puedes pulsar "Detener" para cerrarla antes de tiempo.
 9. En **Resultados**: mientras está activa, solo cuántas personas votaron, en vivo (los votos por opción no se publican antes del acta); tras cerrarla, el indicador de veracidad del acta ("✓ Acta verificada": firma digital válida, sin modificaciones y con los votos guardados coincidiendo), el ganador y el desglose por mesa. El PDF del acta lleva el mismo veredicto en el encabezado.
 10. En **Escrutinio**, "Verificar actas" muestra acta por acta si su contenido, la cadena y la firma digital están en orden.

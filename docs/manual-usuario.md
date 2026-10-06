@@ -36,8 +36,8 @@ Desde otro equipo de la misma red, se reemplaza `localhost` por la IP del servid
 No requiere instalar nada en el equipo del usuario. Funciona en Chrome, Firefox y Edge
 en sus versiones recientes.
 
-![Captura 01: La pantalla de ingreso, con sus dos pestañas: Administrador / Auditor / Jurado y Votante](img/01-pantalla-inicio.png)
-*Captura 01. La pantalla de ingreso, con sus dos pestañas: Administrador / Auditor / Jurado y Votante.*
+![Captura 01: La pantalla de ingreso: primero el ingreso de votantes y, debajo, aparte, el botón para el administrador, el auditor o el jurado](img/01-pantalla-inicio.png)
+*Captura 01. La pantalla de ingreso: primero el ingreso de votantes y, debajo, aparte, el botón para el administrador, el auditor o el jurado.*
 
 ---
 
@@ -58,15 +58,18 @@ verifica no necesita poder modificar.
 
 ## 3. Ingreso al sistema
 
-La pantalla de inicio tiene dos pestañas. Elija la que corresponda a su rol.
+La pantalla de inicio muestra primero el **Ingreso de votantes**, que son quienes más
+entran. El administrador, el auditor y el jurado entran con el botón que está debajo,
+aparte: **Ingresar como administrador, auditor o jurado**.
 
 ### 3.1 Administrador, Auditor o Jurado
 
-1. Pestaña **Administrador / Auditor / Jurado**.
+1. Debajo del ingreso de votantes, botón **Ingresar como administrador, auditor o
+   jurado**. (Para volver, **← Volver al ingreso de votantes**.)
 2. Escriba su **Usuario** y **Contraseña**.
 3. Botón **Ingresar como administrador**.
 
-El sistema lo lleva al panel que corresponde a su rol: los administradores ven nueve
+El sistema lo lleva al panel que corresponde a su rol: los administradores ven diez
 pestañas; los auditores, solo dos. El **jurado** tiene un paso más: el código de su
 autenticador, igual que el votante (ver [3.2](#32-votante)); la primera vez, lo registra.
 
@@ -75,7 +78,7 @@ autenticador, igual que el votante (ver [3.2](#32-votante)); la primera vez, lo 
 
 ### 3.2 Votante
 
-1. Pestaña **Votante**.
+1. Es lo primero que aparece en la pantalla de inicio: **Ingreso de votantes**.
 2. Escriba su número de **Cédula**.
 3. Escriba su **PIN de acceso**, que le entrega el encargado de su puesto de votación.
 4. Botón **Ingresar a votar**.
@@ -643,7 +646,7 @@ de su puesto si el administrador lo asignó así: quienes no pueden usar una app
 autenticadora. Su autorización reemplaza el código del celular del votante,
 así que su propio ingreso también lleva segundo factor.
 
-**Primer ingreso:** entra por la pestaña **Administrador / Auditor / Jurado** con el
+**Primer ingreso:** entra con el botón **Ingresar como administrador, auditor o jurado**, con el
 usuario y la contraseña que le dio el administrador, y registra su autenticador igual
 que un votante (ver [3.2](#32-votante)). Conviene activar el bloqueo con huella o rostro de
 la app.

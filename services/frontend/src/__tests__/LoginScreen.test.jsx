@@ -1,5 +1,6 @@
-// Pantalla de ingreso: administradores/auditores con usuario y contraseña;
-// votantes con cédula y PIN y, después, el segundo factor: el código de su
+// Pantalla de ingreso: primero la de los votantes, con cédula y PIN; el
+// personal (administrador, auditor o jurado) entra con un botón aparte, con
+// usuario y contraseña. Después del PIN, el votante pasa al segundo factor: el código de su
 // autenticador (o registrarlo, la primera vez) o, si votan asistidos, la
 // autorización del jurado de su mesa. El jurado entra con usuario,
 // contraseña y su propio código.
@@ -13,12 +14,37 @@ jest.mock('../api.js', () => require('./apiFalsa.js').crearApiFalsa());
 
 beforeEach(() => reiniciarApiFalsa(api));
 
+const PERSONAL = 'Ingresar como administrador, auditor o jurado';
+// El ingreso del personal está detrás de su botón.
+async function alPersonal(usuario) {
+  await usuario.click(screen.getByRole('button', { name: PERSONAL }));
+}
+
+describe('qué se ve primero', () => {
+  it('el ingreso de votantes, y aparte el botón para el personal; con él se va y se vuelve', async () => {
+    const usuario = userEvent.setup();
+    render(<LoginScreen onLogin={jest.fn()} />);
+    expect(screen.getByRole('heading', { name: 'Ingreso de votantes' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Cédula')).toHaveFocus();
+    expect(screen.queryByLabelText('Usuario')).not.toBeInTheDocument();
+
+    await alPersonal(usuario);
+    expect(screen.getByRole('heading', { name: 'Administrador, auditor o jurado' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Usuario')).toHaveFocus();
+    expect(screen.queryByRole('button', { name: PERSONAL })).not.toBeInTheDocument();
+
+    await usuario.click(screen.getByRole('button', { name: '← Volver al ingreso de votantes' }));
+    expect(screen.getByLabelText('Cédula')).toBeInTheDocument();
+  });
+});
+
 describe('ingreso de administrador o auditor', () => {
   it('manda usuario y contraseña, y abre la sesión con el rol que devuelve el servicio', async () => {
     api.loginAdmin.mockResolvedValue({ token: 'jwt-auditor', role: 'auditor' });
     const onLogin = jest.fn();
     const usuario = userEvent.setup();
     render(<LoginScreen onLogin={onLogin} />);
+    await alPersonal(usuario);
 
     await usuario.type(screen.getByLabelText('Usuario'), 'ana');
     await usuario.type(screen.getByLabelText('Contraseña'), 'clave-larga-123');
@@ -28,15 +54,16 @@ describe('ingreso de administrador o auditor', () => {
     expect(onLogin).toHaveBeenCalledWith({ role: 'auditor', token: 'jwt-auditor', username: 'ana' });
   });
 
-  it('la contraseña no se ve en pantalla', () => {
+  it('la contraseña no se ve en pantalla', async () => {
+    const usuario = userEvent.setup();
     render(<LoginScreen onLogin={jest.fn()} />);
+    await alPersonal(usuario);
     expect(screen.getByLabelText('Contraseña')).toHaveAttribute('type', 'password');
   });
 
   it('el PIN del votante tampoco se ve: en la mesa puede haber alguien al lado (el jurado, en el voto asistido)', async () => {
     const usuario = userEvent.setup();
     render(<LoginScreen onLogin={jest.fn()} />);
-    await usuario.click(screen.getByRole('button', { name: 'Votante' }));
     expect(screen.getByLabelText('PIN de acceso')).toHaveAttribute('type', 'password');
   });
 
@@ -45,6 +72,7 @@ describe('ingreso de administrador o auditor', () => {
     const onLogin = jest.fn();
     const usuario = userEvent.setup();
     render(<LoginScreen onLogin={onLogin} />);
+    await alPersonal(usuario);
 
     await usuario.type(screen.getByLabelText('Usuario'), 'ana');
     await usuario.type(screen.getByLabelText('Contraseña'), 'equivocada');
@@ -58,6 +86,7 @@ describe('ingreso de administrador o auditor', () => {
   it('mientras espera la respuesta, el botón queda deshabilitado (sin envíos dobles)', async () => {
     const usuario = userEvent.setup();
     render(<LoginScreen onLogin={jest.fn()} />);
+    await alPersonal(usuario);
     await usuario.type(screen.getByLabelText('Usuario'), 'ana');
     await usuario.type(screen.getByLabelText('Contraseña'), 'clave');
     await usuario.click(screen.getByRole('button', { name: 'Ingresar como administrador' }));
@@ -70,7 +99,6 @@ describe('ingreso de votante', () => {
 
   async function conPin(usuario, primerPaso) {
     api.loginVoter.mockResolvedValue(primerPaso);
-    await usuario.click(screen.getByRole('button', { name: 'Votante' }));
     await usuario.type(screen.getByLabelText('Cédula'), '1000000001');
     await usuario.type(screen.getByLabelText('PIN de acceso'), '482913');
     await usuario.click(screen.getByRole('button', { name: 'Ingresar a votar' }));
@@ -153,16 +181,17 @@ describe('ingreso de votante', () => {
     expect(screen.getByLabelText('Cédula')).toHaveValue('1000000001');
   });
 
-  it('al cambiar de pestaña se borra el error de la otra', async () => {
+  it('al volver al ingreso de votantes se borra el error del personal', async () => {
     api.loginAdmin.mockRejectedValue(new Error('Usuario o contraseña incorrectos'));
     const usuario = userEvent.setup();
     render(<LoginScreen onLogin={jest.fn()} />);
+    await alPersonal(usuario);
     await usuario.type(screen.getByLabelText('Usuario'), 'ana');
     await usuario.type(screen.getByLabelText('Contraseña'), 'x');
     await usuario.click(screen.getByRole('button', { name: 'Ingresar como administrador' }));
     await screen.findByText('Usuario o contraseña incorrectos');
 
-    await usuario.click(screen.getByRole('button', { name: 'Votante' }));
+    await usuario.click(screen.getByRole('button', { name: '← Volver al ingreso de votantes' }));
     expect(screen.queryByText('Usuario o contraseña incorrectos')).not.toBeInTheDocument();
   });
 });
@@ -174,7 +203,7 @@ describe('ingreso de jurado', () => {
     const onLogin = jest.fn();
     const usuario = userEvent.setup();
     render(<LoginScreen onLogin={onLogin} />);
-
+    await alPersonal(usuario);
     await usuario.type(screen.getByLabelText('Usuario'), 'jurado.mesa1');
     await usuario.type(screen.getByLabelText('Contraseña'), 'clave-larga-123');
     await usuario.click(screen.getByRole('button', { name: 'Ingresar como administrador' }));
@@ -191,6 +220,7 @@ describe('ingreso de jurado', () => {
     api.enrollAdmin.mockResolvedValue({ token: 'jwt-jurado', role: 'jurado' });
     const usuario = userEvent.setup();
     render(<LoginScreen onLogin={jest.fn()} />);
+    await alPersonal(usuario);
     await usuario.type(screen.getByLabelText('Usuario'), 'jurado.mesa1');
     await usuario.type(screen.getByLabelText('Contraseña'), 'clave-larga-123');
     await usuario.click(screen.getByRole('button', { name: 'Ingresar como administrador' }));

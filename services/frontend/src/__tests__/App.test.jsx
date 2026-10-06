@@ -11,6 +11,7 @@ jest.mock('../api.js', () => require('./apiFalsa.js').crearApiFalsa());
 
 async function ingresar(usuario, rol) {
   api.loginAdmin.mockResolvedValue({ token: `jwt-${rol}`, role: rol });
+  await usuario.click(screen.getByRole('button', { name: 'Ingresar como administrador, auditor o jurado' }));
   await usuario.type(screen.getByLabelText('Usuario'), 'persona');
   await usuario.type(screen.getByLabelText('Contraseña'), 'clave');
   await usuario.click(screen.getByRole('button', { name: 'Ingresar como administrador' }));
@@ -24,9 +25,10 @@ beforeEach(() => {
   sessionStorage.clear();
 });
 
-it('sin sesión, muestra la pantalla de ingreso', () => {
+it('sin sesión, muestra la pantalla de ingreso: primero la de votantes', () => {
   render(<App />);
-  expect(screen.getByRole('button', { name: 'Ingresar como administrador' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Ingresar a votar' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Ingresar como administrador, auditor o jurado' })).toBeInTheDocument();
 });
 
 it('el administrador ve todas las pestañas de gestión', async () => {
@@ -55,7 +57,7 @@ it('la sesión no se guarda en el navegador, y "Salir" la cierra', async () => {
   expect(document.cookie).toBe('');
 
   await usuario.click(screen.getByRole('button', { name: 'Salir' }));
-  expect(screen.getByRole('button', { name: 'Ingresar como administrador' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Ingresar a votar' })).toBeInTheDocument();
 });
 
 it('un votante entra a su papeleta, con su PIN y el código de su autenticador', async () => {
@@ -65,7 +67,6 @@ it('un votante entra a su papeleta, con su PIN y el código de su autenticador',
   api.listMyVotes.mockResolvedValue({ votes: [] });
   const usuario = userEvent.setup();
   render(<App />);
-  await usuario.click(screen.getByRole('button', { name: 'Votante' }));
   await usuario.type(screen.getByLabelText('Cédula'), '1000000001');
   await usuario.type(screen.getByLabelText('PIN de acceso'), '482913');
   await usuario.click(screen.getByRole('button', { name: 'Ingresar a votar' }));
@@ -85,6 +86,7 @@ it('un jurado entra a su panel: su mesa y los votantes asistidos, sin pestañas 
   });
   const usuario = userEvent.setup();
   render(<App />);
+  await usuario.click(screen.getByRole('button', { name: 'Ingresar como administrador, auditor o jurado' }));
   await usuario.type(screen.getByLabelText('Usuario'), 'jurado.mesa1');
   await usuario.type(screen.getByLabelText('Contraseña'), 'clave');
   await usuario.click(screen.getByRole('button', { name: 'Ingresar como administrador' }));
@@ -111,6 +113,7 @@ it('un jurado de todo el puesto ve que puede autorizar en cualquier mesa, con la
   });
   const usuario = userEvent.setup();
   render(<App />);
+  await usuario.click(screen.getByRole('button', { name: 'Ingresar como administrador, auditor o jurado' }));
   await usuario.type(screen.getByLabelText('Usuario'), 'jurado.puesto');
   await usuario.type(screen.getByLabelText('Contraseña'), 'clave');
   await usuario.click(screen.getByRole('button', { name: 'Ingresar como administrador' }));

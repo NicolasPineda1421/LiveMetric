@@ -1,9 +1,18 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import SegundoFactor from '../components/SegundoFactor.jsx';
 
+// Primero, el ingreso de los votantes (los que más entran); el personal
+// (administrador, auditor o jurado) entra con el botón de abajo, aparte.
 export default function LoginScreen({ onLogin }) {
-  const [tab, setTab] = useState('admin'); // 'admin' | 'voter'
+  const [tab, setTab] = useState('voter'); // 'voter' | 'admin'
+  // Al pasar de un formulario al otro, el foco va a su primer campo (para
+  // quien usa el teclado o un lector de pantalla).
+  const primerCampo = useRef(null);
+  const cambioDeFormulario = useRef(false);
+  useEffect(() => {
+    if (cambioDeFormulario.current) primerCampo.current?.focus();
+  }, [tab]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -88,6 +97,12 @@ export default function LoginScreen({ onLogin }) {
     setError('');
   }
 
+  function cambiarA(otro) {
+    cambioDeFormulario.current = true;
+    setTab(otro);
+    setError('');
+  }
+
   return (
     <div className="login-screen">
       <div className="login-hero">
@@ -108,13 +123,11 @@ export default function LoginScreen({ onLogin }) {
       <div className="login-panel">
         <div className="login-card">
           {!paso && (
-            <div className="login-tabs">
-              <button className={`login-tab ${tab === 'admin' ? 'active' : ''}`} onClick={() => { setTab('admin'); setError(''); }}>
-                Administrador / Auditor / Jurado
-              </button>
-              <button className={`login-tab ${tab === 'voter' ? 'active' : ''}`} onClick={() => { setTab('voter'); setError(''); }}>
-                Votante
-              </button>
+            <div className="login-card-encabezado">
+              <h2 className="login-card-titulo">{tab === 'voter' ? 'Ingreso de votantes' : 'Administrador, auditor o jurado'}</h2>
+              <p className="login-card-subtitulo">
+                {tab === 'voter' ? 'Con tu cédula y el PIN que te entregaron en tu puesto de votación.' : 'Con tu usuario y tu contraseña del panel.'}
+              </p>
             </div>
           )}
 
@@ -132,7 +145,7 @@ export default function LoginScreen({ onLogin }) {
             <form onSubmit={submitAdmin}>
               <div className="field">
                 <label htmlFor="admin-user">Usuario</label>
-                <input id="admin-user" value={adminUser} onChange={(e) => setAdminUser(e.target.value)} required autoFocus />
+                <input id="admin-user" ref={primerCampo} value={adminUser} onChange={(e) => setAdminUser(e.target.value)} required autoFocus />
               </div>
               <div className="field">
                 <label htmlFor="admin-pass">Contraseña</label>
@@ -144,7 +157,7 @@ export default function LoginScreen({ onLogin }) {
             <form onSubmit={submitVoter}>
               <div className="field">
                 <label htmlFor="cedula-user">Cédula</label>
-                <input id="cedula-user" value={cedulaUser} onChange={(e) => setCedulaUser(e.target.value)} required autoFocus inputMode="numeric" />
+                <input id="cedula-user" ref={primerCampo} value={cedulaUser} onChange={(e) => setCedulaUser(e.target.value)} required autoFocus inputMode="numeric" />
               </div>
               <div className="field">
                 <label htmlFor="voter-pin">PIN de acceso</label>
@@ -159,6 +172,21 @@ export default function LoginScreen({ onLogin }) {
             </form>
           )}
         </div>
+
+        {/* Aparte de la tarjeta: el ingreso del personal, o volver al de votantes. */}
+        {!paso && (
+          <div className="login-alterno">
+            {tab === 'voter' ? (
+              <button key="al-personal" type="button" className="btn btn-outline" onClick={() => cambiarA('admin')}>
+                Ingresar como administrador, auditor o jurado
+              </button>
+            ) : (
+              <button key="a-votantes" type="button" className="link-button" onClick={() => cambiarA('voter')}>
+                ← Volver al ingreso de votantes
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
