@@ -526,6 +526,28 @@ function comandoOmitido([archivo, control, servicio, motivo]) {
   guardar(archivo, registro);
 }
 
+// Los SBOM que deja el paso de las imágenes (CycloneDX: uno de la imagen y
+// otro de las dependencias de cada servicio): dónde quedaron y cuántos.
+function resumenSbom(carpetaLogs) {
+  const carpeta = path.join(carpetaLogs, 'sbom');
+  let archivos;
+  try {
+    archivos = fs.readdirSync(carpeta).filter((a) => a.endsWith('.cdx.json'));
+  } catch {
+    return 'SBOM: no se generó (el paso de las imágenes no llegó a correr).';
+  }
+  const validos = archivos.filter((a) => {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(carpeta, a), 'utf8')).bomFormat === 'CycloneDX';
+    } catch {
+      return false;
+    }
+  }).length;
+  const fallidos = archivos.length - validos;
+  return `SBOM (CycloneDX, de la imagen y de las dependencias de cada servicio): ${carpeta} · ${plural(validos, 'archivo', 'archivos')}`
+    + (fallidos ? `; ${plural(fallidos, 'no se pudo generar', 'no se pudieron generar')}` : '');
+}
+
 function comandoFinal([archivo, carpetaLogs]) {
   const lineasArchivo = leer(archivo)
     .split('\n')
@@ -597,6 +619,7 @@ function comandoFinal([archivo, carpetaLogs]) {
   escribir();
   escribir(gris('  No se revisan localmente (solo en GitHub Actions): Checkov, despliegue con Terraform y DAST con OWASP ZAP.'));
   escribir(gris(`  Logs completos de cada paso: ${carpetaLogs}`));
+  escribir(gris(`  ${resumenSbom(carpetaLogs)}`));
   if (inicio) {
     escribir(gris(`  Duración: ${duracion(Math.round((Date.now() - inicio) / 1000))}`));
   }

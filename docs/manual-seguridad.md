@@ -42,6 +42,7 @@ Todas son de código abierto y corren en el pipeline de GitHub Actions (`.github
 | **npm audit** | CVE en las dependencias de producción | `--omit=dev --audit-level=high` | **Sí**, desde severidad alta |
 | **Trivy** (`fs`) | CVE en `package.json`/`package-lock.json` | `CRITICAL,HIGH`, `--ignore-unfixed`; excepciones en `.trivyignore` | **Sí** |
 | **Trivy** (imagen) | CVE en las 6 imágenes construidas (sistema base y librerías) | Igual que el anterior. También en `release.yml`: una imagen con CVE críticas o altas no se publica en Docker Hub | **Sí** |
+| **Trivy** (SBOM) | El inventario de componentes de cada servicio, en CycloneDX: el de la imagen y el de sus dependencias declaradas | En `container-scan` y en `release.yml`; al publicar, además, cada imagen lleva su SBOM adjunto en Docker Hub (`sbom: true`). Ver [Pipeline DevSecOps](pipeline-devsecops.md) | No: es un registro, no un control |
 | **Checkov** | Terraform (`infra/terraform`): la red de la base, los puertos publicados y el endurecimiento de cada contenedor | Checkov no trae controles para el provider de Docker: evalúa las políticas propias de `infra/terraform/politicas-checkov/` (`CKV2_LM_1` a `CKV2_LM_6`). `soft_fail: false`. Excepción: `#checkov:skip=<ID>:<motivo>` en el recurso | **Sí** |
 | **OWASP ZAP** (baseline) | La aplicación desplegada, como caja negra, en `http://localhost:3000` | Escaneo pasivo, con las reglas alfa (`-a`) | No: el reporte queda como artefacto |
 | **Jest** | Pruebas unitarias y de integración de los servicios (incluye un ataque simulado contra las actas) y de la interfaz (sello del acta, papeleta, roles, XSS) | Base desechable y secretos aleatorios por corrida | **Sí** |
@@ -60,6 +61,7 @@ El *Security Gate*, último job del pipeline, resume el resultado real de cada c
 | Gitleaks, npm audit, pruebas | El log de su job en GitHub → **Actions** → la corrida → el job |
 | OWASP ZAP | El artefacto `zap-baseline-report` de cada corrida (`report_html.html`) |
 | Cobertura de pruebas | Artefactos `coverage-<servicio>` y la insignia del README |
+| SBOM de cada servicio | Artefactos `sbom-<servicio>` de cada corrida (`sbom-<servicio>-vX.Y.Z` en una publicación); en una imagen publicada, `docker buildx imagetools inspect <imagen>:<versión> --format '{{ json .SBOM }}'`; en la PC, la subcarpeta `sbom` de la carpeta de resultados del pipeline local |
 | Todo, en la PC | `./scripts/pipeline-local.sh` muestra cada resultado ya interpretado y un cuadro final; los logs completos quedan en la carpeta que indica al empezar (`/tmp/livemetric-pipeline-local.*`) |
 
 Los hallazgos que tienen una excepción justificada en el código (`eslint-disable … -- motivo`, `nosemgrep`) no se suben a GitHub Security: GitHub no respeta la marca de "suprimido" de herramientas externas y los mostraría como alertas abiertas. Su justificación queda en el código, junto a la línea.
@@ -103,6 +105,7 @@ La tabla trae la librería o el paquete del sistema, el CVE, la severidad, la ve
 - **En una imagen**, casi siempre se resuelve actualizando la imagen base (`node:20-alpine`, `nginx:1.30-alpine`, `postgres:16-alpine`) y reconstruyendo.
 - **En dependencias**, se actualiza el paquete.
 - **Si un CVE no aplica** (por ejemplo, la función vulnerable no se usa), va a `.trivyignore` con el motivo y la fecha en que se volverá a revisar. Hoy no hay ninguna excepción.
+- **Una CVE nueva en una versión ya desplegada**: con su SBOM (el artefacto de la corrida o el adjunto de Docker Hub), `trivy sbom <archivo>` dice si esa versión la tiene, sin reconstruir la imagen.
 
 ### Checkov
 

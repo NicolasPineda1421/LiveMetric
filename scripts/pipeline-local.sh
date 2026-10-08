@@ -238,6 +238,18 @@ done
 # La fecha del día invalida la capa de "apk upgrade" de un build de otro día
 # (ver ARG ACTUALIZAR_PAQUETES en los Dockerfile).
 ACTUALIZAR_PAQUETES="${ACTUALIZAR_PAQUETES:-$(date +%F)}"
+
+# SBOM (CycloneDX) de cada servicio, como en el pipeline de GitHub: el de la
+# imagen y el de las dependencias que declara (package-lock.json, sin las de
+# desarrollo), en $LOG_DIR/sbom. No bloquea. Trivy lo escribe en la salida
+# estándar: así el demonio de Docker no necesita ver la carpeta de resultados.
+mkdir -p "$LOG_DIR/sbom"
+sbom() {
+  "${TRIVY[@]}" -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.70.0 image "livemetric-$1-localcheck" \
+    --format cyclonedx --quiet --skip-version-check > "$LOG_DIR/sbom/$1-imagen.cdx.json"
+  "${TRIVY[@]}" -v "$DOCKER_MOUNT_ROOT:/repo" -w /repo aquasec/trivy:0.70.0 fs "services/$1" \
+    --format cyclonedx --quiet --skip-version-check > "$LOG_DIR/sbom/$1-dependencias.cdx.json"
+}
 paso 4
 for svc in "${SERVICES[@]}"; do
   correr "$LOG_DIR/docker-build-$svc.log" "$svc · construyendo la imagen" \
@@ -252,6 +264,7 @@ for svc in "${SERVICES[@]}"; do
       --exit-code 1 --ignore-unfixed --scanners vuln --ignorefile /repo/.trivyignore \
       --skip-version-check --no-progress
     resumir trivy-image "$svc" $? "$LOG_DIR/trivy-image-$svc.log"
+    correr "$LOG_DIR/sbom-$svc.log" "$svc · SBOM" sbom "$svc"
   fi
   docker rmi "livemetric-$svc-localcheck" > /dev/null 2>&1
 done

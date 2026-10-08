@@ -232,7 +232,8 @@ jobs:
           category: 'trivy-sca-${{ matrix.service }}'
 
   # -------------------------------------------------------------------------
-  # 4) TRIVY - Escaneo de vulnerabilidades en las imagenes Docker construidas.
+  # 4) TRIVY - Escaneo de vulnerabilidades en las imagenes Docker construidas,
+  #    y el SBOM (CycloneDX) de cada servicio.
   # -------------------------------------------------------------------------
   container-scan:
     name: Trivy - ${{ matrix.service }}
@@ -253,6 +254,28 @@ jobs:
           docker build -t livemetric/${{ matrix.service }}-service:ci \
             ./services/${{ matrix.service }}
 
+      # SBOM (Software Bill of Materials) en CycloneDX: el inventario de lo
+      # que trae la imagen (paquetes del sistema y dependencias de Node) y el
+      # de las dependencias que declara el servicio en su package-lock.json
+      # (sin las de desarrollo). El segundo hace falta sobre todo en el
+      # frontend: sus librerias van compiladas en el JavaScript, y la imagen
+      # no las deja ver. Se generan antes del escaneo, para tenerlos aunque
+      # la imagen no pase la puerta de seguridad.
+      - name: Generar el SBOM de la imagen
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: 'livemetric/${{ matrix.service }}-service:ci'
+          format: 'cyclonedx'
+          output: 'sbom-${{ matrix.service }}-imagen.cdx.json'
+
+      - name: Generar el SBOM de las dependencias
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: 'fs'
+          scan-ref: './services/${{ matrix.service }}'
+          format: 'cyclonedx'
+          output: 'sbom-${{ matrix.service }}-dependencias.cdx.json'
+
       - name: Escanear imagen con Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -270,6 +293,16 @@ jobs:
         with:
           sarif_file: 'trivy-${{ matrix.service }}.sarif'
           category: 'trivy-${{ matrix.service }}'
+
+      # Los dos SBOM quedan en la corrida (Summary > Artifacts), 90 dias.
+      - name: Guardar el SBOM
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sbom-${{ matrix.service }}
+          path: sbom-${{ matrix.service }}-*.cdx.json
+          if-no-files-found: warn
+          retention-days: 90
 
   # -------------------------------------------------------------------------
   # 5) CHECKOV - Validacion de seguridad del codigo Terraform (IaC).

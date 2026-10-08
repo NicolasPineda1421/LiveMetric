@@ -176,6 +176,35 @@ jobs:
           trivyignores: '.trivyignore'
 
       # -----------------------------------------------------------------------
+      # SBOM en CycloneDX de la imagen que se va a publicar y de las
+      # dependencias del servicio (como en el pipeline principal), guardados
+      # en la corrida. Ademas, la publicacion adjunta el SBOM a la imagen en
+      # Docker Hub (sbom: true, mas abajo).
+      # -----------------------------------------------------------------------
+      - name: Generar el SBOM de la imagen
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: 'livemetric-${{ matrix.service }}:release-candidate'
+          format: 'cyclonedx'
+          output: 'sbom-${{ matrix.service }}-${{ needs.version.outputs.semver }}-imagen.cdx.json'
+
+      - name: Generar el SBOM de las dependencias
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: 'fs'
+          scan-ref: './services/${{ matrix.service }}'
+          format: 'cyclonedx'
+          output: 'sbom-${{ matrix.service }}-${{ needs.version.outputs.semver }}-dependencias.cdx.json'
+
+      - name: Guardar el SBOM
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sbom-${{ matrix.service }}-${{ needs.version.outputs.semver }}
+          path: sbom-${{ matrix.service }}-*.cdx.json
+          if-no-files-found: error
+          retention-days: 90
+
+      # -----------------------------------------------------------------------
       # El login ocurre DESPUES del escaneo, a proposito: si la imagen no pasa,
       # el runner nunca llega a manejar las credenciales de Docker Hub.
       # -----------------------------------------------------------------------
@@ -188,6 +217,10 @@ jobs:
       # -----------------------------------------------------------------------
       # Segunda invocacion de build-push: gracias a la cache de la primera, no
       # reconstruye nada, solo etiqueta y sube la MISMA imagen ya escaneada.
+      # sbom: true adjunta a la imagen publicada su SBOM (una "attestation"
+      # de BuildKit, en SPDX): queda en Docker Hub junto a cada version, y se
+      # lee con
+      #   docker buildx imagetools inspect <imagen>:<version> --format '{{ json .SBOM }}'
       # -----------------------------------------------------------------------
       - name: Publicar en Docker Hub
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
@@ -197,6 +230,7 @@ jobs:
           # una publicacion anterior (ver ARG ACTUALIZAR_PAQUETES en el Dockerfile).
           build-args: ACTUALIZAR_PAQUETES=${{ github.run_id }}
           push: true
+          sbom: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}
@@ -247,6 +281,11 @@ jobs:
             echo "Cada imagen tambien queda como \`${VERSION}\` (igual que el tag de git), \`${CLEAN%.*}\` y \`latest\`."
             echo ""
             echo "Todas las imagenes superaron el escaneo de Trivy (CRITICAL/HIGH) antes de publicarse."
+            echo ""
+            echo "Cada imagen lleva su SBOM adjunto en Docker Hub, y el de CycloneDX (imagen y dependencias) queda en los artefactos de esta corrida. Para leer el adjunto:"
+            echo '```bash'
+            echo "docker buildx imagetools inspect ${NS}/livemetric-auth:${CLEAN} --format '{{ json .SBOM }}'"
+            echo '```'
             echo ""
             echo "Para descargarlas:"
             echo '```bash'

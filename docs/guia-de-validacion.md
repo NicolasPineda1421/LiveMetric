@@ -74,6 +74,13 @@ Lo automatizan `divipola.test.js` y `puestos.test.js` (auth) y `ubicacion.test.j
 7. **El acta consolida por mesa y determina un ganador** — Con votantes de al menos 2 mesas distintas (el padrón de demostración ya trae "Mesa 1" y "Mesa 2"), vota desde cédulas de ambas mesas en la misma elección presidencial y espera la certificación. `GET /certifications/:electionId` en Scrutiny debe devolver `results.byTable` con una entrada por mesa (y su propio conteo por candidato) y `results.winner` con el candidato de más votos a nivel global.
 8. **Empates se reportan, no se ocultan** — Fuerza un empate exacto entre dos candidatos (mismo número de votos) y certifica la elección: `winner.tie` debe ser `true` y `winner.tiedWith` debe listar al otro candidato empatado, en vez de elegir uno arbitrariamente.
 
+## SBOM de cada servicio
+
+1. **En cada push** — En GitHub → **Actions** → la corrida → **Artifacts**, hay un `sbom-<servicio>` por cada uno de los 6 servicios, con `<servicio>-imagen.cdx.json` y `<servicio>-dependencias.cdx.json`. Los dos son CycloneDX (`"bomFormat": "CycloneDX"`): el de la imagen trae el sistema operativo (Alpine) y las dependencias de Node (en `auth`, por ejemplo, `express`); el de las dependencias del frontend trae `react` y `recharts`, y no trae `jest` (las de desarrollo no se incluyen).
+2. **En la PC** — `./scripts/pipeline-local.sh` deja los mismos archivos en la subcarpeta `sbom` de su carpeta de resultados, y el cuadro final dice cuántos generó.
+3. **En una imagen publicada** — `docker buildx imagetools inspect <namespace>/livemetric-auth:<versión> --format '{{ json .SBOM }}'` devuelve su SBOM en SPDX, adjunto por `release.yml`.
+4. **Para qué sirve** — `trivy sbom auth-imagen.cdx.json` revisa las CVE de ese inventario sin reconstruir la imagen.
+
 ## Estadística avanzada de los reportes
 
 En **Reportes**, al agregar un widget, hay cuatro fuentes de datos que responden preguntas concretas (la lógica está en `services/analytics/src/advancedStats.js`, con pruebas en `advancedStats.test.js`):

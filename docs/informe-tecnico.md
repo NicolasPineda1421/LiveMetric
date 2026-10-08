@@ -405,8 +405,9 @@ flowchart LR
     V --> B["Construye las 6 imágenes<br/>(sin publicar)"]
     B --> TR{"Trivy<br/>CRITICAL / HIGH"}
     TR -->|"falla"| X(["No se publica"])
-    TR -->|"pasa"| L["Login en Docker Hub"]
-    L --> H["Publica X.Y.Z, vX.Y.Z,<br/>X.Y y latest"]
+    TR -->|"pasa"| S["SBOM en CycloneDX<br/>(artefacto)"]
+    S --> L["Login en Docker Hub"]
+    L --> H["Publica X.Y.Z, vX.Y.Z,<br/>X.Y y latest,<br/>con su SBOM adjunto"]
 ```
 
 *Figura 9. Pipeline de publicación. Las credenciales de Docker Hub se usan después del escaneo: si la imagen no lo pasa, el runner nunca las toca.*
@@ -569,6 +570,8 @@ El enunciado menciona Bandit, que analiza código Python. LiveMetric está escri
 
 El job `container-scan` construye las seis imágenes reales, igual que en producción, y las escanea con Trivy. Una CVE crítica o alta con corrección disponible detiene el pipeline. Las excepciones irían en `.trivyignore` con su justificación; hoy no hay ninguna.
 
+El mismo job genera el **SBOM** (*Software Bill of Materials*) de cada servicio en **CycloneDX**, también con Trivy: el de la imagen (los paquetes de Alpine y las dependencias de Node que lleva) y el de las dependencias que declara el servicio en su `package-lock.json`, sin las de desarrollo. El segundo hace falta sobre todo en el frontend: sus librerías van compiladas dentro del JavaScript y la imagen no las deja ver. Los dos quedan en la corrida durante 90 días (artefacto `sbom-<servicio>`), y se generan antes del escaneo, así que están aunque la imagen no pase. Con un SBOM guardado se puede saber, el día que se publica una CVE nueva, si una versión ya desplegada la tiene (`trivy sbom <archivo>`), sin reconstruirla. El pipeline local deja los mismos archivos en su carpeta de resultados.
+
 ```yaml
   container-scan:
     needs: [dependency-audit, sast-scan, lint-security]
@@ -616,7 +619,7 @@ Entre las pruebas hay ataques simulados. Por ejemplo, un acta reescrita con todo
 |---|---|---|
 | `iac-scan` | **Checkov** | Revisa `infra/terraform/main.tf` con seis políticas propias (ver abajo). Bloquea |
 | `iac-deploy` | **Terraform** | `terraform apply` levanta el sistema completo, un *smoke test* comprueba que los cuatro servicios responden, y `terraform destroy` lo limpia |
-| `release.yml` | **Trivy** + Docker Hub | Publica las seis imágenes solo si pasan el escaneo (Figura 9) |
+| `release.yml` | **Trivy** + Docker Hub | Publica las seis imágenes solo si pasan el escaneo (Figura 9), cada una con su SBOM adjunto (SPDX, de BuildKit) y el de CycloneDX en los artefactos |
 | `orquestacion/deploy.sh` | **Docker Swarm** | Despliega la versión publicada, después de verificar que las seis imágenes existen en Docker Hub |
 
 *Tabla 7. Controles y automatización del despliegue.*
@@ -831,6 +834,7 @@ Un hallazgo no siempre sale de una herramienta automática: algunos aparecieron 
 | La carga masiva por API (`/admin/voters/bulk`) declaraba hasta 5000 votantes, pero el límite de 10 kB por pedido la dejaba en unas decenas; y desde el panel, el padrón se cargaba votante por votante | Revisión funcional del equipo | Baja (operación) | Resuelto | Carga desde un CSV o desde celdas pegadas, validada en el navegador y mandada en lotes de 100. Las dos rutas que agregan votantes aceptan 256 kB (200 votantes) y leen el cuerpo después de comprobar la sesión; la lista de PIN se descarga con las fórmulas neutralizadas (amenazas 20 a 22) |
 | Los puestos de votación eran solo un nombre: no se sabía dónde quedaba cada uno ni se podía agrupar por municipio o zona, y dos puestos de municipios distintos con el mismo nombre se juntaban en uno | Revisión funcional del equipo | Baja (operación) | Resuelto | Cada puesto tiene país, departamento y municipio de la Divipola del DANE (código y nombre oficial), localidad y zona urbana o rural (migración 009). Se registra con su primer votante, en el formulario o en el archivo, con las mismas reglas en el panel y en el servicio; un nombre repetido en otro municipio se rechaza en vez de juntar dos puestos. Los puestos anteriores se completan en la pestaña **Puestos** |
 | Con un padrón de muchos puestos, los gráficos de participación quedaban ilegibles (nombres inclinados, encimados y cortados); agrupar por mesa juntaba la "Mesa 1" de todos los puestos, y "Mesas con votos" las contaba igual | Revisión funcional del equipo | Baja (lectura de los reportes) | Resuelto | Con muchas categorías o nombres largos, barras horizontales de mayor a menor, con el nombre recortado (completo al pasar el mouse) y el valor al final; se desplazan dentro del widget y en el PDF van las 15 primeras. La participación se muestra en % de cada grupo y se agrupa también por municipio, departamento y zona; cada mesa se cuenta con su puesto |
+| El proyecto no tenía SBOM: Trivy armaba el inventario de cada imagen solo para buscar CVE y lo descartaba, así que no quedaba registro de qué componentes llevaba cada versión publicada | Revisión del equipo | Baja (cadena de suministro) | Resuelto | SBOM en CycloneDX de cada imagen y de las dependencias de cada servicio, en cada push (artefacto de 90 días) y en el pipeline local; al publicar, cada imagen lleva su SBOM adjunto en Docker Hub (`sbom: true` de BuildKit) |
 | Un jurado creado con la mesa escrita "1" no podía autorizar a los votantes de la "Mesa 1": el puesto y la mesa se escribían a mano y se comparaban letra por letra | Prueba del equipo con el contenedor global | Media (el voto asistido quedaba bloqueado) | Resuelto | Al crear un jurado, el puesto y la mesa se eligen del padrón, con la opción *Todas las mesas del puesto*; se comparan sin distinguir mayúsculas, tildes ni el prefijo "Mesa" (`lugares.js`), así que los jurados ya creados funcionan sin recrearlos, y el administrador puede **Cambiar mesa** |
 | El PIN del votante no vencía: uno filtrado o viejo servía en cualquier elección futura | Revisión funcional del equipo | Media | Resuelto | El PIN vence 24 horas después de generarlo (`PIN_VIGENCIA_HORAS`, de 1 hora a 90 días), comprobado en los dos pasos del ingreso (migraciones `007_vencimiento_pin.sql` y `008_pin_sin_vencimiento.sql`, que le pone fecha a los PIN anteriores). Una versión también limitaba el ingreso a la ventana de la votación; el equipo la quitó, porque obligaba a programar una elección para registrar el autenticador, y votar ya está limitado al horario de la elección. Otra dejaba elegir la fecha de vencimiento al generarlo (por defecto, el cierre de la elección); el equipo prefirió un tiempo fijo que corre desde que se genera |
 | Con la elección abierta, el administrador y el auditor veían los votos de cada opción y quién iba ganando (la API los entregaba), y un resultado parcial puede influir en quien todavía no votó | Revisión funcional del equipo | Media (integridad del proceso electoral) | Resuelto | Analytics solo publica el total de votos hasta que existe el acta certificada: los votos por opción, la concentración y el momento de definición no salen del servicio antes. Se aplica en la API, no solo en la pantalla, con pruebas que lo comprueban |

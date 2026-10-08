@@ -22,7 +22,14 @@ Todas las actions de terceros están **fijadas a un SHA de commit** (con la vers
 
 | Job | Herramienta | Qué detiene |
 |---|---|---|
-| `container-scan` | **Trivy** (modo imagen) | Construye las 6 imágenes reales y busca CVE `CRITICAL`/`HIGH` en el sistema base y las librerías. Las excepciones, siempre justificadas, van en `.trivyignore` (hoy no hay ninguna). |
+| `container-scan` | **Trivy** (modo imagen) | Construye las 6 imágenes reales y busca CVE `CRITICAL`/`HIGH` en el sistema base y las librerías. Las excepciones, siempre justificadas, van en `.trivyignore` (hoy no hay ninguna). Además genera el **SBOM** de cada servicio en CycloneDX (ver abajo). |
+
+**SBOM (*Software Bill of Materials*).** El inventario de todo lo que lleva cada servicio, en formato **CycloneDX**, generado con Trivy:
+
+- `<servicio>-imagen.cdx.json`: lo que trae la imagen, los paquetes de Alpine y las dependencias de Node.
+- `<servicio>-dependencias.cdx.json`: lo que declara el `package-lock.json`, sin las dependencias de desarrollo. En el frontend es el que importa: sus librerías (React, Recharts…) van compiladas en el JavaScript, y la imagen no las deja ver.
+
+Quedan en cada corrida como artefacto `sbom-<servicio>`, durante 90 días; se generan antes del escaneo, así que están aunque la imagen no pase. Al publicar una versión, `release.yml` hace lo mismo (artefacto `sbom-<servicio>-vX.Y.Z`) y además adjunta a cada imagen de Docker Hub su SBOM en SPDX (`sbom: true` de BuildKit), que se lee con `docker buildx imagetools inspect <imagen>:<versión> --format '{{ json .SBOM }}'`. Cuando se publica una CVE nueva, `trivy sbom <archivo>` dice si una versión ya construida la tiene, sin reconstruirla.
 
 **Fase 4 — Pruebas.**
 
@@ -59,6 +66,7 @@ Los hallazgos de Semgrep, ESLint, Trivy y Checkov se suben en formato **SARIF** 
 - Una falla de la conexión no es un hallazgo: si npm audit o Trivy fallan por la red (DNS caído, `EAI_AGAIN`, `network is unreachable`, la base de Trivy que no baja), se reintentan hasta 3 veces antes de marcarse en rojo.
 - La base de vulnerabilidades de Trivy (unos 70 MB) queda en el volumen `livemetric-trivy-cache`: se descarga una vez, y otra solo cuando está vieja, en lugar de en cada uno de los 12 análisis. Para liberar el espacio: `docker volume rm livemetric-trivy-cache`.
 - Las imágenes se construyen con la fecha del día en `ACTUALIZAR_PAQUETES`, para que la capa de `apk upgrade` no salga de la caché de otro día (ver [Gestión de vulnerabilidades](manual-seguridad.md#5-gestión-de-vulnerabilidades)).
+- El SBOM de cada servicio (de la imagen y de las dependencias, en CycloneDX) queda en la subcarpeta `sbom` de la de resultados; el cuadro final dice dónde y cuántos.
 - Fuera de alcance local (solo en GitHub Actions): Checkov, el despliegue con Terraform y el DAST.
 
 ## Cómo comprobar que los controles bloquean de verdad

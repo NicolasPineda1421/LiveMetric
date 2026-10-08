@@ -156,4 +156,4 @@ git tag -a v1.4.0 -m "LiveMetric v1.4.0: <resumen>"
 git push origin v1.4.0
 ```
 
-El tag dispara `.github/workflows/release.yml`: construye las 6 imágenes, las escanea con Trivy (si alguna tiene CVE críticas o altas no se publica) y las sube a Docker Hub como `1.4.0`, `v1.4.0` (igual que el tag de git), `1.4` y `latest`. Se usa versionado semántico: el tercer número para correcciones, el segundo para funcionalidad nueva compatible y el primero para cambios que rompen compatibilidad.
+El tag dispara `.github/workflows/release.yml`: construye las 6 imágenes, las escanea con Trivy (si alguna tiene CVE críticas o altas no se publica), genera su SBOM y las sube a Docker Hub como `1.4.0`, `v1.4.0` (igual que el tag de git), `1.4` y `latest`, cada una con su SBOM adjunto. Se usa versionado semántico: el tercer número para correcciones, el segundo para funcionalidad nueva compatible y el primero para cambios que rompen compatibilidad.

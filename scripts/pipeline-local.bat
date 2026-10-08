@@ -46,6 +46,7 @@ for %%R in (docker node npm) do (
 set SERVICES=auth voting analytics scrutiny scheduler frontend
 set "LOG_DIR=%TEMP%\livemetric-pipeline-local-%RANDOM%%RANDOM%"
 mkdir "%LOG_DIR%"
+mkdir "%LOG_DIR%\sbom"
 set "RESULTADOS=%LOG_DIR%\resultados.jsonl"
 set "RESUMEN=node scripts\lib\pipeline-resumen.js"
 %RESUMEN% inicio "%RESULTADOS%"
@@ -129,6 +130,11 @@ for %%S in (%SERVICES%) do (
     call :en_curso "%%S - Trivy (imagen)"
     docker run --rm -v livemetric-trivy-cache:/root/.cache/trivy -v /var/run/docker.sock:/var/run/docker.sock -v "%cd%:/repo" aquasec/trivy:0.70.0 image livemetric-%%S-localcheck --severity CRITICAL,HIGH --exit-code 1 --ignore-unfixed --scanners vuln --ignorefile /repo/.trivyignore --skip-version-check --no-progress > "%LOG_DIR%\trivy-image-%%S.log" 2>&1
     call :resumir trivy-image %%S !errorlevel! "%LOG_DIR%\trivy-image-%%S.log"
+    REM SBOM (CycloneDX) de la imagen y de las dependencias del servicio, en
+    REM %LOG_DIR%\sbom, como en el pipeline de GitHub. No bloquea.
+    call :en_curso "%%S - SBOM"
+    docker run --rm -v livemetric-trivy-cache:/root/.cache/trivy -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.70.0 image livemetric-%%S-localcheck --format cyclonedx --quiet --skip-version-check > "%LOG_DIR%\sbom\%%S-imagen.cdx.json" 2> "%LOG_DIR%\sbom-%%S.log"
+    docker run --rm -v livemetric-trivy-cache:/root/.cache/trivy -v "%cd%:/repo" -w /repo aquasec/trivy:0.70.0 fs services/%%S --format cyclonedx --quiet --skip-version-check > "%LOG_DIR%\sbom\%%S-dependencias.cdx.json" 2>> "%LOG_DIR%\sbom-%%S.log"
   )
   docker rmi livemetric-%%S-localcheck >nul 2>nul
 )
