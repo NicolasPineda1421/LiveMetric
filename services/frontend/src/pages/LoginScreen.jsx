@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
+import GuiaAutenticador from '../components/GuiaAutenticador.jsx';
 import SegundoFactor from '../components/SegundoFactor.jsx';
 
 // Primero, el ingreso de los votantes (los que más entran); el personal
@@ -152,6 +153,7 @@ export default function LoginScreen({ onLogin }) {
                 <input id="admin-pass" type="password" value={adminPass} onChange={(e) => setAdminPass(e.target.value)} required />
               </div>
               <button className="btn btn-primary" disabled={loading}>{loading ? 'Ingresando…' : 'Ingresar como administrador'}</button>
+              <GuiaAutenticador para="personal" />
             </form>
           ) : (
             <form onSubmit={submitVoter}>
@@ -169,6 +171,7 @@ export default function LoginScreen({ onLogin }) {
                 </div>
               </div>
               <button className="btn btn-primary" disabled={loading}>{loading ? 'Verificando…' : 'Ingresar a votar'}</button>
+              <GuiaAutenticador para="votante" />
             </form>
           )}
         </div>

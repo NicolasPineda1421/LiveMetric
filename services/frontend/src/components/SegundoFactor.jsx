@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import GuiaAutenticador from './GuiaAutenticador.jsx';
 
 // Segundo paso del ingreso, después del PIN (votante) o de la contraseña
 // (jurado). "paso" es lo que devolvió el primero:
@@ -83,9 +84,13 @@ export default function SegundoFactor({ paso, loading, onCodigo, onJurado, onVol
             : 'Desde ahora, además de tu PIN, entrarás con un código de tu celular.'}{' '}
           Esto se hace una sola vez.
         </p>
+        <GuiaAutenticador para={esJurado ? 'personal' : 'votante'} />
         <ol className="pasos-registro">
           <li>Instala <strong>Microsoft Authenticator</strong> o <strong>Google Authenticator</strong> en tu celular. Son gratis.</li>
-          <li>En la app, toca <strong>+</strong> (agregar cuenta), elige <strong>Otra cuenta</strong> y <strong>escanea este código</strong>:</li>
+          <li>
+            En la app, toca <strong>+</strong> y elige <strong>Otra cuenta</strong> (Microsoft) o <strong>Escanear un código
+            QR</strong> (Google); después <strong>escanea este código</strong>:
+          </li>
         </ol>
         <div className="qr-registro">
           <QRCodeSVG value={paso.otpauthUri} size={184} marginSize={2} title="Código QR para el autenticador" />
@@ -126,6 +131,7 @@ export default function SegundoFactor({ paso, loading, onCodigo, onJurado, onVol
           ? '¿Cambiaste o perdiste el celular? El administrador puede restablecer tu autenticador.'
           : '¿Cambiaste o perdiste el celular? Avisa al encargado de tu puesto: puede restablecer tu autenticador.'}
       </p>
+      <GuiaAutenticador para={esJurado ? 'personal' : 'votante'} />
       <Volver onVolver={onVolver} />
     </form>
   );

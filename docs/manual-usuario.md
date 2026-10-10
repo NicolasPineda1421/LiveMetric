@@ -98,14 +98,31 @@ Se hace **una sola vez**, con la ayuda del encargado del puesto si hace falta:
 
 1. Instale **Microsoft Authenticator** o **Google Authenticator** en su celular (son
    gratis, en la tienda de aplicaciones).
-2. En la app, toque **+** (agregar cuenta), elija **Otra cuenta** y **escanee el código
-   QR** que muestra la pantalla. Si no puede escanearlo, toque *«¿No puedes escanear?»* y
-   escriba la clave en la app.
+2. En la app, toque **+** y elija **Otra cuenta** (Microsoft) o **Escanear un código QR**
+   (Google), y **escanee el código QR** que muestra la pantalla. Si no puede escanearlo,
+   toque *«¿No puedes escanear?»* y escriba la clave en la app.
 3. La app muestra un código de 6 dígitos para **LiveMetric**. Escríbalo y toque
    **Confirmar y entrar**.
 
 ![Captura 28: Primer ingreso del votante: los tres pasos para registrar su autenticador, con el QR](img/28-registro-autenticador.png)
 *Captura 28. Primer ingreso del votante: los tres pasos para registrar su autenticador, con el QR.*
+
+**Guía paso a paso, con dibujos.** Debajo de **Ingresar a votar**, en el ingreso del
+personal y en las pantallas del autenticador está **Guía paso a paso: cómo entrar con el
+autenticador**. Abre una ventana con una pestaña para **Microsoft Authenticator** y otra
+para **Google Authenticator**: cada paso (instalar la app, agregar la cuenta, elegir el
+tipo, escanear el QR, ver el código, escribirlo y los ingresos siguientes) tiene un dibujo
+de la pantalla, con un recuadro en lo que hay que tocar, y su explicación. Al final, qué
+hacer si el código no funciona (la hora del celular en automático, el código del momento,
+un celular nuevo). Desde el ingreso del personal, la guía aclara que el autenticador lo usa
+el jurado. Se cierra con **Cerrar**, con *Escape* o tocando fuera de la ventana. Los
+dibujos son simplificados: no son capturas de las apps.
+
+![Captura 38: La guía del autenticador, pestaña Microsoft Authenticator: siete pasos, cada uno con el dibujo de la pantalla y su explicación](img/38-guia-autenticador-microsoft.png)
+*Captura 38. La guía, pestaña Microsoft Authenticator: de instalar la app a los ingresos siguientes, cada paso con el dibujo de la pantalla (el recuadro ámbar marca dónde tocar) y su explicación.*
+
+![Captura 39: La guía del autenticador, pestaña Google Authenticator, con sus pasos propios](img/39-guia-autenticador-google.png)
+*Captura 39. La pestaña Google Authenticator: el + abajo a la derecha, «Escanear un código QR» y, si la cámara no funciona, «Ingresar una clave de configuración».*
 
 > 💡 **Huella o rostro:** en Microsoft Authenticator puede activar *Configuración → Bloqueo
 > de aplicación*, para que la app pida su huella o su rostro antes de mostrar los códigos.
@@ -649,7 +666,7 @@ así que su propio ingreso también lleva segundo factor.
 **Primer ingreso:** entra con el botón **Ingresar como administrador, auditor o jurado**, con el
 usuario y la contraseña que le dio el administrador, y registra su autenticador igual
 que un votante (ver [3.2](#32-votante)). Conviene activar el bloqueo con huella o rostro de
-la app.
+la app. La **Guía paso a paso: cómo entrar con el autenticador**, debajo del ingreso del personal, lo explica con dibujos para Microsoft Authenticator y para Google Authenticator.
 
 **Su panel** muestra su mesa (o su puesto), los pasos para autorizar y la lista de
 votantes asistidos que puede autorizar: nombre, últimos 4 dígitos de la cédula y mesa.
@@ -752,7 +769,8 @@ Las capturas están en `docs/img/`. Se tomaron con los datos de demostración (p
 candidatos y votos ficticios) sobre una instalación limpia, con el navegador a 1280 px de
 ancho. Ninguna muestra credenciales vigentes: la contraseña y el PIN aparecen ocultos, los
 PIN generados, difuminados, y el QR y los códigos de las capturas 28 a 30 son de una
-instalación de prueba ya borrada (además, cada código vence a los 30 segundos).
+instalación de prueba ya borrada o inventados para la captura (además, cada código vence a
+los 30 segundos).
 
 | # | Archivo | Contenido |
 |---|---|---|
@@ -792,6 +810,8 @@ instalación de prueba ya borrada (además, cada código vence a los 30 segundos
 | 35 | `35-padron-archivo-pines.png` | Resultado de la carga y descarga de los PIN (difuminados) |
 | 36 | `36-puestos.png` | Pestaña Puestos: la ubicación de cada puesto y el formulario para ponerla |
 | 37 | `37-reportes-participacion.png` | Participación por puesto, mesa, municipio y zona en los reportes |
+| 38 | `38-guia-autenticador-microsoft.png` | Guía paso a paso del autenticador: Microsoft Authenticator |
+| 39 | `39-guia-autenticador-google.png` | Guía paso a paso del autenticador: Google Authenticator |
 
 Las capturas 05 y 26 juntas muestran el control de acceso por rol: conviene usarlas también
 en el informe y en el video.
