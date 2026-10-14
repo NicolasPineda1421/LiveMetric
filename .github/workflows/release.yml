@@ -39,12 +39,8 @@ name: LiveMetric Release — Publicacion en Docker Hub
 #                                        (normalmente igual al namespace).
 #     - Secret   DOCKERHUB_DESCRIPCION_TOKEN (opcional) -> Access Token con
 #                                        permiso Read, Write, Delete, solo
-#                                        para publicar docker-hub/README.md
-#                                        como la pagina del repo livemetric
-#                                        (Docker Hub no deja cambiarla con
-#                                        uno Read & Write). Sin el, se intenta
-#                                        con DOCKERHUB_TOKEN y, si no alcanza,
-#                                        el resumen lo avisa.
+#                                        para la pagina de Docker Hub (ver
+#                                        pagina-docker-hub.yml).
 # =============================================================================
 
 on:
@@ -442,52 +438,22 @@ jobs:
           [ "$FALLAS" -eq 0 ]
 
   # ---------------------------------------------------------------------------
-  # 4b) La pagina de nicolaspineda1421/livemetric en Docker Hub: su README es
-  #     docker-hub/README.md, con los comandos para correr el sistema. Solo
-  #     con la version mas nueva, la que recibe latest.
-  #
-  #     Docker Hub exige un token con permiso "Read, Write, Delete" para
-  #     cambiar la pagina; el de publicar (DOCKERHUB_TOKEN) puede ser solo
-  #     "Read & Write". Por eso usa DOCKERHUB_DESCRIPCION_TOKEN si existe, y
-  #     si la pagina no se puede actualizar, lo avisa sin frenar el release:
-  #     las imagenes ya estan publicadas y verificadas.
+  # 4b) La pagina de nicolaspineda1421/livemetric en Docker Hub
+  #     (docker-hub/README.md, con las etiquetas de esta version): solo con la
+  #     version mas nueva, la que recibe latest. Ver pagina-docker-hub.yml,
+  #     que tambien corre solo cuando cambia el README.
   # ---------------------------------------------------------------------------
   docker-hub-page:
     name: Pagina de Docker Hub
     needs: [version, verify-latest]
     if: needs.version.outputs.latest == 'true'
-    runs-on: ubuntu-latest
     permissions:
       contents: read
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-
-      - name: Publicar docker-hub/README.md como la pagina del repo
-        id: pagina
-        continue-on-error: true
-        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_DESCRIPCION_TOKEN || secrets.DOCKERHUB_TOKEN }}
-          repository: ${{ vars.DOCKERHUB_NAMESPACE }}/livemetric
-          short-description: "Votación en tiempo real con acta firmada. Corre el sistema con docker run y docker compose"
-          readme-filepath: ./docker-hub/README.md
-
-      - name: Registrar el resultado en el resumen
-        env:
-          RESULTADO: ${{ steps.pagina.outcome }}
-          NS: ${{ vars.DOCKERHUB_NAMESPACE }}
-        run: |
-          if [ "$RESULTADO" = success ]; then
-            echo "### 📄 Pagina de Docker Hub actualizada: https://hub.docker.com/r/${NS}/livemetric" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "::warning::No se pudo actualizar la pagina de ${NS}/livemetric en Docker Hub"
-            {
-              echo "### ⚠️ La pagina de Docker Hub no se actualizo"
-              echo ""
-              echo "Las imagenes si se publicaron. Docker Hub pide un token con permiso **Read, Write, Delete** para cambiar la pagina: crea uno (Account Settings > Personal access tokens) y guardalo como el secret \`DOCKERHUB_DESCRIPCION_TOKEN\`, o pega a mano \`docker-hub/README.md\` en la pagina del repo."
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
+    uses: ./.github/workflows/pagina-docker-hub.yml
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      DOCKERHUB_DESCRIPCION_TOKEN: ${{ secrets.DOCKERHUB_DESCRIPCION_TOKEN }}
 
   # ---------------------------------------------------------------------------
   # 5) Resumen del release: deja en la pestaña Summary una tabla con las 8

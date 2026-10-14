@@ -1,0 +1,108 @@
+name: LiveMetric — Pagina de Docker Hub
+
+# =============================================================================
+# Publica docker-hub/README.md como la pagina de nicolaspineda1421/livemetric
+# en Docker Hub (la puerta de entrada: dice que correr para levantar el
+# sistema). La lista de etiquetas se arma con la version mas nueva de los
+# tags de git, asi que siempre muestra la que tiene "latest".
+#
+# Corre:
+#   - desde release.yml, al publicar una version que pasa a ser latest;
+#   - en cada push a main que cambia docker-hub/README.md, sin publicar
+#     ninguna imagen;
+#   - a mano (Run workflow), por ejemplo despues de guardar el token.
+#
+# Docker Hub exige un token con permiso "Read, Write, Delete" para cambiar
+# la pagina, mas amplio que el de publicar imagenes ("Read & Write"). Va en
+# el secret opcional DOCKERHUB_DESCRIPCION_TOKEN, que solo usa este
+# workflow; sin el, se intenta con DOCKERHUB_TOKEN. Si no alcanza, el resumen
+# lo avisa y la corrida no falla: las imagenes no dependen de la pagina.
+# =============================================================================
+
+on:
+  workflow_call:
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
+      DOCKERHUB_DESCRIPCION_TOKEN:
+        required: false
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - docker-hub/README.md
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pagina-docker-hub
+  cancel-in-progress: false
+
+jobs:
+  pagina:
+    name: Pagina de Docker Hub
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # Con los tags de git, para saber cual es la version mas nueva.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - name: Armar la pagina con las etiquetas de la version mas nueva
+        env:
+          SALIDA: ${{ runner.temp }}/README.md
+        run: |
+          VERSION="$(git tag --list 'v*.*.*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)"
+          if [ -z "$VERSION" ]; then
+            echo "❌ No hay ningun tag vX.Y.Z"
+            exit 1
+          fi
+          export VERSION
+          # El bloque entre los marcadores pasa a ser la linea de etiquetas de
+          # esa version; los marcadores no van a Docker Hub.
+          python3 - <<'EOF'
+          import os, re
+          version = os.environ["VERSION"]
+          limpia = version[1:]
+          menor = limpia.rsplit(".", 1)[0]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          texto = open("docker-hub/README.md", encoding="utf-8").read()
+          linea = (f"- [`{limpia}`, `{version}`, `{menor}`, `latest`]"
+                   f"(https://github.com/{repo}/blob/{version}/docker-hub/Dockerfile)")
+          texto, n = re.subn(r"<!-- etiquetas:inicio -->\n.*?\n<!-- etiquetas:fin -->", lambda _: linea, texto, flags=re.S)
+          assert n == 1, "docker-hub/README.md tiene que tener un solo bloque de etiquetas"
+          open(os.environ["SALIDA"], "w", encoding="utf-8").write(texto)
+          print(f"Etiquetas de {version}: {linea}")
+          EOF
+
+      - name: Publicar la pagina
+        id: pagina
+        continue-on-error: true
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_DESCRIPCION_TOKEN || secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ vars.DOCKERHUB_NAMESPACE }}/livemetric
+          short-description: "Votación en tiempo real con acta firmada. Corre el sistema con docker run y docker compose"
+          readme-filepath: ${{ runner.temp }}/README.md
+
+      - name: Registrar el resultado en el resumen
+        env:
+          RESULTADO: ${{ steps.pagina.outcome }}
+          NS: ${{ vars.DOCKERHUB_NAMESPACE }}
+        run: |
+          if [ "$RESULTADO" = success ]; then
+            echo "### 📄 Pagina de Docker Hub actualizada: https://hub.docker.com/r/${NS}/livemetric" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::No se pudo actualizar la pagina de ${NS}/livemetric en Docker Hub"
+            {
+              echo "### ⚠️ La pagina de Docker Hub no se actualizo"
+              echo ""
+              echo "Docker Hub pide un token con permiso **Read, Write, Delete** para cambiar la pagina: crea uno (Account Settings > Personal access tokens), guardalo con \`gh secret set DOCKERHUB_DESCRIPCION_TOKEN\` y vuelve a correr este workflow (\`gh workflow run pagina-docker-hub.yml\`)."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

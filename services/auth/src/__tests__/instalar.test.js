@@ -67,3 +67,10 @@ test('sin la carpeta montada (sin -v), se detiene y dice el comando', () => {
 test('fuera de Linux (sin tabla de montajes) no puede saberlo y sigue', () => {
   expect(estaMontada(carpeta, path.join(carpeta, 'no-existe'))).toBe(true);
 });
+
+test('la página de Docker Hub tiene un solo bloque de etiquetas, el que arma pagina-docker-hub.yml', () => {
+  const pagina = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'docker-hub', 'README.md'), 'utf8');
+  expect(pagina.match(/<!-- etiquetas:inicio -->\n[\s\S]*?\n<!-- etiquetas:fin -->/g)).toHaveLength(1);
+  // Los comandos de la página son los de la imagen de instalación.
+  expect(pagina).toContain('docker run --rm --pull always -v "${PWD}:/salida" nicolaspineda1421/livemetric');
+});

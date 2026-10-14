@@ -155,5 +155,8 @@ LiveMetric/
 ├── docs/                         # Esta documentación + modelo de amenazas
 └── .github/
     ├── CODEOWNERS, pull_request_template.md
-    └── workflows/devsecops.yml   # Pipeline DevSecOps
+    └── workflows/
+        ├── devsecops.yml         # Pipeline DevSecOps, en cada push y PR
+        ├── release.yml           # Publica las imágenes en Docker Hub (tag vX.Y.Z)
+        └── pagina-docker-hub.yml # La página de nicolaspineda1421/livemetric en Docker Hub
 ```
