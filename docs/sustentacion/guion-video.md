@@ -16,7 +16,7 @@ Antes de grabar:
    - la aplicación como administrador, y una ventana de incógnito para el votante;
    - Grafana (`http://localhost:3010`);
    - el repositorio en GitHub: pestañas **Actions** y **Security**;
-   - Docker Hub (`hub.docker.com/u/nicolaspineda1421`);
+   - Docker Hub (`hub.docker.com/r/nicolaspineda1421/livemetric`, la puerta de entrada);
    - Threat Dragon (`https://www.threatdragon.com`, o la versión de escritorio) con el modelo ya importado.
 6. **Terminal** en la raíz del repositorio, con letra grande.
 
@@ -98,10 +98,10 @@ git reset prueba.js && rm prueba.js
 
 **Pantalla:** GitHub Actions (workflow *Release*), Docker Hub y el repositorio.
 
-- Una versión se publica creando un tag `vX.Y.Z`. Mostrar la corrida de `release.yml` para la v1.5.0: las siete imágenes se construyen, **Trivy las escanea antes de publicarlas**, el compose de Docker Hub se levanta con ellas y, si todo pasa, suben con `1.5.0`, `v1.5.0`, `1.5` y `latest`, cada una con su SBOM. El último job comprueba en Docker Hub que `latest` quedó en esa versión.
-- En Docker Hub, las siete imágenes con sus etiquetas. Cualquiera corre el sistema sin el repositorio: `docker compose run --rm configurar` y `docker compose up -d` con el compose de `docker-hub/`.
+- Una versión se publica creando un tag `vX.Y.Z`. Mostrar la corrida de `release.yml` para la v1.6.0: las ocho imágenes se construyen, **Trivy las escanea antes de publicarlas**, el sistema se levanta con ellas desde la imagen de instalación y, si todo pasa, suben con `1.6.0`, `v1.6.0`, `1.6` y `latest`, cada una con su SBOM. El último job comprueba en Docker Hub que `latest` quedó en esa versión.
+- En Docker Hub, la página de `nicolaspineda1421/livemetric`: cualquiera corre el sistema sin el repositorio con los dos comandos que muestra (`docker run … nicolaspineda1421/livemetric` y `docker compose up -d`). Después, las demás imágenes con sus etiquetas.
 - Infraestructura como código: el job de Terraform levanta el sistema completo, comprueba que responde y lo destruye en cada corrida. Mostrar `infra/terraform/main.tf`, una de las políticas de `politicas-checkov/` y el paso del *smoke test* en Actions.
-- Docker Swarm: `cd orquestacion && ./deploy.sh v1.5.0` despliega las imágenes publicadas, con réplicas y *rolling updates*. Basta con mencionarlo: Swarm y compose no pueden correr a la vez en la misma PC.
+- Docker Swarm: `cd orquestacion && ./deploy.sh v1.6.0` despliega las imágenes publicadas, con réplicas y *rolling updates*. Basta con mencionarlo: Swarm y compose no pueden correr a la vez en la misma PC.
 
 ## Bloque 7 — Monitoreo y detección en tiempo de ejecución (11:30 – 13:30)
 

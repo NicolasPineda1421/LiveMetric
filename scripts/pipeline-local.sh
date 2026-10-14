@@ -247,18 +247,24 @@ mkdir -p "$LOG_DIR/sbom"
 sbom() {
   "${TRIVY[@]}" -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.70.0 image "livemetric-$1-localcheck" \
     --format cyclonedx --quiet --skip-version-check > "$LOG_DIR/sbom/$1-imagen.cdx.json"
-  # La base no tiene dependencias de Node: su SBOM es el de la imagen.
-  [ "$1" = db ] && return 0
+  # Solo los servicios declaran dependencias de Node: el SBOM de la base y el
+  # del instalador es el de la imagen.
+  [ -d "services/$1" ] || return 0
   "${TRIVY[@]}" -v "$DOCKER_MOUNT_ROOT:/repo" -w /repo aquasec/trivy:0.70.0 fs "services/$1" \
     --format cyclonedx --quiet --skip-version-check > "$LOG_DIR/sbom/$1-dependencias.cdx.json"
 }
 paso 4
-# Ademas de los servicios, "db": la base con su esquema (db/Dockerfile), la
-# imagen que usa el compose de Docker Hub.
-for svc in "${SERVICES[@]}" db; do
-  if [ "$svc" = db ]; then contexto=db; else contexto="services/$svc"; fi
+# Ademas de los servicios, las dos imagenes del compose de Docker Hub: "db",
+# la base con su esquema (db/Dockerfile), e "instalador", la que prepara la
+# carpeta del usuario (docker-hub/Dockerfile, construida desde la raiz).
+for svc in "${SERVICES[@]}" db instalador; do
+  case "$svc" in
+    db) contexto=db; dockerfile=db/Dockerfile ;;
+    instalador) contexto=.; dockerfile=docker-hub/Dockerfile ;;
+    *) contexto="services/$svc"; dockerfile="services/$svc/Dockerfile" ;;
+  esac
   correr "$LOG_DIR/docker-build-$svc.log" "$svc · construyendo la imagen" \
-    docker build --build-arg ACTUALIZAR_PAQUETES="$ACTUALIZAR_PAQUETES" -t "livemetric-$svc-localcheck" "$contexto"
+    docker build --build-arg ACTUALIZAR_PAQUETES="$ACTUALIZAR_PAQUETES" -t "livemetric-$svc-localcheck" -f "$dockerfile" "$contexto"
   BUILD_RC=$?
   resumir build "$svc" "$BUILD_RC" "$LOG_DIR/docker-build-$svc.log"
 

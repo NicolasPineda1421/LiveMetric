@@ -3,7 +3,7 @@
 [![Pipeline DevSecOps](https://github.com/NicolasPineda1421/LiveMetric/actions/workflows/devsecops.yml/badge.svg?branch=main)](https://github.com/NicolasPineda1421/LiveMetric/actions/workflows/devsecops.yml)
 [![Cobertura de pruebas](https://img.shields.io/endpoint?url=https%3A%2F%2Fnicolaspineda1421.github.io%2FLiveMetric%2Fcoverage.json)](https://nicolaspineda1421.github.io/LiveMetric/)
 [![Versión](https://img.shields.io/github/v/release/NicolasPineda1421/LiveMetric?label=versi%C3%B3n)](https://github.com/NicolasPineda1421/LiveMetric/releases)
-[![Docker Hub](https://img.shields.io/docker/v/nicolaspineda1421/livemetric-auth?sort=semver&label=docker%20hub)](https://hub.docker.com/u/nicolaspineda1421)
+[![Docker Hub](https://img.shields.io/docker/v/nicolaspineda1421/livemetric?sort=semver&label=docker%20hub)](https://hub.docker.com/r/nicolaspineda1421/livemetric)
 [![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-blue)](LICENSE)
 
 **Sistema de elecciones y votación en tiempo real**, construido con microservicios y un ciclo DevSecOps completo.
@@ -43,15 +43,16 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 
 **Requisito:** [Docker](https://docs.docker.com/get-docker/) (en Windows, Docker Desktop).
 
-**Sin clonar el repositorio**, con las imágenes publicadas en Docker Hub ([guía completa](docker-hub/README.md)):
+**Sin clonar el repositorio**, desde [Docker Hub](https://hub.docker.com/r/nicolaspineda1421/livemetric) ([guía completa](docker-hub/README.md)):
 
 ```bash
 mkdir livemetric && cd livemetric
-curl -fsSLO https://raw.githubusercontent.com/NicolasPineda1421/LiveMetric/main/docker-hub/docker-compose.yml
-docker compose run --rm configurar      # crea el .env con los secretos de esta instalación
-docker compose up -d                    # http://localhost:3000
+docker run --rm --pull always -v "${PWD}:/salida" nicolaspineda1421/livemetric   # deja el compose y el .env
+docker compose up -d --pull always                                               # http://localhost:3000
 docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay
 ```
+
+Los mismos dos primeros comandos actualizan a la última versión.
 
 **Desde el repositorio**, que además corre el análisis de seguridad antes de arrancar y levanta el monitoreo:
 
@@ -85,10 +86,11 @@ La primera vez tarda varios minutos (construye y analiza las imágenes). Al term
 
 ## Imágenes en Docker Hub
 
-Las 7 imágenes (las 6 del sistema y, desde la v1.5.0, la base con su esquema) se publican en [Docker Hub](https://hub.docker.com/u/nicolaspineda1421) con cada versión de git (`vX.Y.Z`), etiquetadas con la versión exacta (`1.5.0`), la línea menor (`1.5`) y `latest`; desde la v1.3.3, también con el mismo nombre del tag de git (`v1.5.0`). Antes de subirse, las 7 se escanean con Trivy y el [compose de Docker Hub](docker-hub/README.md) se levanta con ellas: si una tiene CVE críticas o altas, o el sistema no arranca, no se publica ninguna (ver [`release.yml`](.github/workflows/release.yml)). `latest` es siempre la versión más nueva: republicar una vieja no lo mueve, y al terminar el workflow comprueba en Docker Hub que `latest` y la versión son la misma imagen en las 7. Cada imagen publicada lleva su SBOM adjunto (`docker buildx imagetools inspect <imagen>:<versión> --format '{{ json .SBOM }}'`). Son las que usan el [compose de Docker Hub](docker-hub/README.md) y el [despliegue con Docker Swarm](orquestacion/README.md).
+Las imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspineda1421) con cada versión de git (`vX.Y.Z`): las 6 del sistema, la base con su esquema (desde la v1.5.0) y la de instalación, [`nicolaspineda1421/livemetric`](https://hub.docker.com/r/nicolaspineda1421/livemetric) (desde la v1.6.0). Esta última es la puerta de entrada: deja en una carpeta el compose y el `.env`, y su página en Docker Hub ([`docker-hub/README.md`](docker-hub/README.md)) dice qué correr. Cada una se etiqueta con la versión exacta (`1.6.0`), la línea menor (`1.6`) y `latest`; desde la v1.3.3, también con el mismo nombre del tag de git (`v1.6.0`). Antes de subirse, las 8 se escanean con Trivy, y el sistema se levanta con ellas desde la imagen de instalación: si una tiene CVE críticas o altas, o el sistema no arranca, no se publica ninguna (ver [`release.yml`](.github/workflows/release.yml)). `latest` es siempre la versión más nueva: republicar una vieja no lo mueve, y al terminar el workflow comprueba en Docker Hub que `latest` y la versión son la misma imagen en las 8. Cada imagen publicada lleva su SBOM adjunto (`docker buildx imagetools inspect <imagen>:<versión> --format '{{ json .SBOM }}'`). Son las que usan el [compose de Docker Hub](docker-hub/README.md) y el [despliegue con Docker Swarm](orquestacion/README.md).
 
 | Servicio | Imagen |
 |---|---|
+| **Instalación** (la puerta de entrada) | [`nicolaspineda1421/livemetric`](https://hub.docker.com/r/nicolaspineda1421/livemetric) |
 | Frontend | [`nicolaspineda1421/livemetric-frontend`](https://hub.docker.com/r/nicolaspineda1421/livemetric-frontend) |
 | Auth | [`nicolaspineda1421/livemetric-auth`](https://hub.docker.com/r/nicolaspineda1421/livemetric-auth) |
 | Voting | [`nicolaspineda1421/livemetric-voting`](https://hub.docker.com/r/nicolaspineda1421/livemetric-voting) |
@@ -98,10 +100,10 @@ Las 7 imágenes (las 6 del sistema y, desde la v1.5.0, la base con su esquema) s
 | Base de datos (PostgreSQL 16 con el esquema) | [`nicolaspineda1421/livemetric-db`](https://hub.docker.com/r/nicolaspineda1421/livemetric-db) |
 
 ```bash
-docker pull nicolaspineda1421/livemetric-auth:1.5.0
+docker pull nicolaspineda1421/livemetric-auth:1.6.0
 ```
 
-Para publicar una versión nueva basta con crear el tag: `git tag -a v1.5.0 -m "..." && git push origin v1.5.0`.
+Para publicar una versión nueva basta con crear el tag: `git tag -a v1.6.0 -m "..." && git push origin v1.6.0`.
 
 ## Estructura del repositorio
 

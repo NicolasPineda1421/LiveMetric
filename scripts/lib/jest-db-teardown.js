@@ -9,7 +9,10 @@ module.exports = async function detenerBaseDePruebas() {
   const nombre = process.env.LIVEMETRIC_DB_PRUEBAS;
   if (!nombre) return;
   try {
-    execFileSync('docker', ['rm', '-f', nombre], { stdio: 'ignore' });
+    // Con -v: los datos de Postgres van en un volumen anónimo (la imagen
+    // declara VOLUME), y "docker rm -f" sin -v lo dejaba suelto en cada
+    // corrida, una base entera por vez.
+    execFileSync('docker', ['rm', '-f', '-v', nombre], { stdio: 'ignore' });
   } catch {
     // Si ya no existe (se corrió con --rm y se detuvo), no hay nada que borrar.
   }

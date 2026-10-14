@@ -61,7 +61,7 @@ docker swarm init
 # 2. Desplegar la versión publicada
 cd orquestacion
 chmod +x deploy.sh
-./deploy.sh v1.5.0
+./deploy.sh v1.6.0
 ```
 
 Conviene desplegar **v1.4.0** o posterior: cada puesto de votación tiene su ubicación (país, departamento, municipio, localidad y zona) y el padrón se filtra por ella, el PIN vence 24 horas después de generarlo, y el padrón se carga desde un CSV (sus migraciones, hasta la 009, las aplica `deploy.sh`). La v1.3.7 trajo la política de contraseñas de las cuentas del panel, y que el PIN sirva haya o no una votación. La imagen del frontend de la v1.3.5 tiene una CVE alta en `pcre2` (10.48-r0), y la de la v1.3.4, cuatro de OpenSSL (su base era `nginx:1.27-alpine`). La v1.3.6 trajo el segundo factor del votante, el voto asistido, el vencimiento del PIN y el padrón con filtros. Además, en las anteriores a v1.3.4, Analytics y Scrutiny contaban a todos los usuarios como uno solo en su límite de peticiones (detrás de nginx), y los nombres con apóstrofes, `&` o `/` se guardaban con entidades HTML. Desde **v1.3.2**: el frontend de las imágenes anteriores no arranca en este stack. Escribía fuera de `/tmp`, que Swarm no puede preparar en un sistema de archivos de solo lectura, y resolvía los servicios del API una sola vez al arrancar: en el primer despliegue se crea antes que ellos y se caía. Desde esta versión los resuelve en cada petición, así que arranca en cualquier orden y sigue a cada servicio aunque cambie de IP. Las anteriores a v1.3.0, además, no firman las actas (Scrutiny) ni verifican

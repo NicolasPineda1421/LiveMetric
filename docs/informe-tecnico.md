@@ -75,7 +75,7 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 | Base de datos de código abierto | PostgreSQL 16, en una red interna sin puerto hacia la PC |
 | Autenticación JWT con roles | JWT HS256 con los roles `admin`, `auditor` y `voter`, verificados en cada servicio |
 | Dockerfile por servicio, docker-compose | Seis Dockerfile multietapa sobre Alpine, sin root; `docker-compose.yml` para desarrollo |
-| Imágenes en Docker Hub con versión semántica | Siete imágenes (las seis del sistema y la base con su esquema) publicadas por `release.yml` con `1.5.0`, `v1.5.0`, `1.5` y `latest`, solo si Trivy aprueba las siete y el sistema arranca con ellas |
+| Imágenes en Docker Hub con versión semántica | Ocho imágenes (las seis del sistema, la base con su esquema y la de instalación, la puerta de entrada) publicadas por `release.yml` con `1.6.0`, `v1.6.0`, `1.6` y `latest`, solo si Trivy aprueba las ocho y el sistema arranca con ellas |
 | Pipeline DevSecOps | 37 jobs en GitHub Actions, con un *Security Gate* final (sección 4) |
 | IaC y orquestación | Terraform (provider `kreuzwerker/docker`) y Docker Swarm |
 | Documentación en Markdown | README y manuales de arquitectura, desarrollo, despliegue, seguridad y usuario |
@@ -358,7 +358,7 @@ En ejecución, los seis contenedores de la aplicación tienen:
 | `infra/terraform/main.tf` | La misma topología como código, con el provider `kreuzwerker/docker` |
 | `orquestacion/docker-stack.yml` | Docker Swarm: réplicas, *rolling update* con *rollback* automático, límites de recursos y red overlay cifrada |
 | `infra/contenedor-global/` | Un contenedor con Docker adentro, para levantar todo sin instalar nada en la PC, incluido el monitoreo (Grafana y Prometheus publicados solo en `127.0.0.1`) |
-| `docker-hub/docker-compose.yml` | El sistema desde Docker Hub, sin clonar el repositorio: baja las imágenes publicadas, incluida `livemetric-db` (Postgres con el esquema adentro). `docker compose run --rm configurar` crea el `.env` con secretos propios, desde la imagen de auth |
+| `docker-hub/` | El sistema desde Docker Hub, sin clonar el repositorio. `docker run nicolaspineda1421/livemetric` deja en una carpeta el compose y el `.env` con secretos propios, y `docker compose up -d` baja las imágenes publicadas, incluida `livemetric-db` (Postgres con el esquema adentro). La página de ese repo en Docker Hub dice qué correr |
 
 *Tabla 3. Formas de desplegar el sistema.*
 
@@ -403,16 +403,16 @@ La publicación es un pipeline aparte (`release.yml`), que corre solo al crear u
 ```mermaid
 flowchart LR
     T(["tag vX.Y.Z"]) --> V["Valida<br/>la versión"]
-    V --> B["Construye las 7 imágenes,<br/>las escanea con Trivy<br/>y genera su SBOM"]
-    V --> P["Levanta con ellas<br/>el compose<br/>de Docker Hub"]
+    V --> B["Construye las 8 imágenes,<br/>las escanea con Trivy<br/>y genera su SBOM"]
+    V --> P["Levanta el sistema<br/>con ellas, desde la<br/>imagen de instalación"]
     B -->|"CVE crítica o alta"| X(["No se publica<br/>ninguna"])
     P -->|"no arranca"| X
-    B -->|"pasan las 7"| H["Login en Docker Hub y publica<br/>X.Y.Z, vX.Y.Z y X.Y con su SBOM,<br/>y latest si es la más nueva"]
+    B -->|"pasan las 8"| H["Login en Docker Hub y publica<br/>X.Y.Z, vX.Y.Z y X.Y con su SBOM,<br/>y latest si es la más nueva"]
     P -->|"responde"| H
-    H --> C["Comprueba que latest<br/>es X.Y.Z en las 7"]
+    H --> C["Comprueba que latest<br/>es X.Y.Z en las 8"]
 ```
 
-*Figura 9. Pipeline de publicación. Las credenciales de Docker Hub se usan después del escaneo y de la prueba del compose: si alguna imagen no pasa, o el sistema no arranca con ellas, el runner nunca las toca. Las publicaciones corren de a una, para que dos versiones no se disputen `latest`.*
+*Figura 9. Pipeline de publicación. Las credenciales de Docker Hub se usan después del escaneo y de la prueba del sistema: si alguna imagen no pasa, o el sistema no arranca con ellas, el runner nunca las toca. Las publicaciones corren de a una, para que dos versiones no se disputen `latest`.*
 
 ### 2.9 Decisiones de diseño principales
 
@@ -570,7 +570,7 @@ El enunciado menciona Bandit, que analiza código Python. LiveMetric está escri
 
 ### 4.4 Fase 3 — Integración y construcción
 
-El job `container-scan` construye las siete imágenes reales (las seis del sistema y `livemetric-db`, la base con su esquema), igual que en producción, y las escanea con Trivy. Una CVE crítica o alta con corrección disponible detiene el pipeline. Las excepciones irían en `.trivyignore` con su justificación; hoy no hay ninguna.
+El job `container-scan` construye las ocho imágenes reales (las seis del sistema, `livemetric-db`, la base con su esquema, y `livemetric`, la de instalación), igual que en producción, y las escanea con Trivy. Una CVE crítica o alta con corrección disponible detiene el pipeline. Las excepciones irían en `.trivyignore` con su justificación; hoy no hay ninguna.
 
 El mismo job genera el **SBOM** (*Software Bill of Materials*) de cada servicio en **CycloneDX**, también con Trivy: el de la imagen (los paquetes de Alpine y las dependencias de Node que lleva) y el de las dependencias que declara el servicio en su `package-lock.json`, sin las de desarrollo. El segundo hace falta sobre todo en el frontend: sus librerías van compiladas dentro del JavaScript y la imagen no las deja ver. Los dos quedan en la corrida durante 90 días (artefacto `sbom-<servicio>`), y se generan antes del escaneo, así que están aunque la imagen no pase. Con un SBOM guardado se puede saber, el día que se publica una CVE nueva, si una versión ya desplegada la tiene (`trivy sbom <archivo>`), sin reconstruirla. El pipeline local deja los mismos archivos en su carpeta de resultados.
 
@@ -621,7 +621,7 @@ Entre las pruebas hay ataques simulados. Por ejemplo, un acta reescrita con todo
 |---|---|---|
 | `iac-scan` | **Checkov** | Revisa `infra/terraform/main.tf` con seis políticas propias (ver abajo). Bloquea |
 | `iac-deploy` | **Terraform** | `terraform apply` levanta el sistema completo, un *smoke test* comprueba que los cuatro servicios responden, y `terraform destroy` lo limpia |
-| `release.yml` | **Trivy** + Docker Hub | Publica las siete imágenes solo si pasan el escaneo y si el compose de Docker Hub arranca con ellas (Figura 9), cada una con su SBOM adjunto (SPDX, de BuildKit) y el de CycloneDX en los artefactos |
+| `release.yml` | **Trivy** + Docker Hub | Publica las ocho imágenes solo si pasan el escaneo y si el sistema arranca con ellas desde la imagen de instalación (Figura 9), cada una con su SBOM adjunto (SPDX, de BuildKit) y el de CycloneDX en los artefactos |
 | `orquestacion/deploy.sh` | **Docker Swarm** | Despliega la versión publicada, después de verificar que las seis imágenes existen en Docker Hub |
 
 *Tabla 7. Controles y automatización del despliegue.*
@@ -661,7 +661,7 @@ definition:
             type=raw,value=latest,enable=${{ needs.version.outputs.latest }}
 ```
 
-*Fragmento 6. Etiquetas de cada imagen publicada (`release.yml`): `1.5.0`, `v1.5.0`, `1.5` y `latest`, este último solo si la versión es la más nueva de los tags de git.*
+*Fragmento 6. Etiquetas de cada imagen publicada (`release.yml`): `1.6.0`, `v1.6.0`, `1.6` y `latest`, este último solo si la versión es la más nueva de los tags de git.*
 
 ### 4.7 Fase 6 — Operación y monitoreo
 
@@ -1011,7 +1011,7 @@ Además, Falco corre con `rule_matching=all`, porque por defecto sus reglas gen�
 |---|---|
 | Repositorio | https://github.com/NicolasPineda1421/LiveMetric |
 | Imágenes | https://hub.docker.com/u/nicolaspineda1421 |
-| Versión documentada | v1.5.0 (release en GitHub y tags en Docker Hub) |
+| Versión documentada | v1.6.0 (release en GitHub y tags en Docker Hub) |
 | Modelo de amenazas | `docs/threat-model/livemetric.threatdragon.json` y `STRIDE-analysis.md` |
 | Pipeline | `.github/workflows/devsecops.yml` y `release.yml` |
 | Manuales | `docs/` (arquitectura, desarrollo, instalación y despliegue, seguridad, usuario) |

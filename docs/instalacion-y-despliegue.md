@@ -8,7 +8,7 @@ Hay cinco formas de levantar LiveMetric. Las tres primeras usan el mismo `docker
 | [`contenedor.sh` / `contenedor.bat`](#2-contenedor-global-solo-docker) | Lo mismo, pero todo dentro de un contenedor global | Solo Docker |
 | [`docker compose`](#3-docker-compose-directo) | Levanta el stack sin analizar nada | Docker |
 | [Terraform](#4-terraform-infraestructura-como-código) | El stack como código, con su propio PostgreSQL local | Docker + Terraform |
-| [Desde Docker Hub](#5-desde-docker-hub-sin-el-repositorio) | Baja las imágenes publicadas y levanta el sistema, sin clonar el repositorio | Solo Docker |
+| [Desde Docker Hub](#5-desde-docker-hub-sin-el-repositorio) | `docker run` deja el compose y el `.env` en una carpeta, y `docker compose up -d` levanta el sistema con las imágenes publicadas, sin clonar el repositorio | Solo Docker |
 
 ## El archivo `.env`
 
@@ -129,17 +129,22 @@ terraform destroy -var-file="terraform.tfvars" # para desmontarlo
 
 ## 5. Desde Docker Hub (sin el repositorio)
 
-Para usar LiveMetric sin clonar el repositorio ni construir nada: se descarga [`docker-hub/docker-compose.yml`](../docker-hub/docker-compose.yml), que baja de Docker Hub las 7 imágenes publicadas (las 6 del sistema y `livemetric-db`, la base con el esquema y las migraciones adentro). Todas pasaron el escaneo de Trivy antes de publicarse.
+Para usar LiveMetric sin clonar el repositorio ni construir nada. La puerta de entrada es [`nicolaspineda1421/livemetric`](https://hub.docker.com/r/nicolaspineda1421/livemetric), cuya página en Docker Hub es [`docker-hub/README.md`](../docker-hub/README.md):
 
 ```bash
 mkdir livemetric && cd livemetric
-curl -fsSLO https://raw.githubusercontent.com/NicolasPineda1421/LiveMetric/main/docker-hub/docker-compose.yml
-docker compose run --rm configurar      # crea el .env con los secretos de esta instalación
-docker compose up -d
+docker run --rm --pull always -v "${PWD}:/salida" nicolaspineda1421/livemetric
+docker compose up -d --pull always
 docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay
 ```
 
-En Windows, con PowerShell, `curl.exe` en lugar de `curl`. El `.env` lo crea el servicio `configurar` con la misma generación que `scripts/lib/generar-env.js`, dentro de la imagen de auth: no hace falta Node.js en la PC. En cada `up`, el servicio `revisar-configuracion` comprueba antes que nada que el `.env` tenga todos los secretos; si falta alguno, no arranca nada y su registro dice qué correr. Se actualiza con `docker compose pull && docker compose up -d`, y las migraciones ponen al día la base. Es el mismo sistema, sin el análisis de seguridad local, sin el monitoreo y sin los puertos del API en `127.0.0.1`. Su base es otra (proyecto `livemetric-dockerhub`). Los detalles están en [`docker-hub/README.md`](../docker-hub/README.md).
+La imagen de instalación (`docker-hub/Dockerfile`, que corre `docker-hub/instalar.js`) deja en la carpeta dos archivos:
+- [`docker-compose.yml`](../docker-hub/docker-compose.yml), que baja de Docker Hub las 7 imágenes del sistema: las 6 componentes y `livemetric-db`, la base con el esquema y las migraciones adentro;
+- el `.env`, con la misma generación de secretos que `scripts/lib/generar-env.js`, así que no hace falta Node.js en la PC.
+
+Corre como root para poder escribir en una carpeta de otro dueño, y le deja los archivos a ese dueño. No pisa un `docker-compose.yml` ni un `.env` ajenos. Si falta el `-v`, se detiene, porque los archivos se perderían con el contenedor. En `cmd`, `${PWD}` se escribe `%cd%`. Los mismos dos comandos actualizan: traen el compose nuevo, agregan al `.env` los secretos que falten y bajan las imágenes de la versión más nueva. Al arrancar, las migraciones ponen al día la base.
+
+En cada `up`, el servicio `revisar-configuracion` comprueba antes que nada que el `.env` tenga todos los secretos; si falta alguno, no arranca nada y su registro dice qué correr. Es el mismo sistema, sin el análisis de seguridad local, sin el monitoreo y sin los puertos del API en `127.0.0.1`. Su base es otra (proyecto `livemetric-dockerhub`). Los detalles están en [`docker-hub/README.md`](../docker-hub/README.md).
 
 ## Acceso desde otras PC de la red
 

@@ -1,9 +1,10 @@
 name: LiveMetric Release — Publicacion en Docker Hub
 
 # =============================================================================
-# Publica las 7 imagenes del proyecto en Docker Hub, versionadas con semver:
-# los 6 componentes y la base con su esquema (livemetric-db, la que usa el
-# compose de Docker Hub, docker-hub/docker-compose.yml).
+# Publica las 8 imagenes del proyecto en Docker Hub, versionadas con semver:
+# los 6 componentes, la base con su esquema (livemetric-db) y la de instalacion
+# (livemetric), la puerta de entrada: deja en la carpeta del usuario el compose
+# de docker-hub/ y el .env, y su README es la pagina del repo en Docker Hub.
 #
 # Se separa de "devsecops.yml" a proposito: ese pipeline corre en CADA push y
 # PR y su trabajo es BLOQUEAR codigo inseguro; este corre solo cuando el
@@ -16,14 +17,14 @@ name: LiveMetric Release — Publicacion en Docker Hub
 #   - workflow_dispatch: ejecucion manual indicando la version, util para la
 #     sustentacion o para republicar sin crear un tag nuevo.
 #
-# Puerta de seguridad: las 7 imagenes se construyen y se escanean con Trivy, y
-# SOLO se publican si pasan las 7 y si el compose de Docker Hub arranca con
+# Puerta de seguridad: las 8 imagenes se construyen y se escanean con Trivy, y
+# SOLO se publican si pasan las 8 y si el compose de Docker Hub arranca con
 # ellas. Una imagen con CVEs CRITICAL/HIGH nunca llega a Docker Hub, y
 # tampoco las demas de esa version.
 #
 # "latest": lo recibe la version solo si es la mas nueva de los tags de git
 # (republicar una version vieja no lo mueve hacia atras), y al final se
-# comprueba en Docker Hub que latest y la version son la misma imagen en las 7.
+# comprueba en Docker Hub que latest y la version son la misma imagen en las 8.
 #
 # Requisitos de configuracion (una sola vez, en el repositorio de GitHub):
 #   Settings > Secrets and variables > Actions
@@ -36,6 +37,14 @@ name: LiveMetric Release — Publicacion en Docker Hub
 #                                        (ej. "livemetric").
 #     - Secret   DOCKERHUB_USERNAME   -> usuario con el que se hace login
 #                                        (normalmente igual al namespace).
+#     - Secret   DOCKERHUB_DESCRIPCION_TOKEN (opcional) -> Access Token con
+#                                        permiso Read, Write, Delete, solo
+#                                        para publicar docker-hub/README.md
+#                                        como la pagina del repo livemetric
+#                                        (Docker Hub no deja cambiarla con
+#                                        uno Read & Write). Sin el, se intenta
+#                                        con DOCKERHUB_TOKEN y, si no alcanza,
+#                                        el resumen lo avisa.
 # =============================================================================
 
 on:
@@ -65,7 +74,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # 1) Resuelve la version una sola vez y la comparte con el resto de jobs,
-  #    para que las 7 imagenes lleven exactamente el mismo numero.
+  #    para que las 8 imagenes lleven exactamente el mismo numero.
   # ---------------------------------------------------------------------------
   version:
     name: Resolver version
@@ -119,7 +128,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # 2) Construye y escanea cada microservicio, sin publicar nada todavia.
-  #    Se publica solo si pasan LAS SIETE (job "publish", mas abajo): asi
+  #    Se publica solo si pasan TODAS (job "publish", mas abajo): asi
   #    "latest" se mueve en todas las imagenes juntas o en ninguna, y nunca
   #    quedan unas en una version y otras en otra.
   # ---------------------------------------------------------------------------
@@ -131,11 +140,21 @@ jobs:
       contents: read
     strategy:
       # Sin fail-fast: si una imagen falla el escaneo, queremos ver el estado
-      # de las otras cinco en la misma corrida, no un reporte a medias.
+      # de las demas en la misma corrida, no un reporte a medias.
       fail-fast: false
       matrix:
         # "db": la base con su esquema (db/Dockerfile).
-        service: [auth, voting, analytics, scrutiny, scheduler, frontend, db]
+        include:
+          - { service: auth, image: livemetric-auth, context: ./services/auth, dockerfile: ./services/auth/Dockerfile, descripcion: "Microservicio auth de LiveMetric" }
+          - { service: voting, image: livemetric-voting, context: ./services/voting, dockerfile: ./services/voting/Dockerfile, descripcion: "Microservicio voting de LiveMetric" }
+          - { service: analytics, image: livemetric-analytics, context: ./services/analytics, dockerfile: ./services/analytics/Dockerfile, descripcion: "Microservicio analytics de LiveMetric" }
+          - { service: scrutiny, image: livemetric-scrutiny, context: ./services/scrutiny, dockerfile: ./services/scrutiny/Dockerfile, descripcion: "Microservicio scrutiny de LiveMetric" }
+          - { service: scheduler, image: livemetric-scheduler, context: ./services/scheduler, dockerfile: ./services/scheduler/Dockerfile, descripcion: "Microservicio scheduler de LiveMetric" }
+          - { service: frontend, image: livemetric-frontend, context: ./services/frontend, dockerfile: ./services/frontend/Dockerfile, descripcion: "Frontend de LiveMetric (React + nginx)" }
+          - { service: db, image: livemetric-db, context: ./db, dockerfile: ./db/Dockerfile, descripcion: "Base de datos de LiveMetric: PostgreSQL 16 con el esquema y las migraciones" }
+          # La puerta de entrada en Docker Hub: deja el compose y el .env en la
+          # carpeta del usuario. Se construye desde la raiz del repo.
+          - { service: instalador, image: livemetric, context: ., dockerfile: ./docker-hub/Dockerfile, descripcion: "LiveMetric: prepara la carpeta para correr el sistema con docker compose" }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -150,7 +169,8 @@ jobs:
       - name: Construir imagen (sin publicar todavia)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
-          context: ${{ matrix.service == 'db' && './db' || format('./services/{0}', matrix.service) }}
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           # Un valor por corrida: la capa de "apk upgrade" no sale de la cache de
           # una publicacion anterior (ver ARG ACTUALIZAR_PAQUETES en el Dockerfile).
           build-args: ACTUALIZAR_PAQUETES=${{ github.run_id }}
@@ -162,7 +182,7 @@ jobs:
 
       # -----------------------------------------------------------------------
       # PUERTA DE SEGURIDAD: mismas reglas que el job "container-scan" del
-      # pipeline principal. exit-code 1 detiene el job, y ninguna de las siete
+      # pipeline principal. exit-code 1 detiene el job, y ninguna de las ocho
       # imagenes se publica.
       # -----------------------------------------------------------------------
       - name: Escanear la imagen candidata con Trivy
@@ -188,9 +208,10 @@ jobs:
           format: 'cyclonedx'
           output: 'sbom-${{ matrix.service }}-${{ needs.version.outputs.semver }}-imagen.cdx.json'
 
-      # La base no tiene dependencias de Node: su SBOM es el de la imagen.
+      # Solo los servicios declaran dependencias de Node (package-lock.json):
+      # el SBOM de la base y el del instalador es el de la imagen.
       - name: Generar el SBOM de las dependencias
-        if: matrix.service != 'db'
+        if: startsWith(matrix.context, './services/')
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: 'fs'
@@ -225,33 +246,47 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Construir las 7 imagenes
+      - name: Construir las 8 imagenes
         run: |
-          for s in auth voting analytics scrutiny scheduler frontend db; do
-            if [ "$s" = db ]; then CONTEXTO=./db; else CONTEXTO="./services/$s"; fi
+          construir() {
             docker build -q --build-arg ACTUALIZAR_PAQUETES="${{ github.run_id }}" \
-              -t "${DOCKERHUB_NAMESPACE}/livemetric-${s}:${LIVEMETRIC_VERSION}" "$CONTEXTO"
+              -f "$3" -t "${DOCKERHUB_NAMESPACE}/$1:${LIVEMETRIC_VERSION}" "$2"
+          }
+          for s in auth voting analytics scrutiny scheduler frontend; do
+            construir "livemetric-$s" "./services/$s" "./services/$s/Dockerfile"
           done
+          construir livemetric-db ./db ./db/Dockerfile
+          construir livemetric . ./docker-hub/Dockerfile
 
-      - name: Preparar una carpeta solo con el compose
+      # Como en la pagina de Docker Hub: en una carpeta vacia, la imagen de
+      # instalacion deja el compose y el .env.
+      - name: Preparar la carpeta con la imagen de instalacion
         run: |
           mkdir -p "$RUNNER_TEMP/livemetric"
-          cp docker-hub/docker-compose.yml "$RUNNER_TEMP/livemetric/"
+          cd "$RUNNER_TEMP/livemetric"
+          if docker run --rm "${DOCKERHUB_NAMESPACE}/livemetric:${LIVEMETRIC_VERSION}"; then
+            echo "❌ Sin -v no deberia seguir: los archivos se perderian"
+            exit 1
+          fi
+          docker run --rm -v "${PWD}:/salida" "${DOCKERHUB_NAMESPACE}/livemetric:${LIVEMETRIC_VERSION}"
+          test -f docker-compose.yml && test -f .env
 
       - name: Sin .env, no arranca nada
         working-directory: ${{ runner.temp }}/livemetric
         run: |
+          mv .env .env.guardado
           if docker compose up -d; then
             echo "❌ Arranco sin .env"
             exit 1
           fi
           docker compose logs revisar-configuracion | grep -q "docker compose run --rm configurar"
           docker compose down
+          mv .env.guardado .env
 
-      - name: Crear el .env y levantar el sistema
+      - name: Levantar el sistema
         working-directory: ${{ runner.temp }}/livemetric
         run: |
-          docker compose run --rm configurar
+          docker compose run --rm configurar | grep -q "completo"
           docker compose up -d
 
       - name: Comprobar que responde
@@ -273,7 +308,7 @@ jobs:
         run: docker compose down -v || true
 
   # ---------------------------------------------------------------------------
-  # 3) Publica las siete imagenes, solo si las siete pasaron el escaneo y el
+  # 3) Publica las ocho imagenes, solo si las ocho pasaron el escaneo y el
   #    compose de Docker Hub arranco con ellas.
   # ---------------------------------------------------------------------------
   publish:
@@ -285,7 +320,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [auth, voting, analytics, scrutiny, scheduler, frontend, db]
+        include:
+          - { service: auth, image: livemetric-auth, context: ./services/auth, dockerfile: ./services/auth/Dockerfile, descripcion: "Microservicio auth de LiveMetric" }
+          - { service: voting, image: livemetric-voting, context: ./services/voting, dockerfile: ./services/voting/Dockerfile, descripcion: "Microservicio voting de LiveMetric" }
+          - { service: analytics, image: livemetric-analytics, context: ./services/analytics, dockerfile: ./services/analytics/Dockerfile, descripcion: "Microservicio analytics de LiveMetric" }
+          - { service: scrutiny, image: livemetric-scrutiny, context: ./services/scrutiny, dockerfile: ./services/scrutiny/Dockerfile, descripcion: "Microservicio scrutiny de LiveMetric" }
+          - { service: scheduler, image: livemetric-scheduler, context: ./services/scheduler, dockerfile: ./services/scheduler/Dockerfile, descripcion: "Microservicio scheduler de LiveMetric" }
+          - { service: frontend, image: livemetric-frontend, context: ./services/frontend, dockerfile: ./services/frontend/Dockerfile, descripcion: "Frontend de LiveMetric (React + nginx)" }
+          - { service: db, image: livemetric-db, context: ./db, dockerfile: ./db/Dockerfile, descripcion: "Base de datos de LiveMetric: PostgreSQL 16 con el esquema y las migraciones" }
+          # La puerta de entrada en Docker Hub: deja el compose y el .env en la
+          # carpeta del usuario. Se construye desde la raiz del repo.
+          - { service: instalador, image: livemetric, context: ., dockerfile: ./docker-hub/Dockerfile, descripcion: "LiveMetric: prepara la carpeta para correr el sistema con docker compose" }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -309,7 +354,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
-          images: ${{ vars.DOCKERHUB_NAMESPACE }}/livemetric-${{ matrix.service }}
+          images: ${{ vars.DOCKERHUB_NAMESPACE }}/${{ matrix.image }}
           tags: |
             type=semver,pattern={{version}},value=${{ needs.version.outputs.semver }}
             type=raw,value=${{ needs.version.outputs.semver }}
@@ -317,7 +362,7 @@ jobs:
             type=raw,value=latest,enable=${{ needs.version.outputs.latest }}
           labels: |
             org.opencontainers.image.title=LiveMetric ${{ matrix.service }}
-            org.opencontainers.image.description=${{ matrix.service == 'db' && 'Base de datos de LiveMetric: PostgreSQL 16 con el esquema y las migraciones' || format('Microservicio {0} de LiveMetric', matrix.service) }}
+            org.opencontainers.image.description=${{ matrix.descripcion }}
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.vendor=LiveMetric
 
@@ -341,7 +386,8 @@ jobs:
       - name: Publicar en Docker Hub
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
-          context: ${{ matrix.service == 'db' && './db' || format('./services/{0}', matrix.service) }}
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           # El mismo valor que en "scan": la misma capa de "apk upgrade".
           build-args: ACTUALIZAR_PAQUETES=${{ github.run_id }}
           push: true
@@ -361,7 +407,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------
-  # 4) Comprueba en Docker Hub que "latest" quedo en esta version en las siete
+  # 4) Comprueba en Docker Hub que "latest" quedo en esta version en las ocho
   #    imagenes (la misma imagen, por su digest). Si no, la corrida falla.
   # ---------------------------------------------------------------------------
   verify-latest:
@@ -379,10 +425,11 @@ jobs:
         run: |
           CLEAN="${VERSION#v}"
           # "|| true": si una etiqueta no existe, se informa y se sigue con las
-          # demas, para ver el estado de las siete en una sola corrida.
+          # demas, para ver el estado de las ocho en una sola corrida.
           FALLAS=0
-          for s in auth voting analytics scrutiny scheduler frontend db; do
-            IMAGEN="${NS}/livemetric-${s}"
+          for imagen in livemetric-auth livemetric-voting livemetric-analytics livemetric-scrutiny \
+                        livemetric-scheduler livemetric-frontend livemetric-db livemetric; do
+            IMAGEN="${NS}/${imagen}"
             VERSIONADA="$(docker buildx imagetools inspect "${IMAGEN}:${CLEAN}" --format '{{ .Manifest.Digest }}' || true)"
             LATEST="$(docker buildx imagetools inspect "${IMAGEN}:latest" --format '{{ .Manifest.Digest }}' || true)"
             if [ -n "$VERSIONADA" ] && [ "$VERSIONADA" = "$LATEST" ]; then
@@ -395,7 +442,55 @@ jobs:
           [ "$FALLAS" -eq 0 ]
 
   # ---------------------------------------------------------------------------
-  # 5) Resumen del release: deja en la pestaña Summary una tabla con las 7
+  # 4b) La pagina de nicolaspineda1421/livemetric en Docker Hub: su README es
+  #     docker-hub/README.md, con los comandos para correr el sistema. Solo
+  #     con la version mas nueva, la que recibe latest.
+  #
+  #     Docker Hub exige un token con permiso "Read, Write, Delete" para
+  #     cambiar la pagina; el de publicar (DOCKERHUB_TOKEN) puede ser solo
+  #     "Read & Write". Por eso usa DOCKERHUB_DESCRIPCION_TOKEN si existe, y
+  #     si la pagina no se puede actualizar, lo avisa sin frenar el release:
+  #     las imagenes ya estan publicadas y verificadas.
+  # ---------------------------------------------------------------------------
+  docker-hub-page:
+    name: Pagina de Docker Hub
+    needs: [version, verify-latest]
+    if: needs.version.outputs.latest == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Publicar docker-hub/README.md como la pagina del repo
+        id: pagina
+        continue-on-error: true
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_DESCRIPCION_TOKEN || secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ vars.DOCKERHUB_NAMESPACE }}/livemetric
+          short-description: "Votación en tiempo real con acta firmada. Corre el sistema con docker run y docker compose"
+          readme-filepath: ./docker-hub/README.md
+
+      - name: Registrar el resultado en el resumen
+        env:
+          RESULTADO: ${{ steps.pagina.outcome }}
+          NS: ${{ vars.DOCKERHUB_NAMESPACE }}
+        run: |
+          if [ "$RESULTADO" = success ]; then
+            echo "### 📄 Pagina de Docker Hub actualizada: https://hub.docker.com/r/${NS}/livemetric" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::No se pudo actualizar la pagina de ${NS}/livemetric en Docker Hub"
+            {
+              echo "### ⚠️ La pagina de Docker Hub no se actualizo"
+              echo ""
+              echo "Las imagenes si se publicaron. Docker Hub pide un token con permiso **Read, Write, Delete** para cambiar la pagina: crea uno (Account Settings > Personal access tokens) y guardalo como el secret \`DOCKERHUB_DESCRIPCION_TOKEN\`, o pega a mano \`docker-hub/README.md\` en la pagina del repo."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # 5) Resumen del release: deja en la pestaña Summary una tabla con las 8
   #    imagenes y el comando para consumirlas. Sirve de evidencia directa
   #    para el informe tecnico y la sustentacion.
   # ---------------------------------------------------------------------------
@@ -415,7 +510,7 @@ jobs:
             {
               echo "## ❌ Release ${VERSION} NO publicado"
               echo ""
-              echo "Una o mas imagenes no superaron el escaneo de Trivy, asi que no se publico ninguna de las 7. Docker Hub sigue como estaba."
+              echo "Una o mas imagenes no superaron el escaneo de Trivy, asi que no se publico ninguna de las 8. Docker Hub sigue como estaba."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
@@ -431,7 +526,7 @@ jobs:
             {
               echo "## ❌ Release ${VERSION} publicado a medias"
               echo ""
-              echo "Las 7 imagenes pasaron el escaneo, pero alguna no se pudo subir a Docker Hub. Vuelve a correr los jobs fallidos (Re-run failed jobs) para completarla."
+              echo "Las 8 imagenes pasaron el escaneo, pero alguna no se pudo subir a Docker Hub. Vuelve a correr los jobs fallidos (Re-run failed jobs) para completarla."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
@@ -444,7 +539,7 @@ jobs:
             exit 1
           fi
           if [ "${{ needs.version.outputs.latest }}" = "true" ]; then
-            ETIQUETAS="\`${VERSION}\` (igual que el tag de git), \`${CLEAN%.*}\` y \`latest\` (comprobado en Docker Hub: es la misma imagen en las 7)"
+            ETIQUETAS="\`${VERSION}\` (igual que el tag de git), \`${CLEAN%.*}\` y \`latest\` (comprobado en Docker Hub: es la misma imagen en las 8)"
           else
             ETIQUETAS="\`${VERSION}\` (igual que el tag de git) y \`${CLEAN%.*}\`. **No** recibe \`latest\`: ya hay una version mas nueva publicada"
           fi
@@ -457,16 +552,16 @@ jobs:
             for s in auth voting analytics scrutiny scheduler frontend db; do
               echo "| ${s} | \`${NS}/livemetric-${s}:${CLEAN}\` |"
             done
+            echo "| instalacion | \`${NS}/livemetric:${CLEAN}\` |"
             echo ""
             echo "Cada imagen tambien queda como ${ETIQUETAS}."
             echo ""
-            echo "Las 7 imagenes superaron el escaneo de Trivy (CRITICAL/HIGH), y el compose de Docker Hub arranco con ellas, antes de publicar cualquiera."
+            echo "Las 8 imagenes superaron el escaneo de Trivy (CRITICAL/HIGH), y el sistema arranco con ellas desde la imagen de instalacion, antes de publicar cualquiera."
             echo ""
-            echo "Para correr el sistema sin el repositorio, solo con Docker:"
+            echo "Para correr el sistema sin el repositorio, solo con Docker (en una carpeta vacia):"
             echo '```bash'
-            echo "curl -fsSLO https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/docker-hub/docker-compose.yml"
-            echo "docker compose run --rm configurar"
-            echo "docker compose up -d"
+            echo "docker run --rm --pull always -v \"\${PWD}:/salida\" ${NS}/livemetric"
+            echo "docker compose up -d --pull always"
             echo '```'
             echo ""
             echo "Cada imagen lleva su SBOM adjunto en Docker Hub, y el de CycloneDX (imagen y dependencias) queda en los artefactos de esta corrida. Para leer el adjunto:"

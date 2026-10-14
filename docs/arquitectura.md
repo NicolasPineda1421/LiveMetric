@@ -58,7 +58,7 @@ Ningún secreto (`POSTGRES_PASSWORD`, `JWT_SECRET`, `VOTER_ID_SALT`, `VOTERS_ENC
 
 - `.env.example`: plantilla sin valores reales.
 - `.env`: lo genera `scripts/lib/generar-env.js` la primera vez que corre `start.sh`/`start.bat`/`contenedor.sh`, con valores aleatorios propios de esa instalación. Como cada instalación tiene su propia base, no hay ningún secreto que compartir entre personas o PCs.
-- Con el compose de Docker Hub, el `.env` lo crea `docker compose run --rm configurar`, con la misma generación (`services/auth/src/secretosInstalacion.js`) desde la imagen de auth. El servicio que revisa en cada arranque que no falte ninguno recibe solo si cada secreto existe (`${VAR:+si}`), nunca su valor.
+- Con el compose de Docker Hub, el `.env` lo crea la imagen de instalación (`nicolaspineda1421/livemetric`) o `docker compose run --rm configurar`, con la misma generación (`services/auth/src/secretosInstalacion.js`). El servicio que revisa en cada arranque que no falte ninguno recibe solo si cada secreto existe (`${VAR:+si}`), nunca su valor.
 - En GitHub Actions, las pruebas generan secretos al azar en cada corrida (`jest.setup.js`) contra una base desechable, y el entorno de staging genera su propio `.env` igual que una instalación nueva: el repositorio no necesita *secrets* de la aplicación.
 
 Tampoco hay credenciales de la aplicación en el repositorio: `db/init.sql` no crea ningún administrador ni asigna PINs. El primer administrador lo pide el script de arranque con `services/auth/src/scripts/crearAdmin.js`, que lee la contraseña por teclado sin mostrarla (ver [instalación](instalacion-y-despliegue.md#primer-administrador)).
@@ -131,7 +131,8 @@ LiveMetric/
 │   ├── init.sql                  # Esquema completo + datos de demostración (lo carga Postgres)
 │   ├── migrations/               # 002–009, solo para bases creadas con un init.sql anterior
 │   └── Dockerfile                # Imagen livemetric-db: Postgres 16 con el esquema y las migraciones
-├── docker-hub/                   # Compose que corre el sistema desde Docker Hub, sin el repositorio
+├── docker-hub/                   # El sistema desde Docker Hub, sin el repositorio: compose, imagen de
+│                                 # instalación (Dockerfile + instalar.js) y su página (README.md)
 ├── services/
 │   ├── frontend/                 # SPA React + nginx (proxy reverso)
 │   ├── auth/                     # A: login dual, padrón, usuarios, auditoría

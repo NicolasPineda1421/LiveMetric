@@ -1,6 +1,7 @@
 // El .env del compose de Docker Hub (docker-hub/docker-compose.yml), que
 // corre LiveMetric sin el repositorio: este script viaja en la imagen de
-// auth, así que basta con Docker.
+// auth y en la de instalación (docker-hub/instalar.js), así que basta con
+// Docker.
 //
 //   docker compose run --rm configurar
 //     Crea el .env de la carpeta con secretos aleatorios propios de esta
@@ -35,7 +36,7 @@ const ENCABEZADO = `# LiveMetric - Configuración de esta instalación (compose 
 const OPCIONALES = `
 # --- Opcionales: quita el "#" para cambiarlas ---
 # Versión de las imágenes (por defecto, la última publicada: latest).
-# LIVEMETRIC_VERSION=1.5.0
+# LIVEMETRIC_VERSION=1.6.0
 # Puerto de la aplicación en esta PC (por defecto, 3000).
 # LIVEMETRIC_PUERTO=3000
 # Horas que dura cada PIN de votante desde que se genera (de 1 a 2160).
@@ -140,4 +141,4 @@ if (require.main === module) {
   process.exitCode = main(process.argv.slice(2));
 }
 
-module.exports = { prepararEnv, leerVariables, secretosFaltantes, main };
+module.exports = { prepararEnv, leerVariables, secretosFaltantes, darAlDuenoDeLaCarpeta, main };

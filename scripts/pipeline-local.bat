@@ -121,13 +121,18 @@ REM cache la capa de "apk upgrade" de un build de otro dia (ver ARG
 REM ACTUALIZAR_PAQUETES en los Dockerfile).
 for /f %%d in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd"') do set "ACTUALIZAR_PAQUETES=%%d"
 call :paso 4
-REM Ademas de los servicios, "db": la base con su esquema (db\Dockerfile), la
-REM imagen que usa el compose de Docker Hub.
-for %%S in (%SERVICES% db) do (
+REM Ademas de los servicios, las dos imagenes del compose de Docker Hub: "db",
+REM la base con su esquema (db\Dockerfile), e "instalador", la que prepara la
+REM carpeta del usuario (docker-hub\Dockerfile, construida desde la raiz).
+for %%S in (%SERVICES% db instalador) do (
   set "CONTEXTO=services\%%S"
+  set "DOCKERFILE=services\%%S\Dockerfile"
   if "%%S"=="db" set "CONTEXTO=db"
+  if "%%S"=="db" set "DOCKERFILE=db\Dockerfile"
+  if "%%S"=="instalador" set "CONTEXTO=."
+  if "%%S"=="instalador" set "DOCKERFILE=docker-hub\Dockerfile"
   call :en_curso "%%S - construyendo la imagen"
-  docker build --build-arg ACTUALIZAR_PAQUETES=!ACTUALIZAR_PAQUETES! -t livemetric-%%S-localcheck !CONTEXTO! > "%LOG_DIR%\docker-build-%%S.log" 2>&1
+  docker build --build-arg ACTUALIZAR_PAQUETES=!ACTUALIZAR_PAQUETES! -t livemetric-%%S-localcheck -f !DOCKERFILE! !CONTEXTO! > "%LOG_DIR%\docker-build-%%S.log" 2>&1
   set RC=!errorlevel!
   call :resumir build %%S !RC! "%LOG_DIR%\docker-build-%%S.log"
   if !RC!==0 (
@@ -138,8 +143,9 @@ for %%S in (%SERVICES% db) do (
     REM %LOG_DIR%\sbom, como en el pipeline de GitHub. No bloquea.
     call :en_curso "%%S - SBOM"
     docker run --rm -v livemetric-trivy-cache:/root/.cache/trivy -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.70.0 image livemetric-%%S-localcheck --format cyclonedx --quiet --skip-version-check > "%LOG_DIR%\sbom\%%S-imagen.cdx.json" 2> "%LOG_DIR%\sbom-%%S.log"
-    REM La base no tiene dependencias de Node: su SBOM es el de la imagen.
-    if not "%%S"=="db" docker run --rm -v livemetric-trivy-cache:/root/.cache/trivy -v "%cd%:/repo" -w /repo aquasec/trivy:0.70.0 fs services/%%S --format cyclonedx --quiet --skip-version-check > "%LOG_DIR%\sbom\%%S-dependencias.cdx.json" 2>> "%LOG_DIR%\sbom-%%S.log"
+    REM Solo los servicios declaran dependencias de Node: el SBOM de la base y
+    REM el del instalador es el de la imagen.
+    if exist "services\%%S" docker run --rm -v livemetric-trivy-cache:/root/.cache/trivy -v "%cd%:/repo" -w /repo aquasec/trivy:0.70.0 fs services/%%S --format cyclonedx --quiet --skip-version-check > "%LOG_DIR%\sbom\%%S-dependencias.cdx.json" 2>> "%LOG_DIR%\sbom-%%S.log"
   )
   docker rmi livemetric-%%S-localcheck >nul 2>nul
 )

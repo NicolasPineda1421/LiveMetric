@@ -152,10 +152,12 @@ El pipeline es la revisión automática obligatoria de todo cambio. La revisión
 ### 6.5 Publicar una versión
 
 ```bash
-git tag -a v1.5.0 -m "LiveMetric v1.5.0: <resumen>"
-git push origin v1.5.0
+git tag -a v1.6.0 -m "LiveMetric v1.6.0: <resumen>"
+git push origin v1.6.0
 ```
 
-El tag dispara `.github/workflows/release.yml`: construye las 7 imágenes (las 6 del sistema y `livemetric-db`), las escanea con Trivy y genera su SBOM, y aparte levanta con ellas el compose de Docker Hub (`docker-hub/docker-compose.yml`) desde una carpeta sin el repositorio, para comprobar que el sistema arranca y responde. Si las 7 pasan y el sistema responde, las sube a Docker Hub como `1.5.0`, `v1.5.0` (igual que el tag de git), `1.5` y `latest`, cada una con su SBOM adjunto. Si alguna tiene CVE críticas o altas, o el sistema no arranca, no se publica ninguna: Docker Hub nunca queda con unas imágenes en una versión y otras en otra. `latest` lo recibe la versión solo si es la más nueva de los tags de git (republicar una anterior con *Run workflow* no lo mueve hacia atrás), y el último paso comprueba en Docker Hub que `latest` y la versión tienen el mismo *digest* en las 6 imágenes; si no, la corrida falla. Las publicaciones corren de a una, para que dos versiones al mismo tiempo no se disputen `latest`.
+El tag dispara `.github/workflows/release.yml`: construye las 8 imágenes (las 6 del sistema, `livemetric-db` y `livemetric`, la de instalación), las escanea con Trivy y genera su SBOM. Aparte, en una carpeta vacía, corre la imagen de instalación y levanta con ella el sistema, para comprobar que arranca y responde. Si las 8 pasan y el sistema responde, las sube a Docker Hub como `1.6.0`, `v1.6.0` (igual que el tag de git), `1.6` y `latest`, cada una con su SBOM adjunto. Si alguna tiene CVE críticas o altas, o el sistema no arranca, no se publica ninguna: Docker Hub nunca queda con unas imágenes en una versión y otras en otra. `latest` lo recibe la versión solo si es la más nueva de los tags de git (republicar una anterior con *Run workflow* no lo mueve hacia atrás), y el último paso comprueba en Docker Hub que `latest` y la versión tienen el mismo *digest* en las 6 imágenes; si no, la corrida falla. Las publicaciones corren de a una, para que dos versiones al mismo tiempo no se disputen `latest`.
 
-Para que `latest` no se quede atrás, cada cambio que llega a `main` y cambia lo que hacen las imágenes se publica con una versión nueva. Se usa versionado semántico: el tercer número para correcciones, el segundo para funcionalidad nueva compatible y el primero para cambios que rompen compatibilidad.
+Para que `latest` no se quede atrás, cada cambio que llega a `main` y cambia lo que hacen las imágenes se publica con una versión nueva.
+
+Con la versión más nueva, el job *Pagina de Docker Hub* publica `docker-hub/README.md` como la página de `nicolaspineda1421/livemetric`. Docker Hub pide para eso un token con permiso **Read, Write, Delete**, más amplio que el de publicar: va en el secret opcional `DOCKERHUB_DESCRIPCION_TOKEN`. Sin él, se intenta con `DOCKERHUB_TOKEN`, y si no alcanza, el resumen de la corrida lo avisa sin frenar el release. Se usa versionado semántico: el tercer número para correcciones, el segundo para funcionalidad nueva compatible y el primero para cambios que rompen compatibilidad.

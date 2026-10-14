@@ -245,17 +245,28 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # "db": la base con su esquema (db/Dockerfile), la imagen que usa el
-        # compose de Docker Hub. Pasa por la misma puerta que los servicios.
-        service: [auth, voting, analytics, scrutiny, scheduler, frontend, db]
+        # Ademas de los servicios, las dos imagenes del compose de Docker Hub:
+        # "db", la base con su esquema (db/Dockerfile), y "instalador", la que
+        # prepara la carpeta del usuario (docker-hub/Dockerfile, construida
+        # desde la raiz). Pasan por la misma puerta.
+        include:
+          - { service: auth, context: ./services/auth, dockerfile: ./services/auth/Dockerfile }
+          - { service: voting, context: ./services/voting, dockerfile: ./services/voting/Dockerfile }
+          - { service: analytics, context: ./services/analytics, dockerfile: ./services/analytics/Dockerfile }
+          - { service: scrutiny, context: ./services/scrutiny, dockerfile: ./services/scrutiny/Dockerfile }
+          - { service: scheduler, context: ./services/scheduler, dockerfile: ./services/scheduler/Dockerfile }
+          - { service: frontend, context: ./services/frontend, dockerfile: ./services/frontend/Dockerfile }
+          - { service: db, context: ./db, dockerfile: ./db/Dockerfile }
+          - { service: instalador, context: ., dockerfile: ./docker-hub/Dockerfile }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Construir imagen local
         env:
-          CONTEXTO: ${{ matrix.service == 'db' && './db' || format('./services/{0}', matrix.service) }}
+          CONTEXTO: ${{ matrix.context }}
+          DOCKERFILE: ${{ matrix.dockerfile }}
         run: |
-          docker build -t livemetric/${{ matrix.service }}-service:ci "$CONTEXTO"
+          docker build -t livemetric/${{ matrix.service }}-service:ci -f "$DOCKERFILE" "$CONTEXTO"
 
       # SBOM (Software Bill of Materials) en CycloneDX: el inventario de lo
       # que trae la imagen (paquetes del sistema y dependencias de Node) y el
@@ -271,9 +282,10 @@ jobs:
           format: 'cyclonedx'
           output: 'sbom-${{ matrix.service }}-imagen.cdx.json'
 
-      # La base no tiene dependencias de Node: su SBOM es el de la imagen.
+      # Solo los servicios declaran dependencias de Node (package-lock.json):
+      # el SBOM de la base y el del instalador es el de la imagen.
       - name: Generar el SBOM de las dependencias
-        if: matrix.service != 'db'
+        if: startsWith(matrix.context, './services/')
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: 'fs'

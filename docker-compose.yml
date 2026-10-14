@@ -100,6 +100,11 @@ services:
       PGOPTIONS: "-c client_min_messages=warning"
     volumes:
       - ./db/migrations:/migraciones:ro
+    # La imagen declara VOLUME para los datos de Postgres, que esta tarea no
+    # usa: sin esto, cada vez que se crea el contenedor queda un volumen
+    # anónimo vacío suelto.
+    tmpfs:
+      - /var/lib/postgresql/data
     depends_on:
       postgres:
         condition: service_healthy

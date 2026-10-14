@@ -1,0 +1,8 @@
+# El contexto de docker-hub/Dockerfile es la raíz del repositorio: entra solo
+# lo que la imagen copia (BuildKit toma este archivo por estar al lado del
+# Dockerfile). Así nunca entra un .env ni nada más del repo.
+*
+!services/auth/src/secretosInstalacion.js
+!services/auth/src/scripts/generarEnv.js
+!docker-hub/docker-compose.yml
+!docker-hub/instalar.js

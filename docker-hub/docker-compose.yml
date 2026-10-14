@@ -1,13 +1,13 @@
 # LiveMetric desde Docker Hub: el sistema completo sin el repositorio, solo
 # con Docker. Baja las 7 imágenes publicadas (las 6 del sistema y la base con
 # su esquema), que pasaron el escaneo de Trivy antes de publicarse. Ver
-# docker-hub/README.md.
+# docker-hub/README.md, que es también la página de nicolaspineda1421/livemetric.
 #
-#   docker compose run --rm configurar    # la primera vez: crea el .env
-#   docker compose up -d                  # http://localhost:3000
+# Este archivo y el .env los deja en la carpeta la imagen de instalación; los
+# mismos dos comandos instalan y actualizan:
+#   docker run --rm --pull always -v "${PWD}:/salida" nicolaspineda1421/livemetric
+#   docker compose up -d --pull always          # http://localhost:3000
 #   docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay
-#
-# Actualizar a la última versión:  docker compose pull && docker compose up -d
 #
 # Seguridad (como en docker-compose.yml, el de la instalación desde el repo):
 #   - "db-net" (internal): la base y los 5 servicios de backend, sin salida a
@@ -33,7 +33,7 @@ services:
 
   # Solo con "docker compose run --rm configurar": crea el .env de esta
   # carpeta con secretos aleatorios, o le agrega los que falten (nunca cambia
-  # uno que ya está). Corre como root para poder escribir en la carpeta, y
+  # uno que ya está), como la imagen de instalación. Corre como root para poder escribir en la carpeta, y
   # deja el archivo a nombre de su dueño; sin red y sin más capacidades que
   # esas dos.
   configurar:
@@ -120,6 +120,11 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD:-}
       # Sin los avisos de "ya existe, se omite" de cada IF NOT EXISTS.
       PGOPTIONS: "-c client_min_messages=warning"
+    # La imagen declara VOLUME para los datos de Postgres, que esta tarea no
+    # usa: sin esto, cada vez que se crea el contenedor queda un volumen
+    # anónimo vacío suelto.
+    tmpfs:
+      - /var/lib/postgresql/data
     depends_on:
       postgres:
         condition: service_healthy
