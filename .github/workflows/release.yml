@@ -1,7 +1,9 @@
 name: LiveMetric Release — Publicacion en Docker Hub
 
 # =============================================================================
-# Publica las 6 imagenes del proyecto en Docker Hub, versionadas con semver.
+# Publica las 7 imagenes del proyecto en Docker Hub, versionadas con semver:
+# los 6 componentes y la base con su esquema (livemetric-db, la que usa el
+# compose de Docker Hub, docker-hub/docker-compose.yml).
 #
 # Se separa de "devsecops.yml" a proposito: ese pipeline corre en CADA push y
 # PR y su trabajo es BLOQUEAR codigo inseguro; este corre solo cuando el
@@ -14,13 +16,14 @@ name: LiveMetric Release — Publicacion en Docker Hub
 #   - workflow_dispatch: ejecucion manual indicando la version, util para la
 #     sustentacion o para republicar sin crear un tag nuevo.
 #
-# Puerta de seguridad: las 6 imagenes se construyen y se escanean con Trivy, y
-# SOLO se publican si pasan las 6. Una imagen con CVEs CRITICAL/HIGH nunca
-# llega a Docker Hub, y tampoco las otras cinco de esa version.
+# Puerta de seguridad: las 7 imagenes se construyen y se escanean con Trivy, y
+# SOLO se publican si pasan las 7 y si el compose de Docker Hub arranca con
+# ellas. Una imagen con CVEs CRITICAL/HIGH nunca llega a Docker Hub, y
+# tampoco las demas de esa version.
 #
 # "latest": lo recibe la version solo si es la mas nueva de los tags de git
 # (republicar una version vieja no lo mueve hacia atras), y al final se
-# comprueba en Docker Hub que latest y la version son la misma imagen en las 6.
+# comprueba en Docker Hub que latest y la version son la misma imagen en las 7.
 #
 # Requisitos de configuracion (una sola vez, en el repositorio de GitHub):
 #   Settings > Secrets and variables > Actions
@@ -62,7 +65,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # 1) Resuelve la version una sola vez y la comparte con el resto de jobs,
-  #    para que las 6 imagenes lleven exactamente el mismo numero.
+  #    para que las 7 imagenes lleven exactamente el mismo numero.
   # ---------------------------------------------------------------------------
   version:
     name: Resolver version
@@ -116,9 +119,9 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # 2) Construye y escanea cada microservicio, sin publicar nada todavia.
-  #    Se publica solo si pasan LAS SEIS (job "publish", mas abajo): asi
+  #    Se publica solo si pasan LAS SIETE (job "publish", mas abajo): asi
   #    "latest" se mueve en todas las imagenes juntas o en ninguna, y nunca
-  #    quedan cinco en una version y una en otra.
+  #    quedan unas en una version y otras en otra.
   # ---------------------------------------------------------------------------
   scan:
     name: Escanear ${{ matrix.service }}
@@ -131,7 +134,8 @@ jobs:
       # de las otras cinco en la misma corrida, no un reporte a medias.
       fail-fast: false
       matrix:
-        service: [auth, voting, analytics, scrutiny, scheduler, frontend]
+        # "db": la base con su esquema (db/Dockerfile).
+        service: [auth, voting, analytics, scrutiny, scheduler, frontend, db]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -146,7 +150,7 @@ jobs:
       - name: Construir imagen (sin publicar todavia)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
-          context: ./services/${{ matrix.service }}
+          context: ${{ matrix.service == 'db' && './db' || format('./services/{0}', matrix.service) }}
           # Un valor por corrida: la capa de "apk upgrade" no sale de la cache de
           # una publicacion anterior (ver ARG ACTUALIZAR_PAQUETES en el Dockerfile).
           build-args: ACTUALIZAR_PAQUETES=${{ github.run_id }}
@@ -158,7 +162,7 @@ jobs:
 
       # -----------------------------------------------------------------------
       # PUERTA DE SEGURIDAD: mismas reglas que el job "container-scan" del
-      # pipeline principal. exit-code 1 detiene el job, y ninguna de las seis
+      # pipeline principal. exit-code 1 detiene el job, y ninguna de las siete
       # imagenes se publica.
       # -----------------------------------------------------------------------
       - name: Escanear la imagen candidata con Trivy
@@ -184,7 +188,9 @@ jobs:
           format: 'cyclonedx'
           output: 'sbom-${{ matrix.service }}-${{ needs.version.outputs.semver }}-imagen.cdx.json'
 
+      # La base no tiene dependencias de Node: su SBOM es el de la imagen.
       - name: Generar el SBOM de las dependencias
+        if: matrix.service != 'db'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: 'fs'
@@ -201,18 +207,85 @@ jobs:
           retention-days: 90
 
   # ---------------------------------------------------------------------------
-  # 3) Publica las seis imagenes, solo si las seis pasaron el escaneo.
+  # 2b) Antes de publicar: el compose de Docker Hub (docker-hub/docker-compose.yml)
+  #     tiene que arrancar con estas imagenes, desde una carpeta sin el repo,
+  #     como lo usaria cualquiera: crea el .env, levanta todo y responde.
+  # ---------------------------------------------------------------------------
+  probar-compose:
+    name: Probar el compose de Docker Hub
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+      # Una etiqueta que no existe en Docker Hub: el compose usa las imagenes
+      # construidas aqui, nunca las publicadas.
+      LIVEMETRIC_VERSION: prueba-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Construir las 7 imagenes
+        run: |
+          for s in auth voting analytics scrutiny scheduler frontend db; do
+            if [ "$s" = db ]; then CONTEXTO=./db; else CONTEXTO="./services/$s"; fi
+            docker build -q --build-arg ACTUALIZAR_PAQUETES="${{ github.run_id }}" \
+              -t "${DOCKERHUB_NAMESPACE}/livemetric-${s}:${LIVEMETRIC_VERSION}" "$CONTEXTO"
+          done
+
+      - name: Preparar una carpeta solo con el compose
+        run: |
+          mkdir -p "$RUNNER_TEMP/livemetric"
+          cp docker-hub/docker-compose.yml "$RUNNER_TEMP/livemetric/"
+
+      - name: Sin .env, no arranca nada
+        working-directory: ${{ runner.temp }}/livemetric
+        run: |
+          if docker compose up -d; then
+            echo "❌ Arranco sin .env"
+            exit 1
+          fi
+          docker compose logs revisar-configuracion | grep -q "docker compose run --rm configurar"
+          docker compose down
+
+      - name: Crear el .env y levantar el sistema
+        working-directory: ${{ runner.temp }}/livemetric
+        run: |
+          docker compose run --rm configurar
+          docker compose up -d
+
+      - name: Comprobar que responde
+        run: |
+          curl -fsS --retry 30 --retry-delay 3 --retry-all-errors -o /dev/null http://localhost:3000/
+          for s in auth voting analytics scrutiny; do
+            curl -fsS --retry 30 --retry-delay 3 --retry-all-errors -o /dev/null "http://localhost:3000/${s}/health"
+            echo "✅ ${s} responde a traves de nginx"
+          done
+
+      - name: Registro de los contenedores (si fallo)
+        if: failure()
+        working-directory: ${{ runner.temp }}/livemetric
+        run: docker compose ps -a && docker compose logs --tail 40
+
+      - name: Bajar el sistema
+        if: always()
+        working-directory: ${{ runner.temp }}/livemetric
+        run: docker compose down -v || true
+
+  # ---------------------------------------------------------------------------
+  # 3) Publica las siete imagenes, solo si las siete pasaron el escaneo y el
+  #    compose de Docker Hub arranco con ellas.
   # ---------------------------------------------------------------------------
   publish:
     name: Publicar ${{ matrix.service }}
-    needs: [version, scan]
+    needs: [version, scan, probar-compose]
     runs-on: ubuntu-latest
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        service: [auth, voting, analytics, scrutiny, scheduler, frontend]
+        service: [auth, voting, analytics, scrutiny, scheduler, frontend, db]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -244,7 +317,7 @@ jobs:
             type=raw,value=latest,enable=${{ needs.version.outputs.latest }}
           labels: |
             org.opencontainers.image.title=LiveMetric ${{ matrix.service }}
-            org.opencontainers.image.description=Microservicio ${{ matrix.service }} de LiveMetric
+            org.opencontainers.image.description=${{ matrix.service == 'db' && 'Base de datos de LiveMetric: PostgreSQL 16 con el esquema y las migraciones' || format('Microservicio {0} de LiveMetric', matrix.service) }}
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.vendor=LiveMetric
 
@@ -268,7 +341,7 @@ jobs:
       - name: Publicar en Docker Hub
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
-          context: ./services/${{ matrix.service }}
+          context: ${{ matrix.service == 'db' && './db' || format('./services/{0}', matrix.service) }}
           # El mismo valor que en "scan": la misma capa de "apk upgrade".
           build-args: ACTUALIZAR_PAQUETES=${{ github.run_id }}
           push: true
@@ -288,7 +361,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------
-  # 4) Comprueba en Docker Hub que "latest" quedo en esta version en las seis
+  # 4) Comprueba en Docker Hub que "latest" quedo en esta version en las siete
   #    imagenes (la misma imagen, por su digest). Si no, la corrida falla.
   # ---------------------------------------------------------------------------
   verify-latest:
@@ -306,9 +379,9 @@ jobs:
         run: |
           CLEAN="${VERSION#v}"
           # "|| true": si una etiqueta no existe, se informa y se sigue con las
-          # demas, para ver el estado de las seis en una sola corrida.
+          # demas, para ver el estado de las siete en una sola corrida.
           FALLAS=0
-          for s in auth voting analytics scrutiny scheduler frontend; do
+          for s in auth voting analytics scrutiny scheduler frontend db; do
             IMAGEN="${NS}/livemetric-${s}"
             VERSIONADA="$(docker buildx imagetools inspect "${IMAGEN}:${CLEAN}" --format '{{ .Manifest.Digest }}' || true)"
             LATEST="$(docker buildx imagetools inspect "${IMAGEN}:latest" --format '{{ .Manifest.Digest }}' || true)"
@@ -322,13 +395,13 @@ jobs:
           [ "$FALLAS" -eq 0 ]
 
   # ---------------------------------------------------------------------------
-  # 5) Resumen del release: deja en la pestaña Summary una tabla con las 6
+  # 5) Resumen del release: deja en la pestaña Summary una tabla con las 7
   #    imagenes y el comando para consumirlas. Sirve de evidencia directa
   #    para el informe tecnico y la sustentacion.
   # ---------------------------------------------------------------------------
   release-summary:
     name: Resumen del release
-    needs: [version, scan, publish, verify-latest]
+    needs: [version, scan, probar-compose, publish, verify-latest]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -342,7 +415,15 @@ jobs:
             {
               echo "## ❌ Release ${VERSION} NO publicado"
               echo ""
-              echo "Una o mas imagenes no superaron el escaneo de Trivy, asi que no se publico ninguna de las 6. Docker Hub sigue como estaba."
+              echo "Una o mas imagenes no superaron el escaneo de Trivy, asi que no se publico ninguna de las 7. Docker Hub sigue como estaba."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if [ "${{ needs.probar-compose.result }}" != "success" ]; then
+            {
+              echo "## ❌ Release ${VERSION} NO publicado"
+              echo ""
+              echo "El compose de Docker Hub (docker-hub/docker-compose.yml) no arranco con estas imagenes, asi que no se publico ninguna. El detalle esta en el job \"Probar el compose de Docker Hub\"."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
@@ -350,7 +431,7 @@ jobs:
             {
               echo "## ❌ Release ${VERSION} publicado a medias"
               echo ""
-              echo "Las 6 imagenes pasaron el escaneo, pero alguna no se pudo subir a Docker Hub. Vuelve a correr los jobs fallidos (Re-run failed jobs) para completarla."
+              echo "Las 7 imagenes pasaron el escaneo, pero alguna no se pudo subir a Docker Hub. Vuelve a correr los jobs fallidos (Re-run failed jobs) para completarla."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
@@ -363,7 +444,7 @@ jobs:
             exit 1
           fi
           if [ "${{ needs.version.outputs.latest }}" = "true" ]; then
-            ETIQUETAS="\`${VERSION}\` (igual que el tag de git), \`${CLEAN%.*}\` y \`latest\` (comprobado en Docker Hub: es la misma imagen en las 6)"
+            ETIQUETAS="\`${VERSION}\` (igual que el tag de git), \`${CLEAN%.*}\` y \`latest\` (comprobado en Docker Hub: es la misma imagen en las 7)"
           else
             ETIQUETAS="\`${VERSION}\` (igual que el tag de git) y \`${CLEAN%.*}\`. **No** recibe \`latest\`: ya hay una version mas nueva publicada"
           fi
@@ -373,13 +454,20 @@ jobs:
             echo ""
             echo "| Microservicio | Imagen |"
             echo "|---|---|"
-            for s in auth voting analytics scrutiny scheduler frontend; do
+            for s in auth voting analytics scrutiny scheduler frontend db; do
               echo "| ${s} | \`${NS}/livemetric-${s}:${CLEAN}\` |"
             done
             echo ""
             echo "Cada imagen tambien queda como ${ETIQUETAS}."
             echo ""
-            echo "Las 6 imagenes superaron el escaneo de Trivy (CRITICAL/HIGH) antes de publicar cualquiera de ellas."
+            echo "Las 7 imagenes superaron el escaneo de Trivy (CRITICAL/HIGH), y el compose de Docker Hub arranco con ellas, antes de publicar cualquiera."
+            echo ""
+            echo "Para correr el sistema sin el repositorio, solo con Docker:"
+            echo '```bash'
+            echo "curl -fsSLO https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/docker-hub/docker-compose.yml"
+            echo "docker compose run --rm configurar"
+            echo "docker compose up -d"
+            echo '```'
             echo ""
             echo "Cada imagen lleva su SBOM adjunto en Docker Hub, y el de CycloneDX (imagen y dependencias) queda en los artefactos de esta corrida. Para leer el adjunto:"
             echo '```bash'
@@ -388,7 +476,7 @@ jobs:
             echo ""
             echo "Para descargarlas:"
             echo '```bash'
-            echo "for s in auth voting analytics scrutiny scheduler frontend; do"
+            echo "for s in auth voting analytics scrutiny scheduler frontend db; do"
             echo "  docker pull ${NS}/livemetric-\$s:${CLEAN}"
             echo "done"
             echo '```'

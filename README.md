@@ -43,6 +43,18 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 
 **Requisito:** [Docker](https://docs.docker.com/get-docker/) (en Windows, Docker Desktop).
 
+**Sin clonar el repositorio**, con las imágenes publicadas en Docker Hub ([guía completa](docker-hub/README.md)):
+
+```bash
+mkdir livemetric && cd livemetric
+curl -fsSLO https://raw.githubusercontent.com/NicolasPineda1421/LiveMetric/main/docker-hub/docker-compose.yml
+docker compose run --rm configurar      # crea el .env con los secretos de esta instalación
+docker compose up -d                    # http://localhost:3000
+docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay
+```
+
+**Desde el repositorio**, que además corre el análisis de seguridad antes de arrancar y levanta el monitoreo:
+
 ```bash
 git clone https://github.com/NicolasPineda1421/LiveMetric.git
 cd LiveMetric
@@ -60,7 +72,7 @@ cd LiveMetric
 
 Los dos modos tienen los mismos comandos para después: `estado`, `logs`, `shell`, `admin` (cambiar la contraseña del administrador), `detener` y `borrar`, por ejemplo `./scripts/start.sh estado` o `./scripts/contenedor.sh admin` (ver [instalación y despliegue](docs/instalacion-y-despliegue.md#1-startsh--startbat-recomendada)).
 
-La primera vez tarda varios minutos (construye y analiza las 6 imágenes). Al terminar, cuando los 7 contenedores están sanos, el script muestra las direcciones:
+La primera vez tarda varios minutos (construye y analiza las imágenes). Al terminar, cuando los 7 contenedores están sanos, el script muestra las direcciones:
 
 ```
   ✔ LiveMetric está arriba
@@ -73,7 +85,7 @@ La primera vez tarda varios minutos (construye y analiza las 6 imágenes). Al te
 
 ## Imágenes en Docker Hub
 
-Las 6 imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspineda1421) con cada versión de git (`vX.Y.Z`), etiquetadas con la versión exacta (`1.4.0`), la línea menor (`1.4`) y `latest`; desde la v1.3.3, también con el mismo nombre del tag de git (`v1.4.0`). Antes de subirse, las 6 se escanean con Trivy: si una tiene CVE críticas o altas, no se publica ninguna (ver [`release.yml`](.github/workflows/release.yml)). `latest` es siempre la versión más nueva: republicar una vieja no lo mueve, y al terminar el workflow comprueba en Docker Hub que `latest` y la versión son la misma imagen en las 6. Cada imagen publicada lleva su SBOM adjunto (`docker buildx imagetools inspect <imagen>:<versión> --format '{{ json .SBOM }}'`). Son las que usa el [despliegue con Docker Swarm](orquestacion/README.md).
+Las 7 imágenes (las 6 del sistema y, desde la v1.5.0, la base con su esquema) se publican en [Docker Hub](https://hub.docker.com/u/nicolaspineda1421) con cada versión de git (`vX.Y.Z`), etiquetadas con la versión exacta (`1.5.0`), la línea menor (`1.5`) y `latest`; desde la v1.3.3, también con el mismo nombre del tag de git (`v1.5.0`). Antes de subirse, las 7 se escanean con Trivy y el [compose de Docker Hub](docker-hub/README.md) se levanta con ellas: si una tiene CVE críticas o altas, o el sistema no arranca, no se publica ninguna (ver [`release.yml`](.github/workflows/release.yml)). `latest` es siempre la versión más nueva: republicar una vieja no lo mueve, y al terminar el workflow comprueba en Docker Hub que `latest` y la versión son la misma imagen en las 7. Cada imagen publicada lleva su SBOM adjunto (`docker buildx imagetools inspect <imagen>:<versión> --format '{{ json .SBOM }}'`). Son las que usan el [compose de Docker Hub](docker-hub/README.md) y el [despliegue con Docker Swarm](orquestacion/README.md).
 
 | Servicio | Imagen |
 |---|---|
@@ -83,12 +95,13 @@ Las 6 imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspine
 | Analytics | [`nicolaspineda1421/livemetric-analytics`](https://hub.docker.com/r/nicolaspineda1421/livemetric-analytics) |
 | Scrutiny | [`nicolaspineda1421/livemetric-scrutiny`](https://hub.docker.com/r/nicolaspineda1421/livemetric-scrutiny) |
 | Scheduler (worker) | [`nicolaspineda1421/livemetric-scheduler`](https://hub.docker.com/r/nicolaspineda1421/livemetric-scheduler) |
+| Base de datos (PostgreSQL 16 con el esquema) | [`nicolaspineda1421/livemetric-db`](https://hub.docker.com/r/nicolaspineda1421/livemetric-db) |
 
 ```bash
-docker pull nicolaspineda1421/livemetric-auth:1.4.0
+docker pull nicolaspineda1421/livemetric-auth:1.5.0
 ```
 
-Para publicar una versión nueva basta con crear el tag: `git tag -a v1.4.0 -m "..." && git push origin v1.4.0`.
+Para publicar una versión nueva basta con crear el tag: `git tag -a v1.5.0 -m "..." && git push origin v1.5.0`.
 
 ## Estructura del repositorio
 

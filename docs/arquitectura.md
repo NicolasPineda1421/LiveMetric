@@ -42,7 +42,7 @@ Los puertos 3001–3004 se publican solo en `127.0.0.1` (para probar las APIs de
 | **Microservicio C — Analytics** | Total de votos en vivo y resultados certificados, métricas y estadística avanzada de los reportes, tableros configurables | Node.js 20 / Express | Solo lectura para admin/auditor; en elecciones cerradas sirve el acta certificada, nunca un recálculo. Verifica por su cuenta la integridad de las actas |
 | **Microservicio D — Scrutiny** | Recuento **independiente** desde los votos, consolidación por **mesa**, **ganador**, y certificación con cadena de hashes SHA-256 y **firma digital Ed25519**; acta en PDF | Node.js 20 / Express | Es el único con la clave privada que firma las actas (`ACTA_SIGNING_KEY`). `/internal/certify` solo acepta un token de servicio (`X-Internal-Token`, comparación *timing-safe*), nunca un JWT de usuario |
 | **Worker — Scheduler** | Activa/cierra elecciones según su horario y dispara la certificación | Node.js 20 + `node-cron` | Sin puerto publicado; solo habla con Scrutiny dentro de `app-net` |
-| **PostgreSQL** (`postgres`) | Persistencia, incluidos el libro de escrutinio y el log de auditoría | PostgreSQL 16 (`postgres:16-alpine`), volumen `db-data` | Solo en la red interna `db-net`, sin puerto en la PC; sistema de archivos de solo lectura salvo sus datos. Triggers que bloquean `UPDATE`/`DELETE` sobre `scrutiny_ledger` y `audit_log` |
+| **PostgreSQL** (`postgres`) | Persistencia, incluidos el libro de escrutinio y el log de auditoría | PostgreSQL 16 (`postgres:16-alpine`; en el compose de Docker Hub, `livemetric-db`: la misma con el esquema adentro, sin `gosu` y como usuario `postgres`), volumen `db-data` | Solo en la red interna `db-net`, sin puerto en la PC; sistema de archivos de solo lectura salvo sus datos. Triggers que bloquean `UPDATE`/`DELETE` sobre `scrutiny_ledger` y `audit_log` |
 
 ## Red
 
@@ -50,6 +50,7 @@ Los puertos 3001–3004 se publican solo en `127.0.0.1` (para probar las APIs de
 - **`db-net` (bridge, `internal`)**: la base y los 5 servicios de backend, nada más. Sin salida a Internet y sin ningún puerto en la PC: el frontend (lo único expuesto a la red) no llega a la base ni aunque se comprometa. La conexión a Postgres no usa TLS porque nunca sale de la máquina.
 - **Docker Swarm** (`orquestacion/docker-stack.yml`): las mismas dos redes, como *overlay* cifradas entre nodos.
 - **Variante Terraform** (`infra/terraform/main.tf`): la misma separación, con su red interna `db_net`.
+- **Compose de Docker Hub** (`docker-hub/docker-compose.yml`): las mismas dos redes, pero solo publica el puerto de la aplicación; el API no queda en `127.0.0.1`.
 
 ## Gestión de secretos
 
@@ -57,6 +58,7 @@ Ningún secreto (`POSTGRES_PASSWORD`, `JWT_SECRET`, `VOTER_ID_SALT`, `VOTERS_ENC
 
 - `.env.example`: plantilla sin valores reales.
 - `.env`: lo genera `scripts/lib/generar-env.js` la primera vez que corre `start.sh`/`start.bat`/`contenedor.sh`, con valores aleatorios propios de esa instalación. Como cada instalación tiene su propia base, no hay ningún secreto que compartir entre personas o PCs.
+- Con el compose de Docker Hub, el `.env` lo crea `docker compose run --rm configurar`, con la misma generación (`services/auth/src/secretosInstalacion.js`) desde la imagen de auth. El servicio que revisa en cada arranque que no falte ninguno recibe solo si cada secreto existe (`${VAR:+si}`), nunca su valor.
 - En GitHub Actions, las pruebas generan secretos al azar en cada corrida (`jest.setup.js`) contra una base desechable, y el entorno de staging genera su propio `.env` igual que una instalación nueva: el repositorio no necesita *secrets* de la aplicación.
 
 Tampoco hay credenciales de la aplicación en el repositorio: `db/init.sql` no crea ningún administrador ni asigna PINs. El primer administrador lo pide el script de arranque con `services/auth/src/scripts/crearAdmin.js`, que lee la contraseña por teclado sin mostrarla (ver [instalación](instalacion-y-despliegue.md#primer-administrador)).
@@ -127,7 +129,9 @@ LiveMetric/
 ├── .gitleaks.toml, .trivyignore  # Configuración de los escáneres
 ├── db/
 │   ├── init.sql                  # Esquema completo + datos de demostración (lo carga Postgres)
-│   └── migrations/               # 002–005, solo para bases creadas con un init.sql anterior
+│   ├── migrations/               # 002–009, solo para bases creadas con un init.sql anterior
+│   └── Dockerfile                # Imagen livemetric-db: Postgres 16 con el esquema y las migraciones
+├── docker-hub/                   # Compose que corre el sistema desde Docker Hub, sin el repositorio
 ├── services/
 │   ├── frontend/                 # SPA React + nginx (proxy reverso)
 │   ├── auth/                     # A: login dual, padrón, usuarios, auditoría

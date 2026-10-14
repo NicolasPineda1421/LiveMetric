@@ -1,0 +1,311 @@
+# LiveMetric desde Docker Hub: el sistema completo sin el repositorio, solo
+# con Docker. Baja las 7 imágenes publicadas (las 6 del sistema y la base con
+# su esquema), que pasaron el escaneo de Trivy antes de publicarse. Ver
+# docker-hub/README.md.
+#
+#   docker compose run --rm configurar    # la primera vez: crea el .env
+#   docker compose up -d                  # http://localhost:3000
+#   docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay
+#
+# Actualizar a la última versión:  docker compose pull && docker compose up -d
+#
+# Seguridad (como en docker-compose.yml, el de la instalación desde el repo):
+#   - "db-net" (internal): la base y los 5 servicios de backend, sin salida a
+#     Internet ni puertos en el host.
+#   - Solo se publica la aplicación (nginx), que reenvía al API.
+#   - Sin root, sistema de archivos de solo lectura y "no-new-privileges".
+#   - Los secretos son propios de esta instalación (los crea "configurar" en
+#     el .env de esta carpeta) y cada servicio recibe solo los suyos.
+
+name: livemetric-dockerhub
+
+networks:
+  app-net:
+    driver: bridge
+  db-net:
+    driver: bridge
+    internal: true
+
+volumes:
+  db-data:
+
+services:
+
+  # Solo con "docker compose run --rm configurar": crea el .env de esta
+  # carpeta con secretos aleatorios, o le agrega los que falten (nunca cambia
+  # uno que ya está). Corre como root para poder escribir en la carpeta, y
+  # deja el archivo a nombre de su dueño; sin red y sin más capacidades que
+  # esas dos.
+  configurar:
+    image: ${DOCKERHUB_NAMESPACE:-nicolaspineda1421}/livemetric-auth:${LIVEMETRIC_VERSION:-latest}
+    profiles: ["configurar"]
+    user: "0:0"
+    command: ["node", "src/scripts/generarEnv.js", "/salida/.env"]
+    volumes:
+      - .:/salida
+    network_mode: none
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+    security_opt:
+      - no-new-privileges:true
+
+  # En cada "up", antes que la base: si al .env le falta algún secreto (o no
+  # hay .env), se detiene diciendo cómo crearlo, en vez de arrancar los
+  # servicios sin claves. Recibe solo si cada secreto existe ("si" o vacío),
+  # nunca su valor.
+  revisar-configuracion:
+    image: ${DOCKERHUB_NAMESPACE:-nicolaspineda1421}/livemetric-auth:${LIVEMETRIC_VERSION:-latest}
+    command: ["node", "src/scripts/generarEnv.js", "--revisar"]
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:+si}
+      JWT_SECRET: ${JWT_SECRET:+si}
+      VOTER_ID_SALT: ${VOTER_ID_SALT:+si}
+      VOTERS_ENCRYPTION_KEY: ${VOTERS_ENCRYPTION_KEY:+si}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:+si}
+      ACTA_SIGNING_KEY: ${ACTA_SIGNING_KEY:+si}
+      ACTA_PUBLIC_KEY: ${ACTA_PUBLIC_KEY:+si}
+    network_mode: none
+    restart: "no"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  # PostgreSQL 16 con el esquema adentro (imagen livemetric-db, db/Dockerfile):
+  # lo carga la primera vez, con el volumen vacío. Corre como "postgres".
+  postgres:
+    image: ${DOCKERHUB_NAMESPACE:-nicolaspineda1421}/livemetric-db:${LIVEMETRIC_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-livemetric}
+      POSTGRES_USER: ${POSTGRES_USER:-livemetric}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    depends_on:
+      revisar-configuracion:
+        condition: service_completed_successfully
+    networks:
+      - db-net
+    healthcheck:
+      # Por TCP a propósito: mientras corre init.sql, Postgres atiende solo
+      # por socket local, así que la base no figura "sana" hasta terminar.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
+
+  # Pone al día una base creada con una versión anterior (al actualizar con
+  # "docker compose pull"): las migraciones son idempotentes, y en una base
+  # nueva o ya al día no cambian nada. Corre en cada "up" y termina.
+  migraciones:
+    image: ${DOCKERHUB_NAMESPACE:-nicolaspineda1421}/livemetric-db:${LIVEMETRIC_VERSION:-latest}
+    entrypoint: ["aplicar-migraciones"]
+    environment:
+      PGHOST: postgres
+      PGDATABASE: ${POSTGRES_DB:-livemetric}
+      PGUSER: ${POSTGRES_USER:-livemetric}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-}
+      # Sin los avisos de "ya existe, se omite" de cada IF NOT EXISTS.
+      PGOPTIONS: "-c client_min_messages=warning"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - db-net
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+
+  auth-service:
+    image: ${DOCKERHUB_NAMESPACE:-nicolaspineda1421}/livemetric-auth:${LIVEMETRIC_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      JWT_SECRET: ${JWT_SECRET:-}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1h}
+      VOTER_JWT_EXPIRES_IN: ${VOTER_JWT_EXPIRES_IN:-10m}
+      PIN_VIGENCIA_HORAS: ${PIN_VIGENCIA_HORAS:-24}
+      VOTER_ID_SALT: ${VOTER_ID_SALT:-}
+      VOTERS_ENCRYPTION_KEY: ${VOTERS_ENCRYPTION_KEY:-}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-livemetric}
+      DB_USER: ${POSTGRES_USER:-livemetric}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migraciones:
+        condition: service_completed_successfully
+    networks:
+      - app-net
+      - db-net
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  voting-service:
+    image: ${DOCKERHUB_NAMESPACE:-nicolaspineda1421}/livemetric-voting:${LIVEMETRIC_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      JWT_SECRET: ${JWT_SECRET:-}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-livemetric}
+      DB_USER: ${POSTGRES_USER:-livemetric}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migraciones:
+        condition: service_completed_successfully
+    networks:
+      - app-net
+      - db-net
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  analytics-service:
+    image: ${DOCKERHUB_NAMESPACE:-nicolaspineda1421}/livemetric-analytics:${LIVEMETRIC_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3003
+      JWT_SECRET: ${JWT_SECRET:-}
+      VOTERS_ENCRYPTION_KEY: ${VOTERS_ENCRYPTION_KEY:-}
+      # Solo la pública: verifica la firma de las actas, no puede firmar.
+      ACTA_PUBLIC_KEY: ${ACTA_PUBLIC_KEY:-}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-livemetric}
+      DB_USER: ${POSTGRES_USER:-livemetric}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migraciones:
+        condition: service_completed_successfully
+      auth-service:
+        condition: service_started
+    networks:
+      - app-net
+      - db-net
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  # Certifica los resultados (cadena de hashes) y firma cada acta: es el único
+  # servicio con la clave privada.
+  scrutiny-service:
+    image: ${DOCKERHUB_NAMESPACE:-nicolaspineda1421}/livemetric-scrutiny:${LIVEMETRIC_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3004
+      JWT_SECRET: ${JWT_SECRET:-}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
+      ACTA_SIGNING_KEY: ${ACTA_SIGNING_KEY:-}
+      ACTA_PUBLIC_KEY: ${ACTA_PUBLIC_KEY:-}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-livemetric}
+      DB_USER: ${POSTGRES_USER:-livemetric}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migraciones:
+        condition: service_completed_successfully
+    networks:
+      - app-net
+      - db-net
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  # Abre y cierra las elecciones según su horario y dispara la certificación.
+  scheduler-worker:
+    image: ${DOCKERHUB_NAMESPACE:-nicolaspineda1421}/livemetric-scheduler:${LIVEMETRIC_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3005
+      SCHEDULER_CRON: ${SCHEDULER_CRON:-* * * * *}
+      SCRUTINY_INTERNAL_URL: http://scrutiny-service:3004
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-livemetric}
+      DB_USER: ${POSTGRES_USER:-livemetric}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migraciones:
+        condition: service_completed_successfully
+      scrutiny-service:
+        condition: service_started
+    networks:
+      - app-net
+      - db-net
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  # La aplicación (React servido por nginx), que además reenvía al API: el
+  # navegador solo habla con este puerto. Se publica en toda la red local,
+  # como en la instalación desde el repo.
+  frontend:
+    image: ${DOCKERHUB_NAMESPACE:-nicolaspineda1421}/livemetric-frontend:${LIVEMETRIC_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      AUTH_URL: /auth
+      VOTING_URL: /voting
+      ANALYTICS_URL: /analytics
+      SCRUTINY_URL: /scrutiny
+    depends_on:
+      - auth-service
+      - voting-service
+      - analytics-service
+      - scrutiny-service
+    networks:
+      - app-net
+    ports:
+      - "0.0.0.0:${LIVEMETRIC_PUERTO:-3000}:8080"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp

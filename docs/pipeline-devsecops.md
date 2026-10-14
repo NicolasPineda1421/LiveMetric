@@ -22,7 +22,7 @@ Todas las actions de terceros están **fijadas a un SHA de commit** (con la vers
 
 | Job | Herramienta | Qué detiene |
 |---|---|---|
-| `container-scan` | **Trivy** (modo imagen) | Construye las 6 imágenes reales y busca CVE `CRITICAL`/`HIGH` en el sistema base y las librerías. Las excepciones, siempre justificadas, van en `.trivyignore` (hoy no hay ninguna). Además genera el **SBOM** de cada servicio en CycloneDX (ver abajo). |
+| `container-scan` | **Trivy** (modo imagen) | Construye las 7 imágenes reales (las 6 del sistema y `livemetric-db`, la base con su esquema, de `db/Dockerfile`) y busca CVE `CRITICAL`/`HIGH` en el sistema base y las librerías. Las excepciones, siempre justificadas, van en `.trivyignore` (hoy no hay ninguna). Además genera el **SBOM** de cada servicio en CycloneDX (ver abajo). |
 
 **SBOM (*Software Bill of Materials*).** El inventario de todo lo que lleva cada servicio, en formato **CycloneDX**, generado con Trivy:
 

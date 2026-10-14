@@ -1,6 +1,6 @@
 # Instalación y despliegue
 
-Hay cuatro formas de levantar LiveMetric. Todas usan el mismo `docker-compose.yml` (salvo Terraform) y el mismo `.env`.
+Hay cinco formas de levantar LiveMetric. Las tres primeras usan el mismo `docker-compose.yml` y el mismo `.env`; Terraform tiene sus propias variables, y la de Docker Hub no necesita el repositorio.
 
 | Forma | Qué hace | Qué necesita la PC |
 |---|---|---|
@@ -8,6 +8,7 @@ Hay cuatro formas de levantar LiveMetric. Todas usan el mismo `docker-compose.ym
 | [`contenedor.sh` / `contenedor.bat`](#2-contenedor-global-solo-docker) | Lo mismo, pero todo dentro de un contenedor global | Solo Docker |
 | [`docker compose`](#3-docker-compose-directo) | Levanta el stack sin analizar nada | Docker |
 | [Terraform](#4-terraform-infraestructura-como-código) | El stack como código, con su propio PostgreSQL local | Docker + Terraform |
+| [Desde Docker Hub](#5-desde-docker-hub-sin-el-repositorio) | Baja las imágenes publicadas y levanta el sistema, sin clonar el repositorio | Solo Docker |
 
 ## El archivo `.env`
 
@@ -125,6 +126,20 @@ terraform destroy -var-file="terraform.tfvars" # para desmontarlo
 ```
 
 `terraform destroy` borra también el volumen de la base, así que cada `apply` después de un `destroy` empieza con una base nueva. Si en cambio se actualiza el código y se vuelve a hacer `apply` sin destruir, la base conserva su esquema: este modo no tiene el servicio `migraciones` de compose, y las de `db/migrations/` se aplican a mano con `docker exec -i livemetric-postgres psql -U <usuario> -d livemetric < db/migrations/<archivo>.sql`.
+
+## 5. Desde Docker Hub (sin el repositorio)
+
+Para usar LiveMetric sin clonar el repositorio ni construir nada: se descarga [`docker-hub/docker-compose.yml`](../docker-hub/docker-compose.yml), que baja de Docker Hub las 7 imágenes publicadas (las 6 del sistema y `livemetric-db`, la base con el esquema y las migraciones adentro). Todas pasaron el escaneo de Trivy antes de publicarse.
+
+```bash
+mkdir livemetric && cd livemetric
+curl -fsSLO https://raw.githubusercontent.com/NicolasPineda1421/LiveMetric/main/docker-hub/docker-compose.yml
+docker compose run --rm configurar      # crea el .env con los secretos de esta instalación
+docker compose up -d
+docker compose exec auth-service node src/scripts/crearAdmin.js --si-no-hay
+```
+
+En Windows, con PowerShell, `curl.exe` en lugar de `curl`. El `.env` lo crea el servicio `configurar` con la misma generación que `scripts/lib/generar-env.js`, dentro de la imagen de auth: no hace falta Node.js en la PC. En cada `up`, el servicio `revisar-configuracion` comprueba antes que nada que el `.env` tenga todos los secretos; si falta alguno, no arranca nada y su registro dice qué correr. Se actualiza con `docker compose pull && docker compose up -d`, y las migraciones ponen al día la base. Es el mismo sistema, sin el análisis de seguridad local, sin el monitoreo y sin los puertos del API en `127.0.0.1`. Su base es otra (proyecto `livemetric-dockerhub`). Los detalles están en [`docker-hub/README.md`](../docker-hub/README.md).
 
 ## Acceso desde otras PC de la red
 

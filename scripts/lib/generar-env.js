@@ -15,9 +15,10 @@
 
 'use strict';
 
-const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+// La misma generación que el .env del compose de Docker Hub.
+const { crearGenerador } = require('../../services/auth/src/secretosInstalacion');
 
 const RAIZ = path.resolve(__dirname, '..', '..');
 const destino = path.resolve(process.argv[2] || path.join(RAIZ, '.env'));
@@ -44,34 +45,9 @@ const existentes = new Map(
 );
 const tieneValor = (nombre) => existentes.has(nombre) && !esMarcador(existentes.get(nombre));
 
-// Firma de las actas (Ed25519): en el .env van los 32 bytes de cada clave
-// en base64, igual que los lee services/scrutiny/src/actaSignature.js. La
-// pública se deriva de la privada (la que ya había, o una nueva), así que
-// siempre quedan en pareja.
-const PKCS8_ED25519 = Buffer.from('302e020100300506032b657004220420', 'hex');
-const crudo = (clave, campo) => Buffer.from(clave.export({ format: 'jwk' })[campo], 'base64url').toString('base64');
-const privada = tieneValor('ACTA_SIGNING_KEY')
-  ? existentes.get('ACTA_SIGNING_KEY')
-  : crudo(crypto.generateKeyPairSync('ed25519').privateKey, 'd');
-function publicaDe(privadaB64) {
-  const clave = crypto.createPrivateKey({
-    key: Buffer.concat([PKCS8_ED25519, Buffer.from(privadaB64, 'base64')]),
-    format: 'der',
-    type: 'pkcs8',
-  });
-  return crudo(crypto.createPublicKey(clave), 'x');
-}
-
-// El valor generado para una variable secreta. La clave del padrón es
-// AES-256: exactamente 32 bytes en base64. La contraseña de Postgres va en
-// hexadecimal, sin caracteres que alguna herramienta tenga que escapar.
-function generado(nombre) {
-  if (nombre === 'ACTA_SIGNING_KEY') return privada;
-  if (nombre === 'ACTA_PUBLIC_KEY') return publicaDe(privada);
-  if (nombre === 'VOTERS_ENCRYPTION_KEY') return crypto.randomBytes(32).toString('base64');
-  if (nombre === 'POSTGRES_PASSWORD') return crypto.randomBytes(24).toString('hex');
-  return crypto.randomBytes(48).toString('base64');
-}
+// La privada de las actas que ya había (si no, se genera una): la pública se
+// deriva de ella, así que siempre quedan en pareja.
+const generado = crearGenerador(tieneValor('ACTA_SIGNING_KEY') ? existentes.get('ACTA_SIGNING_KEY') : null);
 
 // Cada línea de la plantilla, con los marcadores reemplazados.
 const lineas = plantilla.split('\n').map((linea) => {

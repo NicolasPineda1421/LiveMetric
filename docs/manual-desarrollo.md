@@ -152,10 +152,10 @@ El pipeline es la revisión automática obligatoria de todo cambio. La revisión
 ### 6.5 Publicar una versión
 
 ```bash
-git tag -a v1.4.0 -m "LiveMetric v1.4.0: <resumen>"
-git push origin v1.4.0
+git tag -a v1.5.0 -m "LiveMetric v1.5.0: <resumen>"
+git push origin v1.5.0
 ```
 
-El tag dispara `.github/workflows/release.yml`: construye las 6 imágenes, las escanea con Trivy y genera su SBOM; si las 6 pasan, las sube a Docker Hub como `1.4.0`, `v1.4.0` (igual que el tag de git), `1.4` y `latest`, cada una con su SBOM adjunto. Si alguna tiene CVE críticas o altas, no se publica ninguna: Docker Hub nunca queda con unas imágenes en una versión y otras en otra. `latest` lo recibe la versión solo si es la más nueva de los tags de git (republicar una anterior con *Run workflow* no lo mueve hacia atrás), y el último paso comprueba en Docker Hub que `latest` y la versión tienen el mismo *digest* en las 6 imágenes; si no, la corrida falla. Las publicaciones corren de a una, para que dos versiones al mismo tiempo no se disputen `latest`.
+El tag dispara `.github/workflows/release.yml`: construye las 7 imágenes (las 6 del sistema y `livemetric-db`), las escanea con Trivy y genera su SBOM, y aparte levanta con ellas el compose de Docker Hub (`docker-hub/docker-compose.yml`) desde una carpeta sin el repositorio, para comprobar que el sistema arranca y responde. Si las 7 pasan y el sistema responde, las sube a Docker Hub como `1.5.0`, `v1.5.0` (igual que el tag de git), `1.5` y `latest`, cada una con su SBOM adjunto. Si alguna tiene CVE críticas o altas, o el sistema no arranca, no se publica ninguna: Docker Hub nunca queda con unas imágenes en una versión y otras en otra. `latest` lo recibe la versión solo si es la más nueva de los tags de git (republicar una anterior con *Run workflow* no lo mueve hacia atrás), y el último paso comprueba en Docker Hub que `latest` y la versión tienen el mismo *digest* en las 6 imágenes; si no, la corrida falla. Las publicaciones corren de a una, para que dos versiones al mismo tiempo no se disputen `latest`.
 
 Para que `latest` no se quede atrás, cada cambio que llega a `main` y cambia lo que hacen las imágenes se publica con una versión nueva. Se usa versionado semántico: el tercer número para correcciones, el segundo para funcionalidad nueva compatible y el primero para cambios que rompen compatibilidad.

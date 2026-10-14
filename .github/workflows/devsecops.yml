@@ -245,14 +245,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [auth, voting, analytics, scrutiny, scheduler, frontend]
+        # "db": la base con su esquema (db/Dockerfile), la imagen que usa el
+        # compose de Docker Hub. Pasa por la misma puerta que los servicios.
+        service: [auth, voting, analytics, scrutiny, scheduler, frontend, db]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Construir imagen local
+        env:
+          CONTEXTO: ${{ matrix.service == 'db' && './db' || format('./services/{0}', matrix.service) }}
         run: |
-          docker build -t livemetric/${{ matrix.service }}-service:ci \
-            ./services/${{ matrix.service }}
+          docker build -t livemetric/${{ matrix.service }}-service:ci "$CONTEXTO"
 
       # SBOM (Software Bill of Materials) en CycloneDX: el inventario de lo
       # que trae la imagen (paquetes del sistema y dependencias de Node) y el
@@ -268,7 +271,9 @@ jobs:
           format: 'cyclonedx'
           output: 'sbom-${{ matrix.service }}-imagen.cdx.json'
 
+      # La base no tiene dependencias de Node: su SBOM es el de la imagen.
       - name: Generar el SBOM de las dependencias
+        if: matrix.service != 'db'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: 'fs'
