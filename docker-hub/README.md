@@ -119,12 +119,53 @@ La base vive en el volumen `livemetric-dockerhub_db-data`, y el `.env` tiene la 
 docker compose exec -T postgres pg_dump -U livemetric livemetric > respaldo.sql
 ```
 
+## Ver el estado
+
+En la carpeta de LiveMetric:
+
 ```bash
 docker compose ps                     # estado de cada servicio
-docker compose logs -f auth-service   # registro de un servicio
-docker compose down                   # detener (los datos quedan)
-docker compose down -v                # borrar todo, base incluida: no se puede deshacer
+docker compose logs -f auth-service   # registro de un servicio (Ctrl+C para salir)
 ```
+
+## Detener
+
+En la carpeta de LiveMetric:
+
+```bash
+docker compose down
+```
+
+Apaga y quita los contenedores. **Los datos quedan**: la base sigue en su volumen, y el `.env` y el `docker-compose.yml` siguen en la carpeta. Para volver a arrancarlo, en la misma carpeta:
+
+```bash
+docker compose up -d
+```
+
+Mientras no lo detengas, LiveMetric vuelve a arrancar solo cada vez que arranca Docker, por ejemplo al encender la PC.
+
+## Borrar
+
+> ⚠️ **No se puede deshacer:** se pierden las elecciones, el padrón, las actas y la auditoría. Si los quieres conservar, haz antes un respaldo (ver **Dónde se guardan los datos**).
+
+En la carpeta de LiveMetric:
+
+```bash
+docker compose down -v --rmi all                   # contenedores, base de datos e imágenes del sistema
+docker rmi nicolaspineda1421/livemetric            # la imagen de instalación
+```
+
+Al final, borra la carpeta, con el `docker-compose.yml` y el `.env`:
+
+```bash
+cd .. && rm -rf livemetric                         # Linux y macOS
+```
+
+```powershell
+cd ..; Remove-Item -Recurse -Force livemetric      # Windows (PowerShell)
+```
+
+Si solo quieres empezar de cero, con la base vacía pero la misma instalación, alcanza con `docker compose down -v` y después `docker compose up -d`.
 
 ## Si algo falla
 
