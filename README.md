@@ -73,7 +73,7 @@ La primera vez tarda varios minutos (construye y analiza las 6 imágenes). Al te
 
 ## Imágenes en Docker Hub
 
-Las 6 imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspineda1421) con cada versión de git (`vX.Y.Z`), etiquetadas con la versión exacta (`1.3.2`), la línea menor (`1.3`) y `latest`; desde la v1.3.3, también con el mismo nombre del tag de git (`v1.3.3`). Antes de subirse, cada una se escanea con Trivy: si tiene CVE críticas o altas, no se publica (ver [`release.yml`](.github/workflows/release.yml)). Cada imagen publicada lleva su SBOM adjunto (`docker buildx imagetools inspect <imagen>:<versión> --format '{{ json .SBOM }}'`). Son las que usa el [despliegue con Docker Swarm](orquestacion/README.md).
+Las 6 imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspineda1421) con cada versión de git (`vX.Y.Z`), etiquetadas con la versión exacta (`1.4.0`), la línea menor (`1.4`) y `latest`; desde la v1.3.3, también con el mismo nombre del tag de git (`v1.4.0`). Antes de subirse, las 6 se escanean con Trivy: si una tiene CVE críticas o altas, no se publica ninguna (ver [`release.yml`](.github/workflows/release.yml)). `latest` es siempre la versión más nueva: republicar una vieja no lo mueve, y al terminar el workflow comprueba en Docker Hub que `latest` y la versión son la misma imagen en las 6. Cada imagen publicada lleva su SBOM adjunto (`docker buildx imagetools inspect <imagen>:<versión> --format '{{ json .SBOM }}'`). Son las que usa el [despliegue con Docker Swarm](orquestacion/README.md).
 
 | Servicio | Imagen |
 |---|---|
@@ -85,7 +85,7 @@ Las 6 imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspine
 | Scheduler (worker) | [`nicolaspineda1421/livemetric-scheduler`](https://hub.docker.com/r/nicolaspineda1421/livemetric-scheduler) |
 
 ```bash
-docker pull nicolaspineda1421/livemetric-auth:1.3.7
+docker pull nicolaspineda1421/livemetric-auth:1.4.0
 ```
 
 Para publicar una versión nueva basta con crear el tag: `git tag -a v1.4.0 -m "..." && git push origin v1.4.0`.

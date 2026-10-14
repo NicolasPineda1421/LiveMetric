@@ -14,9 +14,13 @@ name: LiveMetric Release — Publicacion en Docker Hub
 #   - workflow_dispatch: ejecucion manual indicando la version, util para la
 #     sustentacion o para republicar sin crear un tag nuevo.
 #
-# Puerta de seguridad: cada imagen se construye, se escanea con Trivy y SOLO
-# se publica si el escaneo pasa. Una imagen con CVEs CRITICAL/HIGH nunca
-# llega a Docker Hub.
+# Puerta de seguridad: las 6 imagenes se construyen y se escanean con Trivy, y
+# SOLO se publican si pasan las 6. Una imagen con CVEs CRITICAL/HIGH nunca
+# llega a Docker Hub, y tampoco las otras cinco de esa version.
+#
+# "latest": lo recibe la version solo si es la mas nueva de los tags de git
+# (republicar una version vieja no lo mueve hacia atras), y al final se
+# comprueba en Docker Hub que latest y la version son la misma imagen en las 6.
 #
 # Requisitos de configuracion (una sola vez, en el repositorio de GitHub):
 #   Settings > Secrets and variables > Actions
@@ -47,10 +51,11 @@ on:
 permissions:
   contents: read
 
-# Si se dispara dos veces seguidas, cancela la corrida anterior: evita que dos
-# publicaciones compitan por el mismo tag "latest".
+# Una publicacion a la vez, de cualquier version: dos corridas al mismo tiempo
+# podrian dejar "latest" en la que termine ultima y no en la mas nueva. La que
+# llega mientras otra corre espera su turno (no la cancela).
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
@@ -64,7 +69,13 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       semver: ${{ steps.resolve.outputs.semver }}
+      latest: ${{ steps.resolve.outputs.latest }}
     steps:
+      # Todos los tags de git, para saber si esta es la version mas nueva.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
       - name: Determinar y validar la version
         id: resolve
         # La version escrita a mano en workflow_dispatch entra por variable de
@@ -88,16 +99,29 @@ jobs:
             exit 1
           fi
 
-          echo "semver=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "✅ Publicando la version ${VERSION}"
+          # "latest" es siempre la version mas nueva: solo la lleva si esta lo
+          # es (republicar una version vieja no la mueve hacia atras).
+          MAS_NUEVA="$({ echo "$VERSION"; git tag --list 'v*.*.*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$'; } | sort -V | tail -n 1)"
+          if [ "$MAS_NUEVA" = "$VERSION" ]; then LATEST=true; else LATEST=false; fi
+
+          {
+            echo "semver=${VERSION}"
+            echo "latest=${LATEST}"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$LATEST" = true ]; then
+            echo "✅ Publicando la version ${VERSION}, que pasa a ser latest"
+          else
+            echo "✅ Publicando la version ${VERSION}; latest sigue en ${MAS_NUEVA}, que es mas nueva"
+          fi
 
   # ---------------------------------------------------------------------------
-  # 2) Construye, escanea y publica cada microservicio.
-  #    El escaneo ocurre ANTES del push: la imagen solo sale del runner si
-  #    Trivy la aprueba.
+  # 2) Construye y escanea cada microservicio, sin publicar nada todavia.
+  #    Se publica solo si pasan LAS SEIS (job "publish", mas abajo): asi
+  #    "latest" se mueve en todas las imagenes juntas o en ninguna, y nunca
+  #    quedan cinco en una version y una en otra.
   # ---------------------------------------------------------------------------
-  publish:
-    name: Publicar ${{ matrix.service }}
+  scan:
+    name: Escanear ${{ matrix.service }}
     needs: version
     runs-on: ubuntu-latest
     permissions:
@@ -115,36 +139,9 @@ jobs:
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       # -----------------------------------------------------------------------
-      # Etiquetas y metadatos OCI. metadata-action genera automaticamente:
-      #   livemetric/livemetric-auth:1.0.0   (version exacta)
-      #   livemetric/livemetric-auth:v1.0.0  (la misma, escrita igual que el
-      #                                       tag de git: de "git tag" a
-      #                                       "docker pull" sin traducir)
-      #   livemetric/livemetric-auth:1.0     (linea menor, para recibir parches)
-      #   livemetric/livemetric-auth:latest  (ultima version estable)
-      # y ademas inyecta labels OCI (fuente, revision, fecha) en la imagen,
-      # para que cualquiera pueda rastrear desde una imagen publicada hasta
-      # el commit exacto que la produjo.
-      # -----------------------------------------------------------------------
-      - name: Calcular etiquetas y metadatos
-        id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
-        with:
-          images: ${{ vars.DOCKERHUB_NAMESPACE }}/livemetric-${{ matrix.service }}
-          tags: |
-            type=semver,pattern={{version}},value=${{ needs.version.outputs.semver }}
-            type=raw,value=${{ needs.version.outputs.semver }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.version.outputs.semver }}
-            type=raw,value=latest
-          labels: |
-            org.opencontainers.image.title=LiveMetric ${{ matrix.service }}
-            org.opencontainers.image.description=Microservicio ${{ matrix.service }} de LiveMetric
-            org.opencontainers.image.licenses=MIT
-            org.opencontainers.image.vendor=LiveMetric
-
-      # -----------------------------------------------------------------------
       # Construccion LOCAL (load: true, push: false). La imagen se queda en el
-      # runner para poder escanearla antes de decidir si se publica.
+      # runner para escanearla; las capas quedan en la cache de GitHub para
+      # que "publish" suba exactamente esta misma imagen.
       # -----------------------------------------------------------------------
       - name: Construir imagen (sin publicar todavia)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
@@ -156,14 +153,13 @@ jobs:
           load: true
           push: false
           tags: livemetric-${{ matrix.service }}:release-candidate
-          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
       # -----------------------------------------------------------------------
       # PUERTA DE SEGURIDAD: mismas reglas que el job "container-scan" del
-      # pipeline principal. exit-code 1 detiene el job y la imagen NUNCA se
-      # publica.
+      # pipeline principal. exit-code 1 detiene el job, y ninguna de las seis
+      # imagenes se publica.
       # -----------------------------------------------------------------------
       - name: Escanear la imagen candidata con Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -179,7 +175,7 @@ jobs:
       # SBOM en CycloneDX de la imagen que se va a publicar y de las
       # dependencias del servicio (como en el pipeline principal), guardados
       # en la corrida. Ademas, la publicacion adjunta el SBOM a la imagen en
-      # Docker Hub (sbom: true, mas abajo).
+      # Docker Hub (sbom: true, en "publish").
       # -----------------------------------------------------------------------
       - name: Generar el SBOM de la imagen
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -204,9 +200,57 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  # ---------------------------------------------------------------------------
+  # 3) Publica las seis imagenes, solo si las seis pasaron el escaneo.
+  # ---------------------------------------------------------------------------
+  publish:
+    name: Publicar ${{ matrix.service }}
+    needs: [version, scan]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [auth, voting, analytics, scrutiny, scheduler, frontend]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Configurar Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
       # -----------------------------------------------------------------------
-      # El login ocurre DESPUES del escaneo, a proposito: si la imagen no pasa,
-      # el runner nunca llega a manejar las credenciales de Docker Hub.
+      # Etiquetas y metadatos OCI. metadata-action genera automaticamente:
+      #   livemetric/livemetric-auth:1.0.0   (version exacta)
+      #   livemetric/livemetric-auth:v1.0.0  (la misma, escrita igual que el
+      #                                       tag de git: de "git tag" a
+      #                                       "docker pull" sin traducir)
+      #   livemetric/livemetric-auth:1.0     (linea menor, para recibir parches)
+      #   livemetric/livemetric-auth:latest  (ultima version estable: solo si
+      #                                       esta es la mas nueva, ver "version")
+      # y ademas inyecta labels OCI (fuente, revision, fecha) en la imagen,
+      # para que cualquiera pueda rastrear desde una imagen publicada hasta
+      # el commit exacto que la produjo.
+      # -----------------------------------------------------------------------
+      - name: Calcular etiquetas y metadatos
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ${{ vars.DOCKERHUB_NAMESPACE }}/livemetric-${{ matrix.service }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.version.outputs.semver }}
+            type=raw,value=${{ needs.version.outputs.semver }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.version.outputs.semver }}
+            type=raw,value=latest,enable=${{ needs.version.outputs.latest }}
+          labels: |
+            org.opencontainers.image.title=LiveMetric ${{ matrix.service }}
+            org.opencontainers.image.description=Microservicio ${{ matrix.service }} de LiveMetric
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.vendor=LiveMetric
+
+      # -----------------------------------------------------------------------
+      # El login ocurre DESPUES del escaneo, a proposito: si alguna imagen no
+      # pasa, el runner nunca llega a manejar las credenciales de Docker Hub.
       # -----------------------------------------------------------------------
       - name: Iniciar sesion en Docker Hub
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
@@ -215,19 +259,17 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       # -----------------------------------------------------------------------
-      # Segunda invocacion de build-push: gracias a la cache de la primera, no
-      # reconstruye nada, solo etiqueta y sube la MISMA imagen ya escaneada.
-      # sbom: true adjunta a la imagen publicada su SBOM (una "attestation"
-      # de BuildKit, en SPDX): queda en Docker Hub junto a cada version, y se
-      # lee con
+      # Con la cache que dejo "scan", no reconstruye nada: etiqueta y sube la
+      # MISMA imagen ya escaneada. sbom: true adjunta a la imagen publicada
+      # su SBOM (una "attestation" de BuildKit, en SPDX): queda en Docker Hub
+      # junto a cada version, y se lee con
       #   docker buildx imagetools inspect <imagen>:<version> --format '{{ json .SBOM }}'
       # -----------------------------------------------------------------------
       - name: Publicar en Docker Hub
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: ./services/${{ matrix.service }}
-          # Un valor por corrida: la capa de "apk upgrade" no sale de la cache de
-          # una publicacion anterior (ver ARG ACTUALIZAR_PAQUETES en el Dockerfile).
+          # El mismo valor que en "scan": la misma capa de "apk upgrade".
           build-args: ACTUALIZAR_PAQUETES=${{ github.run_id }}
           push: true
           sbom: true
@@ -246,13 +288,47 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------
-  # 3) Resumen del release: deja en la pestaña Summary una tabla con las 6
+  # 4) Comprueba en Docker Hub que "latest" quedo en esta version en las seis
+  #    imagenes (la misma imagen, por su digest). Si no, la corrida falla.
+  # ---------------------------------------------------------------------------
+  verify-latest:
+    name: Verificar latest en Docker Hub
+    needs: [version, publish]
+    if: needs.version.outputs.latest == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Comparar latest con la version publicada
+        env:
+          NS: ${{ vars.DOCKERHUB_NAMESPACE }}
+          VERSION: ${{ needs.version.outputs.semver }}
+        run: |
+          CLEAN="${VERSION#v}"
+          # "|| true": si una etiqueta no existe, se informa y se sigue con las
+          # demas, para ver el estado de las seis en una sola corrida.
+          FALLAS=0
+          for s in auth voting analytics scrutiny scheduler frontend; do
+            IMAGEN="${NS}/livemetric-${s}"
+            VERSIONADA="$(docker buildx imagetools inspect "${IMAGEN}:${CLEAN}" --format '{{ .Manifest.Digest }}' || true)"
+            LATEST="$(docker buildx imagetools inspect "${IMAGEN}:latest" --format '{{ .Manifest.Digest }}' || true)"
+            if [ -n "$VERSIONADA" ] && [ "$VERSIONADA" = "$LATEST" ]; then
+              echo "✅ ${IMAGEN}:latest = ${CLEAN}"
+            else
+              echo "❌ ${IMAGEN}:latest no es ${CLEAN} (latest ${LATEST:-sin digest}, ${CLEAN} ${VERSIONADA:-sin digest})"
+              FALLAS=$((FALLAS + 1))
+            fi
+          done
+          [ "$FALLAS" -eq 0 ]
+
+  # ---------------------------------------------------------------------------
+  # 5) Resumen del release: deja en la pestaña Summary una tabla con las 6
   #    imagenes y el comando para consumirlas. Sirve de evidencia directa
   #    para el informe tecnico y la sustentacion.
   # ---------------------------------------------------------------------------
   release-summary:
     name: Resumen del release
-    needs: [version, publish]
+    needs: [version, scan, publish, verify-latest]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -262,11 +338,34 @@ jobs:
           NS="${{ vars.DOCKERHUB_NAMESPACE }}"
           CLEAN="${VERSION#v}"
 
-          if [ "${{ needs.publish.result }}" != "success" ]; then
-            echo "## ❌ Release ${VERSION} NO completado" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "Una o mas imagenes no superaron el escaneo de Trivy y no fueron publicadas." >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ needs.scan.result }}" != "success" ]; then
+            {
+              echo "## ❌ Release ${VERSION} NO publicado"
+              echo ""
+              echo "Una o mas imagenes no superaron el escaneo de Trivy, asi que no se publico ninguna de las 6. Docker Hub sigue como estaba."
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 1
+          fi
+          if [ "${{ needs.publish.result }}" != "success" ]; then
+            {
+              echo "## ❌ Release ${VERSION} publicado a medias"
+              echo ""
+              echo "Las 6 imagenes pasaron el escaneo, pero alguna no se pudo subir a Docker Hub. Vuelve a correr los jobs fallidos (Re-run failed jobs) para completarla."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if [ "${{ needs.verify-latest.result }}" = "failure" ]; then
+            {
+              echo "## ❌ Release ${VERSION}: latest no quedo en esta version"
+              echo ""
+              echo "Las imagenes se publicaron, pero en Docker Hub latest no coincide con ${VERSION} en todas. El detalle esta en el job \"Verificar latest en Docker Hub\"."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          if [ "${{ needs.version.outputs.latest }}" = "true" ]; then
+            ETIQUETAS="\`${VERSION}\` (igual que el tag de git), \`${CLEAN%.*}\` y \`latest\` (comprobado en Docker Hub: es la misma imagen en las 6)"
+          else
+            ETIQUETAS="\`${VERSION}\` (igual que el tag de git) y \`${CLEAN%.*}\`. **No** recibe \`latest\`: ya hay una version mas nueva publicada"
           fi
 
           {
@@ -278,9 +377,9 @@ jobs:
               echo "| ${s} | \`${NS}/livemetric-${s}:${CLEAN}\` |"
             done
             echo ""
-            echo "Cada imagen tambien queda como \`${VERSION}\` (igual que el tag de git), \`${CLEAN%.*}\` y \`latest\`."
+            echo "Cada imagen tambien queda como ${ETIQUETAS}."
             echo ""
-            echo "Todas las imagenes superaron el escaneo de Trivy (CRITICAL/HIGH) antes de publicarse."
+            echo "Las 6 imagenes superaron el escaneo de Trivy (CRITICAL/HIGH) antes de publicar cualquiera de ellas."
             echo ""
             echo "Cada imagen lleva su SBOM adjunto en Docker Hub, y el de CycloneDX (imagen y dependencias) queda en los artefactos de esta corrida. Para leer el adjunto:"
             echo '```bash'

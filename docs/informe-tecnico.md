@@ -75,7 +75,7 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 | Base de datos de código abierto | PostgreSQL 16, en una red interna sin puerto hacia la PC |
 | Autenticación JWT con roles | JWT HS256 con los roles `admin`, `auditor` y `voter`, verificados en cada servicio |
 | Dockerfile por servicio, docker-compose | Seis Dockerfile multietapa sobre Alpine, sin root; `docker-compose.yml` para desarrollo |
-| Imágenes en Docker Hub con versión semántica | Seis imágenes publicadas por `release.yml` con `1.3.7`, `v1.3.7`, `1.3` y `latest`, solo si Trivy las aprueba |
+| Imágenes en Docker Hub con versión semántica | Seis imágenes publicadas por `release.yml` con `1.4.0`, `v1.4.0`, `1.4` y `latest`, solo si Trivy aprueba las seis |
 | Pipeline DevSecOps | 37 jobs en GitHub Actions, con un *Security Gate* final (sección 4) |
 | IaC y orquestación | Terraform (provider `kreuzwerker/docker`) y Docker Swarm |
 | Documentación en Markdown | README y manuales de arquitectura, desarrollo, despliegue, seguridad y usuario |
@@ -397,20 +397,21 @@ flowchart LR
 
 *Figura 8. Pipeline de `devsecops.yml`, que corre en cada push y pull request a `main`. Gitleaks va primero: si encuentra un secreto, no corre nada más. El Security Gate espera a todos los controles, no solo a los que se dibujan llegando a él. Aparte, la insignia de cobertura se publica después de Jest.*
 
-La publicación es un pipeline aparte (`release.yml`), que corre solo al crear un tag `vX.Y.Z`. Así, `latest` no cambia con cada commit, sino solo cuando el equipo publica una versión:
+La publicación es un pipeline aparte (`release.yml`), que corre solo al crear un tag `vX.Y.Z`. Así, `latest` no cambia con cada commit, sino solo cuando el equipo publica una versión, y siempre a la más nueva:
 
 ```mermaid
 flowchart LR
     T(["tag vX.Y.Z"]) --> V["Valida el formato<br/>de la versión"]
     V --> B["Construye las 6 imágenes<br/>(sin publicar)"]
     B --> TR{"Trivy<br/>CRITICAL / HIGH"}
-    TR -->|"falla"| X(["No se publica"])
-    TR -->|"pasa"| S["SBOM en CycloneDX<br/>(artefacto)"]
+    TR -->|"falla alguna"| X(["No se publica<br/>ninguna"])
+    TR -->|"pasan las 6"| S["SBOM en CycloneDX<br/>(artefacto)"]
     S --> L["Login en Docker Hub"]
-    L --> H["Publica X.Y.Z, vX.Y.Z,<br/>X.Y y latest,<br/>con su SBOM adjunto"]
+    L --> H["Publica X.Y.Z, vX.Y.Z y X.Y,<br/>con su SBOM adjunto,<br/>y latest si es la más nueva"]
+    H --> C["Comprueba que latest<br/>y X.Y.Z son la misma<br/>imagen en las 6"]
 ```
 
-*Figura 9. Pipeline de publicación. Las credenciales de Docker Hub se usan después del escaneo: si la imagen no lo pasa, el runner nunca las toca.*
+*Figura 9. Pipeline de publicación. Las credenciales de Docker Hub se usan después del escaneo: si alguna imagen no lo pasa, el runner nunca las toca. Las publicaciones corren de a una, para que dos versiones no se disputen `latest`.*
 
 ### 2.9 Decisiones de diseño principales
 
@@ -656,10 +657,10 @@ definition:
             type=semver,pattern={{version}},value=${{ needs.version.outputs.semver }}
             type=raw,value=${{ needs.version.outputs.semver }}
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.version.outputs.semver }}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ needs.version.outputs.latest }}
 ```
 
-*Fragmento 6. Etiquetas de cada imagen publicada (`release.yml`): `1.3.7`, `v1.3.7`, `1.3` y `latest`.*
+*Fragmento 6. Etiquetas de cada imagen publicada (`release.yml`): `1.4.0`, `v1.4.0`, `1.4` y `latest`, este último solo si la versión es la más nueva de los tags de git.*
 
 ### 4.7 Fase 6 — Operación y monitoreo
 
@@ -1009,7 +1010,7 @@ Además, Falco corre con `rule_matching=all`, porque por defecto sus reglas gen�
 |---|---|
 | Repositorio | https://github.com/NicolasPineda1421/LiveMetric |
 | Imágenes | https://hub.docker.com/u/nicolaspineda1421 |
-| Versión documentada | v1.3.7 (release en GitHub y tags en Docker Hub) |
+| Versión documentada | v1.4.0 (release en GitHub y tags en Docker Hub) |
 | Modelo de amenazas | `docs/threat-model/livemetric.threatdragon.json` y `STRIDE-analysis.md` |
 | Pipeline | `.github/workflows/devsecops.yml` y `release.yml` |
 | Manuales | `docs/` (arquitectura, desarrollo, instalación y despliegue, seguridad, usuario) |
