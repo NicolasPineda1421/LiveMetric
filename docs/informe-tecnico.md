@@ -12,7 +12,7 @@
 <p class="subtitulo">Sistema de elecciones y escrutinio en tiempo real,<br>con un pipeline DevSecOps de ciclo completo</p>
 </div>
 <div class="integrantes"><strong>Integrantes:</strong> William Andres Mosquera Vela<br>Juan Nicolas Pineda Alvarado<br>Johnny Albeiro Mallama Mejia<br>Juan Esteban Contreras Gonzalez</div>
-<div class="cierre"><strong>Docente:</strong> Jaider Ospina Navas<br><strong>Fecha:</strong> 02/10/2026<br><strong>Licencia:</strong> MIT</div>
+<div class="cierre"><strong>Docente:</strong> Jaider Ospina Navas<br><strong>Fecha:</strong> 14/10/2026<br><strong>Licencia:</strong> MIT</div>
 </div>
 
 <!-- indice -->
@@ -594,7 +594,7 @@ El mismo job genera el **SBOM** (*Software Bill of Materials*) de cada servicio 
 
 ### 4.5 Fase 4 — Pruebas
 
-**Pruebas unitarias y de integración.** Jest corre en los seis componentes: **401 pruebas** en la corrida sobre la v1.3.7.
+**Pruebas unitarias y de integración.** Jest corre en los seis componentes: **514 pruebas** en la corrida sobre la v1.6.0.
 
 - **Servicios.** Supertest llama a la app de Express en memoria contra un PostgreSQL 16 real y desechable: cada `npm test` lo levanta en un contenedor, le carga `db/init.sql` y lo borra al terminar.
 - **Frontend.** React Testing Library prueba los componentes sobre jsdom, con el cliente HTTP reemplazado por un doble.
@@ -688,40 +688,43 @@ Los mismos controles, salvo Checkov, Terraform y ZAP, corren en la PC con `./scr
 
 ### 5.1 Resumen de la última corrida
 
-Los datos de esta sección salen de la corrida del pipeline sobre la versión v1.3.7, del 5 de octubre de 2026, y del pipeline local sobre ese mismo código.
+Los datos de esta sección salen de la corrida del pipeline sobre la versión v1.6.0, del 14 de octubre de 2026, de su publicación en Docker Hub y del pipeline local sobre ese mismo código.
 
 | Control | Resultado |
 |---|---|
-| Gitleaks | Sin secretos en los 97 commits del historial |
-| Semgrep | 289 reglas sobre 223 archivos: 0 hallazgos de severidad alta o media; 33 informativos |
-| ESLint | 0 hallazgos en los 6 servicios; 15 excepciones justificadas en el código |
+| Gitleaks | Sin secretos en los 112 commits del historial |
+| Semgrep | 289 reglas sobre 263 archivos: 1 hallazgo alto, un falso positivo en una prueba nueva que después se justificó (Tabla 10), y 33 informativos. Semgrep reporta, no bloquea |
+| ESLint | 0 hallazgos en los 6 servicios; 26 excepciones justificadas en el código |
 | npm audit | 0 vulnerabilidades en las dependencias de producción de los 6 servicios |
 | Trivy (dependencias) | 0 CVE críticas o altas |
-| Trivy (imágenes) | 0 CVE críticas o altas en las 6 imágenes |
+| Trivy (imágenes) | 0 CVE críticas o altas en las 8 imágenes |
 | Checkov | 37 controles aprobados, 0 fallidos |
-| Jest | 401 pruebas aprobadas; 80,3 % de cobertura de líneas |
-| Terraform | Despliegue, *smoke test* y destrucción correctos |
+| Jest | 514 pruebas aprobadas; 84,1 % de cobertura de líneas |
+| Terraform | Despliegue (17 recursos), *smoke test* y destrucción correctos |
 | OWASP ZAP | 0 alertas altas, 0 medias, 1 baja (falso positivo) y 8 informativas |
+| Publicación (`release.yml`) | Las 8 imágenes publicadas como `1.6.0`, `v1.6.0`, `1.6` y `latest`, después del escaneo y de levantar el sistema con ellas; `latest` comprobado por *digest* en las 8 |
 
 *Tabla 8. Resultado de cada control.*
 
 ### 5.2 Reportes de ejemplo
 
-**Pipeline local.** Este es el cuadro final de `./scripts/pipeline-local.sh`, que resume todos los controles por servicio:
+**Pipeline local.** Este es el cuadro final de `./scripts/pipeline-local.sh`, que resume todos los controles por servicio. Es de `main` después de la v1.6.0, con el falso positivo de Semgrep ya justificado; por eso Auth tiene una prueba más que en la Tabla 8. Las dos imágenes que no son de un servicio, la base y la de instalación, solo se construyen y se escanean:
 
 ```
   Todo el repositorio
-   ✔ Secretos  · Gitleaks    sin secretos expuestos (97 commits revisados)
+   ✔ Secretos  · Gitleaks    sin secretos expuestos (114 commits revisados)
    ✔ Código    · Semgrep     sin hallazgos para revisar · 33 informativos
 
   Por servicio Código     Dependencias          Imagen Docker         Pruebas
               ESLint     npm audit  Trivy      build      Trivy      Jest
-  auth        ✔          ✔          ✔          ✔          ✔          ✔ 114
+  auth        ✔          ✔          ✔          ✔          ✔          ✔ 163
   voting      ✔          ✔          ✔          ✔          ✔          ✔ 35
-  analytics   ✔          ✔          ✔          ✔          ✔          ✔ 85
+  analytics   ✔          ✔          ✔          ✔          ✔          ✔ 96
   scrutiny    ✔          ✔          ✔          ✔          ✔          ✔ 22
   scheduler   ✔          ✔          ✔          ✔          ✔          ✔ 4
-  frontend    ✔          ✔          ✔          ✔          ✔          ✔ 101
+  frontend    ✔          ✔          ✔          ✔          ✔          ✔ 195
+  db          —          —          —          ✔          ✔          —
+  instalador  —          —          —          ✔          ✔          —
 
   ✔ Todos los controles que bloquean pasaron. Es seguro hacer push.
 ```
@@ -729,15 +732,15 @@ Los datos de esta sección salen de la corrida del pipeline sobre la versión v1
 **Gitleaks.** Revisa el historial completo con las reglas por defecto, más una propia para `JWT_SECRET`. Cuatro huellas de falsos positivos ya revisados están en `.gitleaksignore`, cada una con su motivo: una contraseña deliberadamente incorrecta en una prueba y los ejemplos de la documentación que muestran cómo comprobar que Gitleaks bloquea.
 
 ```
-INF 97 commits scanned.
-INF scanned ~3646401 bytes (3.65 MB) in 1.68s
+INF 112 commits scanned.
+INF scanned ~4200628 bytes (4.20 MB) in 844ms
 INF no leaks found
 ```
 
-**Semgrep.** Los 33 hallazgos que quedan son informativos, en siete categorías, y confirman protecciones que están implementadas. Por ejemplo, `helmet_header_x_powered_by` (9 casos) indica que helmet quita la cabecera `X-Powered-By`, y `rate_limit_control` (4) que los servicios limitan la tasa de peticiones. Los 28 hallazgos altos y medios de las primeras corridas se corrigieron todos (Tabla 10).
+**Semgrep.** Los 33 hallazgos que quedan son informativos, en siete categorías, y confirman protecciones que están implementadas. Por ejemplo, `helmet_header_x_powered_by` (9 casos) indica que helmet quita la cabecera `X-Powered-By`, y `rate_limit_control` (4) que los servicios limitan la tasa de peticiones. Los 28 hallazgos altos y medios de las primeras corridas se corrigieron todos, y el falso positivo alto de la v1.6.0 se justificó en el código (Tabla 10).
 
 ```
-Ran 289 rules on 223 files: 33 findings.
+Ran 289 rules on 263 files: 33 findings.
 [INFO] helmet_header_x_powered_by (9)
 [INFO] rate_limit_control (4)
 [INFO] helmet_header_dns_prefetch (4)   [INFO] helmet_header_hsts (4)
@@ -763,7 +766,7 @@ terraform scan results:
 Passed checks: 37, Failed checks: 0, Skipped checks: 0
 ```
 
-**OWASP ZAP.** La Figura 13 es el resumen del reporte de la última corrida. La única alerta baja, *Timestamp Disclosure*, es un falso positivo: ZAP interpreta como marca de tiempo una constante numérica del JavaScript compilado de una librería (`1604231423`).
+**OWASP ZAP.** La Figura 13 es el resumen del reporte de la corrida sobre la v1.6.0. La única alerta baja, *Timestamp Disclosure*, es un falso positivo: ZAP interpreta como marca de tiempo una constante numérica del JavaScript compilado de una librería (`1604231423`).
 
 ![Resumen del reporte de OWASP ZAP](img/zap-resumen.png)
 
@@ -776,6 +779,7 @@ La evolución de ZAP muestra el ciclo completo de gestión de un hallazgo:
 | Primera corrida con el stack completo | 0 | 1 | 7 | 9 |
 | Después de corregir las cabeceras | 0 | 0 | 1 | 9 |
 | Con Vite 8 (v1.3.4): el nuevo build ya no deja comentarios de las librerías y desaparece *Suspicious Comments* | 0 | 0 | 1 | 8 |
+| v1.6.0 | 0 | 0 | 1 | 8 |
 
 *Tabla 9. Alertas de ZAP antes y después de las correcciones.*
 
@@ -783,15 +787,15 @@ La evolución de ZAP muestra el ciclo completo de gestión de un hallazgo:
 
 | Componente | Pruebas | Líneas cubiertas | Cobertura |
 |---|---|---|---|
-| Analytics | 90 | 497 / 531 | 93,6 % |
+| Analytics | 96 | 526 / 550 | 95,6 % |
 | Scrutiny | 22 | 323 / 359 | 90,0 % |
-| Frontend | 136 | 838 / 1052 | 79,7 % |
+| Frontend | 195 | 1485 / 1722 | 86,2 % |
 | Voting | 35 | 159 / 204 | 77,9 % |
-| Auth | 114 | 579 / 818 | 70,8 % |
+| Auth | 162 | 802 / 1064 | 75,4 % |
 | Scheduler | 4 | 26 / 52 | 50,0 % |
-| **Total** | **401** | **2422 / 3016** | **80,3 %** |
+| **Total** | **514** | **3321 / 3951** | **84,1 %** |
 
-En Auth, los scripts de terminal (`crearAdmin.js`, `cambiarContrasena.js` y `terminal.js`) se prueban ejecutándolos de verdad, como procesos aparte con la entrada por tubería (`crearAdmin.test.js`): Jest no mide la cobertura de un proceso hijo, así que figuran como no cubiertos aunque tienen pruebas. Por eso la cobertura de Auth bajó respecto de la versión anterior (75,1 %).
+En Auth, los scripts de terminal (`crearAdmin.js`, `cambiarContrasena.js` y `terminal.js`) se prueban ejecutándolos de verdad, como procesos aparte con la entrada por tubería (`crearAdmin.test.js`): Jest no mide la cobertura de un proceso hijo, así que figuran como no cubiertos aunque tienen pruebas. Por eso Auth queda por debajo del promedio. Scheduler tiene la cobertura más baja por cómo está repartido su código. Su lógica, abrir y cerrar las elecciones y pedir la certificación (`schedulerTick.js`), tiene 23 de 24 líneas cubiertas. Lo que queda sin cubrir es `index.js`, el arranque del proceso: el cron y el endpoint de salud.
 
 ### 5.3 Tabla de hallazgos
 
@@ -841,6 +845,11 @@ Un hallazgo no siempre sale de una herramienta automática: algunos aparecieron 
 | El PIN del votante no vencía: uno filtrado o viejo servía en cualquier elección futura | Revisión funcional del equipo | Media | Resuelto | El PIN vence 24 horas después de generarlo (`PIN_VIGENCIA_HORAS`, de 1 hora a 90 días), comprobado en los dos pasos del ingreso (migraciones `007_vencimiento_pin.sql` y `008_pin_sin_vencimiento.sql`, que le pone fecha a los PIN anteriores). Una versión también limitaba el ingreso a la ventana de la votación; el equipo la quitó, porque obligaba a programar una elección para registrar el autenticador, y votar ya está limitado al horario de la elección. Otra dejaba elegir la fecha de vencimiento al generarlo (por defecto, el cierre de la elección); el equipo prefirió un tiempo fijo que corre desde que se genera |
 | Con la elección abierta, el administrador y el auditor veían los votos de cada opción y quién iba ganando (la API los entregaba), y un resultado parcial puede influir en quien todavía no votó | Revisión funcional del equipo | Media (integridad del proceso electoral) | Resuelto | Analytics solo publica el total de votos hasta que existe el acta certificada: los votos por opción, la concentración y el momento de definición no salen del servicio antes. Se aplica en la API, no solo en la pantalla, con pruebas que lo comprueban |
 | Los servicios se conectan a la base como dueños de las tablas, y por eso pueden desactivar el trigger *append-only* | Demostración del ataque a las actas | Media | Mitigado | La firma Ed25519 y el reconteo detectan cualquier alteración del acta (Figura 16). Pendiente: un usuario de base por servicio, sin permiso para cambiar las tablas |
+| Republicar una versión vieja le ponía `latest`, y si una imagen no pasaba el escaneo las demás se publicaban igual: `latest` podía quedar atrás, o con imágenes de versiones distintas | Revisión del pipeline | Media (cadena de suministro) | Resuelto | `latest` solo para la versión más nueva de los tags de git. Las 8 imágenes se escanean y el sistema se levanta con ellas antes de publicar cualquiera; al final se compara el *digest* de `latest` con el de la versión en las 8. Las publicaciones corren de a una |
+| La imagen oficial `postgres:16-alpine` trae `gosu`, compilado en Go, con 25 CVE críticas y altas de la biblioteca estándar de Go. Nadie la escaneaba, porque el proyecto no la construía | Trivy (imagen `livemetric-db`, nueva) | Alta | Mitigado (parcial) | En `livemetric-db`, la imagen publicada de la base, `gosu` se reemplaza por `su-exec` de Alpine y la imagen corre como `postgres`: 0 CVE. El compose del repositorio, Swarm, Terraform y las pruebas siguen con la oficial, donde `gosu` solo corre al arrancar, para dejar de ser root, sin recibir entradas de afuera. Pendiente: usar `livemetric-db` también ahí |
+| La imagen de instalación (`nicolaspineda1421/livemetric`) corre como root | Semgrep | Media | Aceptado | Escribe el compose y el `.env` en la carpeta del usuario, que en Linux es de otro dueño, y le deja los archivos a ese dueño. No es un servicio: escribe y termina. Excepción `nosemgrep` con el motivo en el `Dockerfile` |
+| Falso positivo alto de Semgrep (`node_secret`) en una prueba nueva: toma el nombre de la variable `JWT_SECRET` por un secreto escrito en el código | Semgrep | Alta | Aceptado (falso positivo) | El valor lo genera la prueba al azar; excepción `nosemgrep` con el motivo al lado |
+| Cada corrida de las pruebas dejaba su base de Postgres desechable en un volumen anónimo (188 en una PC del equipo, 8,4 GB), y `migraciones` dejaba uno vacío cada vez que se recreaba | Revisión del equipo | Baja (disco) | Resuelto | El teardown de Jest borra el contenedor con `-v`, y `migraciones` monta un `tmpfs` donde la imagen de Postgres declara su volumen |
 
 *Tabla 10. Hallazgos con su severidad, estado y justificación.*
 
@@ -860,6 +869,7 @@ Un control que nunca falla puede no estar revisando nada: lo demostró Checkov. 
   - el PDF de este informe se regeneró idéntico.
 
   Aparecieron los hallazgos que la Tabla 10 marca con ese origen, que ninguna herramienta automática había señalado.
+- **Desde Docker Hub.** En una carpeta vacía, sin el repositorio, los dos comandos de la página de `nicolaspineda1421/livemetric` levantaron el sistema con las imágenes publicadas de la v1.6.0: los cuatro servicios respondieron a través de nginx, se creó el administrador y ese administrador inició sesión. La misma prueba corre en `release.yml` con las imágenes recién construidas, antes de publicarlas.
 - **Integridad del acta, en vivo (amenaza 15).** Un script de demostración (`scripts/demo/alterar-acta.js`) hace lo que haría un atacante con acceso total a la base:
   - intenta cambiar el acta y la base se lo impide;
   - con permisos de dueño de la tabla, apaga el trigger *append-only*;
@@ -983,7 +993,7 @@ Además, Falco corre con `rule_matching=all`, porque por defecto sus reglas gen�
 - **La base es compartida entre servicios**, con un mismo usuario de PostgreSQL para todos, que además es dueño de las tablas: puede desactivar los triggers *append-only*. Tampoco tiene respaldo automático.
 - **Swarm se probó en un solo nodo**, y ahí los secretos llegan a los servicios como variables de entorno.
 - **Faltan procedimientos de rotación.** Cambiar la clave de cifrado del padrón requiere un script que todavía no existe, y las actas firmadas con una clave anterior pasan a verse como alteradas, porque el sistema no conserva las claves públicas viejas.
-- **La cobertura de pruebas es desigual:** Auth (55 %) y el scheduler (50 %) quedan muy por debajo del resto.
+- **La cobertura de pruebas es desigual:** el scheduler (50 %) y Auth (75 %) quedan por debajo del total (84 %), porque el arranque del scheduler y los scripts de terminal de Auth no se miden (sección 5.2).
 
 ### 7.3 Lecciones aprendidas
 
@@ -1004,6 +1014,7 @@ Además, Falco corre con `rule_matching=all`, porque por defecto sus reglas gen�
 - **Operación.** Respaldos automáticos y cifrados de la base.
 - **Puestos.** Puestos de votación en el exterior (el país ya se guarda).
 - **Dependencias.** Mantener las dependencias y las imágenes base al día antes de cada versión, aunque no haya CVE.
+- **Imágenes.** Usar `livemetric-db`, sin `gosu`, también en el compose del repositorio, en Swarm y en Terraform, y publicar las imágenes también para `arm64`.
 
 ## Anexo. Enlaces y reproducción
 

@@ -24,6 +24,9 @@ describe('secretos de la instalación', () => {
     const generado = crearGenerador();
     expect(Buffer.from(generado('VOTERS_ENCRYPTION_KEY'), 'base64')).toHaveLength(32);
     expect(generado('POSTGRES_PASSWORD')).toMatch(/^[0-9a-f]{48}$/);
+    // Semgrep (node_secret) toma el nombre de la variable por un secreto escrito
+    // en el código: el valor es el que genera crearGenerador, al azar.
+    // nosemgrep: node_secret
     expect(Buffer.from(generado('JWT_SECRET'), 'base64')).toHaveLength(48);
 
     const privada = generado('ACTA_SIGNING_KEY');
