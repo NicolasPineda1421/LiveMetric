@@ -69,7 +69,10 @@ test('fuera de Linux (sin tabla de montajes) no puede saberlo y sigue', () => {
 });
 
 test('la página de Docker Hub tiene un solo bloque de etiquetas, el que arma pagina-docker-hub.yml', () => {
-  const pagina = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'docker-hub', 'README.md'), 'utf8');
+  // En Windows, git baja los .md con CRLF (y el contenedor global copia la
+  // carpeta así): se normaliza antes de buscar el bloque.
+  const pagina = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'docker-hub', 'README.md'), 'utf8')
+    .replace(/\r\n/g, '\n');
   expect(pagina.match(/<!-- etiquetas:inicio -->\n[\s\S]*?\n<!-- etiquetas:fin -->/g)).toHaveLength(1);
   // Los comandos de la página son los de la imagen de instalación.
   expect(pagina).toContain('docker run --rm --pull always -v "${PWD}:/salida" nicolaspineda1421/livemetric');

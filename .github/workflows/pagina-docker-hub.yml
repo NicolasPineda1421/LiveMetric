@@ -71,7 +71,8 @@ jobs:
           limpia = version[1:]
           menor = limpia.rsplit(".", 1)[0]
           repo = os.environ["GITHUB_REPOSITORY"]
-          texto = open("docker-hub/README.md", encoding="utf-8").read()
+          # Con CRLF (un README guardado en Windows) el bloque no se encontraria.
+          texto = open("docker-hub/README.md", encoding="utf-8").read().replace("\r\n", "\n")
           linea = (f"- [`{limpia}`, `{version}`, `{menor}`, `latest`]"
                    f"(https://github.com/{repo}/blob/{version}/docker-hub/Dockerfile)")
           texto, n = re.subn(r"<!-- etiquetas:inicio -->\n.*?\n<!-- etiquetas:fin -->", lambda _: linea, texto, flags=re.S)
