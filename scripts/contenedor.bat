@@ -141,6 +141,32 @@ set "PUBLICAR=%PUBLICAR% -p 127.0.0.1:%PUERTO_GRAFANA%:3010 -p 127.0.0.1:%PUERTO
 call :ok "Puertos %PUERTO_GRAFANA% para Grafana y %PUERTO_PROMETHEUS% para Prometheus libres"
 :sin_puertos_monitoreo
 
+REM Memoria de Docker Desktop: con el backend Hyper-V viene en 2 GB. Jest
+REM lanza un proceso por CPU menos uno, de unos 300 MB cada uno con jsdom, y
+REM con 12 CPU no entran: el motor se va al swap y las pruebas del frontend
+REM se pasan de su tiempo limite. Con poca memoria, el contenedor global ve
+REM solo una CPU cada 512 MB (--cpuset-cpus: Jest las cuenta con
+REM os.availableParallelism, que lo respeta).
+set "LIMITE_CPU="
+set "MEM_BYTES="
+for /f "tokens=1,2" %%a in ('docker info --format "{{.NCPU}} {{.MemTotal}}" 2^>nul') do (
+  set "NCPU=%%a"
+  set "MEM_BYTES=%%b"
+)
+if not defined MEM_BYTES goto :sin_limite_cpu
+set "MEM_MB=%MEM_BYTES:~0,-6%"
+set /a CPUS_MEMORIA=MEM_MB/512
+if %CPUS_MEMORIA% LSS 2 set "CPUS_MEMORIA=2"
+if %CPUS_MEMORIA% GEQ %NCPU% goto :sin_limite_cpu
+set /a ULTIMA_CPU=CPUS_MEMORIA-1
+set "LIMITE_CPU=--cpuset-cpus=0-%ULTIMA_CPU%"
+set /a MEM_GB=(MEM_MB+500)/1000
+set /a GB_NECESARIOS=(NCPU*512+1023)/1024
+call :aviso "Docker Desktop tiene unos %MEM_GB% GB de memoria: el contenedor global usa %CPUS_MEMORIA% de sus %NCPU% CPU, para que las pruebas no se queden sin memoria."
+call :info "Asi las pruebas pasan igual. Para que use todas: %GB_NECESARIOS% GB en Docker Desktop, Settings, Resources,"
+call :info "solo si la PC los tiene libres: con Hyper-V los reserva enteros al arrancar, y si no hay, Docker no inicia."
+:sin_limite_cpu
+
 REM --- 2. Contenedor global -------------------------------------------------
 call :fase 2 "Contenedor global"
 set "LOG_BUILD=%TEMP%\livemetric-global-build-%RANDOM%.log"
@@ -166,7 +192,7 @@ if errorlevel 1 (
   call :falla "No se pudo preparar el .env."
   goto :fin_error
 )
-docker run -d --name %NOMBRE% --privileged --restart unless-stopped %PUBLICAR% -v %VOLUMEN%:/var/lib/docker -v "%cd%\.env:/livemetric/.env:ro" %IMAGEN% >nul
+docker run -d --name %NOMBRE% --privileged --restart unless-stopped %LIMITE_CPU% %PUBLICAR% -v %VOLUMEN%:/var/lib/docker -v "%cd%\.env:/livemetric/.env:ro" %IMAGEN% >nul
 if errorlevel 1 (
   call :falla "No se pudo arrancar el contenedor global."
   goto :fin_error
