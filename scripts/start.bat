@@ -231,13 +231,16 @@ if errorlevel 1 (
   call :aviso "El monitoreo no arranco; LiveMetric si esta arriba. Log: %LOG_MONITOREO%"
   goto :sin_monitoreo
 )
+REM Las esperas son con ping y no con timeout: timeout falla al instante si
+REM la entrada no es la consola (redirigida, o desde otro programa), y el
+REM bucle terminaria sin esperar.
 for /l %%i in (1,1,60) do (
   if "!MONITOREO_OK!"=="0" (
     call curl -sf http://127.0.0.1:%PUERTO_GRAFANA%/api/health >nul 2>nul
     if not errorlevel 1 (
       set MONITOREO_OK=1
     ) else (
-      call timeout /t 2 /nobreak >nul
+      ping -n 3 127.0.0.1 >nul
     )
   )
 )
@@ -258,7 +261,7 @@ for /l %%i in (1,1,5) do (
     if not errorlevel 1 (
       set FRONTEND_UP=1
     ) else (
-      call timeout /t 1 /nobreak >nul
+      ping -n 2 127.0.0.1 >nul
     )
   )
 )

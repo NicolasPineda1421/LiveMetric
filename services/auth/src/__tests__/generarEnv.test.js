@@ -63,7 +63,9 @@ describe('generarEnv.js', () => {
     const variables = leer(ruta);
     expect([...variables.keys()]).toEqual(SECRETOS);
     expect(publicaDe(variables.get('ACTA_SIGNING_KEY'))).toBe(variables.get('ACTA_PUBLIC_KEY'));
-    expect(fs.statSync(ruta).mode & 0o777).toBe(0o600);
+    // En Windows no hay permisos de Unix: el mode 0o600 no tiene efecto y Node
+    // informa 0o666 para cualquier archivo que se puede escribir.
+    if (process.platform !== 'win32') expect(fs.statSync(ruta).mode & 0o777).toBe(0o600);
     // Las opcionales van comentadas: no cambian nada si no se tocan.
     expect(fs.readFileSync(ruta, 'utf8')).toMatch(/^# LIVEMETRIC_VERSION=/m);
   });

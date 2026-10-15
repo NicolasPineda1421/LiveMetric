@@ -200,13 +200,16 @@ if errorlevel 1 (
 
 <nul set /p "=%GRIS%   ... esperando al motor de Docker de adentro%RESET%"
 set MOTOR_OK=0
+REM Las esperas son con ping y no con timeout: timeout falla al instante si
+REM la entrada no es la consola (redirigida, o desde otro programa), y el
+REM bucle terminaria sin esperar.
 for /l %%i in (1,1,60) do (
   if "!MOTOR_OK!"=="0" (
     docker exec %NOMBRE% docker info >nul 2>nul
     if not errorlevel 1 (
       set MOTOR_OK=1
     ) else (
-      timeout /t 1 /nobreak >nul
+      ping -n 2 127.0.0.1 >nul
     )
   )
 )
@@ -321,7 +324,7 @@ for /l %%i in (1,1,60) do (
     if not errorlevel 1 (
       set MONITOREO_OK=1
     ) else (
-      timeout /t 2 /nobreak >nul
+      ping -n 3 127.0.0.1 >nul
     )
   )
 )

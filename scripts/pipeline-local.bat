@@ -75,7 +75,14 @@ REM igual que "Verificar SARIF generado" en el workflow real.
 call :paso 2
 if exist semgrep-local.sarif del /q semgrep-local.sarif
 call :en_curso "Semgrep analizando el codigo"
-docker run --rm -v "%cd%:/src" -w /src semgrep/semgrep semgrep scan --config=p/owasp-top-ten --config=p/expressjs --config=p/nodejsscan --config=p/jwt --sarif --output=/src/semgrep-local.sarif . > "%LOG_DIR%\semgrep.log" 2>&1
+REM Los node_modules de los servicios (unos 66.000 archivos, fuera de git) se
+REM tapan con un tmpfs vacio, solo dentro del contenedor de Semgrep: aunque
+REM analiza solo los archivos de git, antes recorre todo el arbol, y con
+REM Docker Desktop cada archivo de una carpeta de Windows cruza a la VM de a
+REM uno (11 minutos, contra 45 segundos tapados). Lo analizado es lo mismo.
+set "SEMGREP_TAPAR="
+for %%S in (%SERVICES%) do if exist "services\%%S\node_modules" set "SEMGREP_TAPAR=!SEMGREP_TAPAR! --tmpfs /src/services/%%S/node_modules"
+docker run --rm%SEMGREP_TAPAR% -v "%cd%:/src" -w /src semgrep/semgrep semgrep scan --config=p/owasp-top-ten --config=p/expressjs --config=p/nodejsscan --config=p/jwt --sarif --output=/src/semgrep-local.sarif . > "%LOG_DIR%\semgrep.log" 2>&1
 set RC=!errorlevel!
 REM El SARIF se escribe dentro del repo (es lo unico que el contenedor ve);
 REM se pasa a la carpeta de logs para no dejarlo suelto en el repo.
