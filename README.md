@@ -142,6 +142,12 @@ El árbol completo, archivo por archivo, está en [Arquitectura](docs/arquitectu
 | [Orquestación](orquestacion/README.md) | Despliegue en Docker Swarm con réplicas, rolling updates y red cifrada |
 | [Observabilidad](monitoring/README.md) | Prometheus, Grafana, Loki y Falco: métricas, logs y detección en runtime |
 
+## 🎬 Demostración de LiveMetric
+
+Consulta el video de demostración del sistema, donde se presentan sus funcionalidades y su funcionamiento.
+
+[▶️ Ver video de demostración de LiveMetric en Google Drive](https://drive.google.com/file/d/1HpOkFSogfZDGLIgd6HAGYGtBFj954uci/view?usp=drive_link)
+
 ## Licencia
 
 Distribuido bajo la licencia **MIT**: se puede usar, copiar, modificar y distribuir libremente, conservando el aviso de copyright. Ver [LICENSE](LICENSE).
