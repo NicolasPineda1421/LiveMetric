@@ -19,7 +19,9 @@ const {
   ubicacionDeFila,
 } = require('./lugares');
 const { buscarMesa, hayVotacionEnCurso, renombrarMesa } = require('./mesas');
-const { catalogoParaElPanel, traeUbicacion, resolverUbicacion, describirUbicacion } = require('./divipola');
+const {
+  catalogoParaElPanel, traeUbicacion, resolverUbicacion, describirUbicacion, cercaDelPuesto,
+} = require('./divipola');
 const { ubicarPuestosDelPedido, guardarUbicaciones, cumpleUbicacion, contarPorDepartamento } = require('./puestos');
 
 const app = express();
@@ -645,6 +647,19 @@ app.post(
  * ADMINISTRACIÓN DE IDENTIDAD — requiere JWT de administrador
  * ============================================================ */
 
+// La ubicación del puesto de cada votante (todo opcional aquí: hace falta
+// solo si su puesto todavía no la tiene; ver puestos.js), y dónde vive un
+// jurado. El departamento y
+// el municipio pueden ir con su nombre o con su código del DANE.
+const reglasDeUbicacion = (prefijo) => [
+  body(`${prefijo}pais`).optional({ values: 'null' }).isString().isLength({ max: 60 }),
+  body(`${prefijo}departamento`).optional({ values: 'null' }).isString().isLength({ max: 80 }),
+  body(`${prefijo}municipio`).optional({ values: 'null' }).isString().isLength({ max: 80 }),
+  body(`${prefijo}localidad`).optional({ values: 'null' }).isString().isLength({ max: 80 }),
+  body(`${prefijo}zona`).optional({ values: 'null' }).isString().isLength({ max: 30 }),
+];
+const datosDeUbicacion = ({ pais, departamento, municipio, localidad, zona }) => ({ pais, departamento, municipio, localidad, zona });
+
 // El puesto y la mesa de un jurado se eligen del padrón: así coinciden
 // siempre con los de sus votantes. Sin mesa, el jurado es de todo el puesto.
 const LUGAR_JURADO_ERRORES = {
@@ -653,20 +668,48 @@ const LUGAR_JURADO_ERRORES = {
   mesa: 'Esa mesa no está en ese puesto del padrón.',
 };
 
-async function lugarDelJurado(pollingPlace, votingTable) {
-  const lugar = ubicarEnPadron(await lugaresDelPadron(pool), pollingPlace, votingTable);
-  return lugar.error ? { error: LUGAR_JURADO_ERRORES[lugar.error] } : lugar;
+// Dónde vive un jurado (migración 011): departamento, municipio y, si la
+// tiene, localidad; sin zona. Va cifrada en admins.ubicacion, como su
+// puesto y su mesa: dice dónde vive una persona.
+function ubicacionDelJurado(datos) {
+  if (!traeUbicacion(datos)) {
+    return { error: 'Indica dónde vive el jurado: su departamento y su municipio, y su localidad si la tiene. Solo puede ser de un puesto cerca de ahí.' };
+  }
+  const { ubicacion, motivos } = resolverUbicacion(datosDeUbicacion(datos), { conZona: false });
+  return motivos ? { error: `Dónde vive el jurado: ${motivos.join('; ')}.` } : { ubicacion };
+}
+const cifrarUbicacion = (u) => encryptField(JSON.stringify(u));
+const descifrarUbicacion = (cifrada) => (cifrada ? JSON.parse(decryptField(cifrada)) : null);
+
+// Por qué un jurado que vive en "vive" no puede ser del puesto.
+function lejosDelPuesto(puesto, vive) {
+  if (!puesto.ubicacion) {
+    return `El puesto «${puesto.pollingPlace}» todavía no tiene ubicación: pónsela en «Puestos» para saber si el jurado vive cerca.`;
+  }
+  return `El puesto «${puesto.pollingPlace}» está en ${describirUbicacion({ ...puesto.ubicacion, zona: null })} y el jurado vive en `
+    + `${describirUbicacion(vive)}: un jurado solo puede ser de un puesto de su municipio y, si el puesto tiene localidad, de su misma localidad.`;
+}
+
+// El puesto y la mesa del jurado como figuran en el padrón, si el puesto
+// está cerca de donde vive; si no, { error }.
+async function lugarDelJurado(pollingPlace, votingTable, vive) {
+  const lugares = await lugaresDelPadron(pool);
+  const lugar = ubicarEnPadron(lugares, pollingPlace, votingTable);
+  if (lugar.error) return { error: LUGAR_JURADO_ERRORES[lugar.error] };
+  const puesto = lugares.find((p) => p.pollingPlace === lugar.pollingPlace);
+  return cercaDelPuesto(vive, puesto.ubicacion) ? lugar : { error: lejosDelPuesto(puesto, vive) };
 }
 
 const lugarJuradoRules = [
   body('pollingPlace').if(body('role').equals('jurado')).trim().isLength({ min: 2, max: 150 }),
   body('votingTable').optional({ values: 'falsy' }).trim().isLength({ min: 1, max: 50 }),
+  ...reglasDeUbicacion(''),
 ];
 
 // Crear un usuario: administrador, auditor (solo lectura) o jurado. El
-// jurado necesita su puesto, y su mesa o ninguna (todo el puesto): solo
-// puede autorizar a los votantes asistidos de ahí. Se guardan cifrados
-// igual que en el padrón.
+// jurado necesita dónde vive y un puesto cerca de ahí, y su mesa o ninguna
+// (todo el puesto): solo puede autorizar a los votantes asistidos de ahí.
+// Se guardan cifrados igual que en el padrón.
 app.post(
   '/admin/users',
   requireAdmin,
@@ -693,18 +736,21 @@ app.post(
     if (problemas.length > 0) return res.status(400).json({ error: mensajeContrasenaDebil(problemas) });
 
     try {
-      const lugar = jurado ? await lugarDelJurado(req.body.pollingPlace, req.body.votingTable) : null;
+      const vive = jurado ? ubicacionDelJurado(req.body) : null;
+      if (vive?.error) return res.status(400).json({ error: vive.error });
+      const lugar = jurado ? await lugarDelJurado(req.body.pollingPlace, req.body.votingTable, vive.ubicacion) : null;
       if (lugar?.error) return res.status(400).json({ error: lugar.error });
       const passwordHash = await bcrypt.hash(password, 12);
       const created = await pool.query(
-        `INSERT INTO admins (username, password_hash, role, polling_place, voting_table)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id, username, role, created_at`,
+        `INSERT INTO admins (username, password_hash, role, polling_place, voting_table, ubicacion)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, username, role, created_at`,
         [
           username,
           passwordHash,
           role,
           jurado ? encryptField(lugar.pollingPlace) : null,
           lugar?.votingTable ? encryptField(lugar.votingTable) : null,
+          jurado ? cifrarUbicacion(vive.ubicacion) : null,
         ]
       );
 
@@ -731,19 +777,30 @@ app.post(
   }
 );
 
-// Usuarios del panel, con la mesa de cada jurado y si ya registró su
-// autenticador (nunca el secreto).
+// Usuarios del panel, con la mesa de cada jurado, dónde vive, si su puesto
+// está cerca (null si todavía no tiene ubicación; false si su puesto cambió
+// de ubicación después) y si ya registró su autenticador (nunca el secreto).
 app.get('/admin/users', requireAdmin, adminReadLimiter, async (_req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT id, username, role, polling_place, voting_table, (totp_secret IS NOT NULL) AS has_totp, created_at
-         FROM admins ORDER BY id ASC`
-    );
-    const users = result.rows.map((u) => ({
-      ...u,
-      polling_place: u.polling_place ? decryptField(u.polling_place) : null,
-      voting_table: u.voting_table ? decryptField(u.voting_table) : null,
-    }));
+    const [result, lugares] = await Promise.all([
+      pool.query(
+        `SELECT id, username, role, polling_place, voting_table, ubicacion, (totp_secret IS NOT NULL) AS has_totp, created_at
+           FROM admins ORDER BY id ASC`
+      ),
+      lugaresDelPadron(pool, { todos: true }),
+    ]);
+    const users = result.rows.map((u) => {
+      const pollingPlace = u.polling_place ? decryptField(u.polling_place) : null;
+      const ubicacion = u.role === 'jurado' ? descifrarUbicacion(u.ubicacion) : null;
+      const puesto = pollingPlace ? lugares.find((p) => mismoPuesto(p.pollingPlace, pollingPlace)) : null;
+      return {
+        ...u,
+        polling_place: pollingPlace,
+        voting_table: u.voting_table ? decryptField(u.voting_table) : null,
+        ubicacion,
+        cerca: u.role === 'jurado' && ubicacion ? cercaDelPuesto(ubicacion, puesto?.ubicacion) : null,
+      };
+    });
     return res.status(200).json({ users });
   } catch (err) {
     console.error('Error en GET /admin/users:', err.message);
@@ -761,17 +818,6 @@ app.get('/admin/padron/lugares', requireAdmin, adminReadLimiter, async (_req, re
   }
 });
 
-// La ubicación del puesto de cada votante (todo opcional aquí: hace falta
-// solo si su puesto todavía no la tiene; ver puestos.js). El departamento y
-// el municipio pueden ir con su nombre o con su código del DANE.
-const reglasDeUbicacion = (prefijo) => [
-  body(`${prefijo}pais`).optional({ values: 'null' }).isString().isLength({ max: 60 }),
-  body(`${prefijo}departamento`).optional({ values: 'null' }).isString().isLength({ max: 80 }),
-  body(`${prefijo}municipio`).optional({ values: 'null' }).isString().isLength({ max: 80 }),
-  body(`${prefijo}localidad`).optional({ values: 'null' }).isString().isLength({ max: 80 }),
-  body(`${prefijo}zona`).optional({ values: 'null' }).isString().isLength({ max: 30 }),
-];
-const datosDeUbicacion = ({ pais, departamento, municipio, localidad, zona }) => ({ pais, departamento, municipio, localidad, zona });
 
 // El puesto y la mesa de cada votante de un pedido como ya figuran en el
 // padrón (lugarCanonico), y la ubicación de los puestos que todavía no la
@@ -1010,7 +1056,9 @@ app.delete('/admin/mesas', requireAdmin, adminOpsLimiter, reglasDeMesa, async (r
   }
 });
 
-// Cambia el puesto y la mesa de un jurado (sin mesa: todo el puesto).
+// Cambia el puesto y la mesa de un jurado (sin mesa: todo el puesto), y
+// dónde vive si se manda (a uno sin ubicación se le pide aquí). El puesto
+// tiene que quedar cerca de donde vive.
 app.put(
   '/admin/users/:id/mesa',
   requireAdmin,
@@ -1019,16 +1067,27 @@ app.put(
     param('id').isInt({ min: 1 }).toInt(),
     body('pollingPlace').trim().isLength({ min: 2, max: 150 }),
     body('votingTable').optional({ values: 'falsy' }).trim().isLength({ min: 1, max: 50 }),
+    ...reglasDeUbicacion(''),
   ],
   async (req, res) => {
     if (!validationResult(req).isEmpty()) return res.status(400).json({ error: 'Indica el puesto (y la mesa, si es de una sola)' });
     try {
-      const lugar = await lugarDelJurado(req.body.pollingPlace, req.body.votingTable);
+      const actual = await pool.query("SELECT ubicacion FROM admins WHERE id = $1 AND role = 'jurado'", [req.params.id]);
+      if (actual.rows.length === 0) return res.status(404).json({ error: 'Jurado no encontrado' });
+      // Dónde vive: la que manda el panel, o la que ya tenía. Los jurados de
+      // antes de la migración 011 no tienen: se les pide aquí.
+      let vive = descifrarUbicacion(actual.rows[0].ubicacion);
+      if (traeUbicacion(req.body) || !vive) {
+        const nueva = ubicacionDelJurado(req.body);
+        if (nueva.error) return res.status(400).json({ error: nueva.error });
+        vive = nueva.ubicacion;
+      }
+      const lugar = await lugarDelJurado(req.body.pollingPlace, req.body.votingTable, vive);
       if (lugar.error) return res.status(400).json({ error: lugar.error });
       const updated = await pool.query(
-        `UPDATE admins SET polling_place = $1, voting_table = $2
-          WHERE id = $3 AND role = 'jurado' RETURNING username`,
-        [encryptField(lugar.pollingPlace), lugar.votingTable ? encryptField(lugar.votingTable) : null, req.params.id]
+        `UPDATE admins SET polling_place = $1, voting_table = $2, ubicacion = $3
+          WHERE id = $4 AND role = 'jurado' RETURNING username`,
+        [encryptField(lugar.pollingPlace), lugar.votingTable ? encryptField(lugar.votingTable) : null, cifrarUbicacion(vive), req.params.id]
       );
       if (updated.rows.length === 0) return res.status(404).json({ error: 'Jurado no encontrado' });
       await recordAuditEvent({
@@ -1038,7 +1097,7 @@ app.put(
         req,
         metadata: { targetUsername: updated.rows[0].username, ...lugar },
       });
-      return res.status(200).json({ id: req.params.id, ...lugar });
+      return res.status(200).json({ id: req.params.id, ...lugar, ubicacion: vive });
     } catch (err) {
       console.error('Error en PUT /admin/users/:id/mesa:', err.message);
       return res.status(500).json({ error: 'Error interno del servidor' });

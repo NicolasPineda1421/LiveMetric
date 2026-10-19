@@ -7,7 +7,7 @@ const app = require('../app');
 const pool = require('../db');
 const { encryptField, decryptField } = require('../voterCrypto');
 const { normalizarPuesto } = require('../lugares');
-const { UBICACION } = require('./ubicacion');
+const { UBICACION, VIVE_CERCA } = require('./ubicacion');
 const { abrirVotacion, cerrarVotacion } = require('./votacion');
 
 const RUN_ID = `CITEST_MESA_${Date.now()}`;
@@ -37,7 +37,7 @@ const crearMesa = (votingTable, pollingPlace = PUESTO) => conAdmin('post', '/adm
 const renombrar = (votingTable, nombre) => conAdmin('put', '/admin/mesas').send({ pollingPlace: PUESTO, votingTable, nombre });
 const eliminar = (votingTable, pollingPlace = PUESTO) => conAdmin('delete', '/admin/mesas').send({ pollingPlace, votingTable });
 const crearJurado = (votingTable) => conAdmin('post', '/admin/users').send({
-  username: `${RUN_ID}_j${(jurados += 1)}`, password: CLAVE_JURADO, role: 'jurado', pollingPlace: PUESTO, votingTable,
+  username: `${RUN_ID}_j${(jurados += 1)}`, password: CLAVE_JURADO, role: 'jurado', pollingPlace: PUESTO, votingTable, ...VIVE_CERCA,
 });
 const elPuesto = async (nombre = PUESTO) => (await conAdmin('get', '/admin/puestos')).body.puestos.find((p) => p.pollingPlace === nombre);
 const laMesa = async (nombre) => (await elPuesto()).mesas.find((m) => m.nombre === nombre);

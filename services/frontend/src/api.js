@@ -88,8 +88,10 @@ export const api = {
   // Departamentos y municipios del DANE (Divipola), con las otras formas de escribirlos.
   getDivipola: (token) => request('auth', '/admin/divipola', { token }),
   // votingTable vacío: el jurado queda de todo el puesto.
-  changeJuradoMesa: (token, userId, pollingPlace, votingTable) =>
-    request('auth', `/admin/users/${userId}/mesa`, { method: 'PUT', token, body: { pollingPlace, votingTable } }),
+  // ubicacion: dónde vive el jurado ({ departamento, municipio, localidad });
+  // el puesto tiene que estar cerca de ahí.
+  changeJuradoMesa: (token, userId, pollingPlace, votingTable, ubicacion = {}) =>
+    request('auth', `/admin/users/${userId}/mesa`, { method: 'PUT', token, body: { pollingPlace, votingTable, ...ubicacion } }),
   resetUserTotp: (token, userId) =>
     request('auth', `/admin/users/${userId}/reset-totp`, { method: 'POST', token }),
   // Agrega votantes (hasta 200 por vez): nunca modifica a uno que ya está.

@@ -11,7 +11,8 @@ export const camposDeUbicacion = (u) => (u
   ? { departamento: u.codigoMunicipio.slice(0, 2), municipio: u.codigoMunicipio, localidad: u.localidad || '', zona: u.zona }
   : CAMPOS_VACIOS);
 
-export default function UbicacionCampos({ ubicador, valor, onChange, idBase }) {
+// Con conZona={false} (dónde vive un jurado) no se pide la zona.
+export default function UbicacionCampos({ ubicador, valor, onChange, idBase, conZona = true }) {
   const municipios = valor.departamento ? ubicador.municipiosDe(valor.departamento).sort(enOrden) : [];
   const localidades = valor.municipio ? ubicador.localidadesDe(valor.municipio) : null;
   const cambiar = (campo, dato) => {
@@ -22,7 +23,7 @@ export default function UbicacionCampos({ ubicador, valor, onChange, idBase }) {
     onChange(nuevo);
   };
   return (
-    <div className="ubicacion-campos">
+    <div className={conZona ? 'ubicacion-campos' : 'ubicacion-campos sin-zona'}>
       <div className="field-dark">
         <label htmlFor={`${idBase}-pais`}>País</label>
         <input id={`${idBase}-pais`} value={ubicador.pais} readOnly />
@@ -64,14 +65,16 @@ export default function UbicacionCampos({ ubicador, valor, onChange, idBase }) {
           />
         )}
       </div>
-      <div className="field-dark">
-        <label htmlFor={`${idBase}-zona`}>Zona</label>
-        <select id={`${idBase}-zona`} value={valor.zona} onChange={(e) => cambiar('zona', e.target.value)} required>
-          <option value="">Elige…</option>
-          <option value="urbana">Urbana</option>
-          <option value="rural">Rural</option>
-        </select>
-      </div>
+      {conZona && (
+        <div className="field-dark">
+          <label htmlFor={`${idBase}-zona`}>Zona</label>
+          <select id={`${idBase}-zona`} value={valor.zona} onChange={(e) => cambiar('zona', e.target.value)} required>
+            <option value="">Elige…</option>
+            <option value="urbana">Urbana</option>
+            <option value="rural">Rural</option>
+          </select>
+        </div>
+      )}
     </div>
   );
 }

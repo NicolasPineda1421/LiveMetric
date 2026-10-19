@@ -303,6 +303,7 @@ erDiagram
         string username
         string password_hash
         string role "admin, auditor o jurado"
+        string ubicacion "jurado: dónde vive, cifrada"
         string totp_secret "cifrado" }
     VOTERS { int id PK
         string cedula "cifrada"
@@ -857,6 +858,7 @@ Un hallazgo no siempre sale de una herramienta automática: algunos aparecieron 
 | Falso positivo alto de Semgrep (`node_secret`) en una prueba nueva: toma el nombre de la variable `JWT_SECRET` por un secreto escrito en el código | Semgrep | Alta | Aceptado (falso positivo) | El valor lo genera la prueba al azar; excepción `nosemgrep` con el motivo al lado |
 | Cada corrida de las pruebas dejaba su base de Postgres desechable en un volumen anónimo (188 en una PC del equipo, 8,4 GB), y `migraciones` dejaba uno vacío cada vez que se recreaba | Revisión del equipo | Baja (disco) | Resuelto | El teardown de Jest borra el contenedor con `-v`, y `migraciones` monta un `tmpfs` donde la imagen de Postgres declara su volumen |
 | Las mesas existían solo en el padrón: no se podía preparar una mesa antes de cargar a sus votantes, y una mesa mal escrita solo se corregía eliminando y volviendo a cargar a cada votante | Revisión funcional del equipo | Baja (operación) | Resuelto | Pestaña **Puestos → Mesas**: crear una mesa sin votantes (`mesas_votacion`, migración 010), renombrarla en sus votantes y sus jurados en una sola transacción (no con una votación en curso, amenaza 23) y eliminar solo las que no tienen votantes ni jurados. Todo queda en la auditoría |
+| Un jurado se podía asignar a cualquier puesto del país, aunque viviera en otro municipio o en el otro extremo de la ciudad, y el día de la elección no llegara a su mesa | Revisión funcional del equipo | Baja (operación) | Resuelto | El jurado tiene dónde vive (municipio y localidad, cifrados; migración 011), y solo puede ser de un puesto de su municipio y, si el puesto tiene localidad, de la misma. El panel ofrece solo los puestos cercanos, y el servicio rechaza los demás. Los jurados de antes siguen autorizando y se les pide la ubicación al cambiarles la mesa |
 
 *Tabla 10. Hallazgos con su severidad, estado y justificación.*
 

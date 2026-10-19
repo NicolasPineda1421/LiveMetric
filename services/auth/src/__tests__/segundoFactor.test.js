@@ -15,7 +15,7 @@ const request = require('supertest');
 const app = require('../app');
 const pool = require('../db');
 const { encryptField, decryptField } = require('../voterCrypto');
-const { conUbicacion } = require('./ubicacion');
+const { conUbicacion, VIVE_CERCA } = require('./ubicacion');
 const totp = require('../totp');
 
 const RUN_ID = `CITEST_2F_${Date.now()}`;
@@ -85,6 +85,7 @@ beforeAll(async () => {
       role: 'jurado',
       pollingPlace: PUESTO,
       votingTable: mesa,
+      ...VIVE_CERCA,
     });
     expect(creado.status).toBe(201);
   }
@@ -362,14 +363,14 @@ describe('Puesto y mesa del jurado', () => {
 
   it('al crearlo, el puesto y la mesa se guardan como figuran en el padrón, aunque se escriban distinto', async () => {
     const cuenta = { username: `${RUN_ID}_jn`, password: JURADO_1.password };
-    const res = await conToken('post', '/admin/users', adminToken).send({ ...cuenta, role: 'jurado', pollingPlace: PUESTO.toLowerCase(), votingTable: '1' });
+    const res = await conToken('post', '/admin/users', adminToken).send({ ...cuenta, role: 'jurado', pollingPlace: PUESTO.toLowerCase(), votingTable: '1', ...VIVE_CERCA });
     expect(res.status).toBe(201);
     const fila = (await conToken('get', '/admin/users', adminToken)).body.users.find((u) => u.username === cuenta.username);
     expect(fila).toMatchObject({ polling_place: PUESTO, voting_table: 'Mesa 1' });
   });
 
   it('un puesto o una mesa que no están en el padrón se rechazan', async () => {
-    const crear = (lugar) => conToken('post', '/admin/users', adminToken).send({ username: `${RUN_ID}_jx2`, password: JURADO_1.password, role: 'jurado', ...lugar });
+    const crear = (lugar) => conToken('post', '/admin/users', adminToken).send({ username: `${RUN_ID}_jx2`, password: JURADO_1.password, role: 'jurado', ...VIVE_CERCA, ...lugar });
     const puesto = await crear({ pollingPlace: 'Punto central', votingTable: 'Mesa 1' });
     expect(puesto.status).toBe(400);
     expect(puesto.body.error).toBe('Ese puesto no está en el padrón.');
@@ -378,7 +379,7 @@ describe('Puesto y mesa del jurado', () => {
   });
 
   it('un jurado de todo el puesto ve los asistidos de todas sus mesas y autoriza en cualquiera', async () => {
-    const creado = await conToken('post', '/admin/users', adminToken).send({ ...JURADO_PUESTO, role: 'jurado', pollingPlace: PUESTO });
+    const creado = await conToken('post', '/admin/users', adminToken).send({ ...JURADO_PUESTO, role: 'jurado', pollingPlace: PUESTO, ...VIVE_CERCA });
     expect(creado.status).toBe(201);
     const token = await registrarJurado(JURADO_PUESTO);
     const panel = await conToken('get', '/jurado/mesa', token);
@@ -405,8 +406,12 @@ describe('Puesto y mesa del jurado', () => {
 
   it('el administrador cambia la mesa de un jurado (o lo deja en todo el puesto), y queda en la auditoría', async () => {
     const { id } = await jurado(JURADO_VIEJO.username);
-    const res = await conToken('put', `/admin/users/${id}/mesa`, adminToken).send({ pollingPlace: PUESTO, votingTable: 'mesa 2' });
-    expect(res.body).toEqual({ id, pollingPlace: PUESTO, votingTable: 'Mesa 2' });
+    // Un jurado de antes de la migración 011 no tiene ubicación: se le pide al cambiarle la mesa.
+    const sinUbicacion = await conToken('put', `/admin/users/${id}/mesa`, adminToken).send({ pollingPlace: PUESTO, votingTable: 'mesa 2' });
+    expect(sinUbicacion.status).toBe(400);
+    expect(sinUbicacion.body.error).toMatch(/^Indica dónde vive el jurado/);
+    const res = await conToken('put', `/admin/users/${id}/mesa`, adminToken).send({ pollingPlace: PUESTO, votingTable: 'mesa 2', ...VIVE_CERCA });
+    expect(res.body).toEqual({ id, pollingPlace: PUESTO, votingTable: 'Mesa 2', ubicacion: expect.objectContaining({ municipio: 'Tunja', localidad: null }) });
     expect((await autorizar(CEDULAS.otraMesa, JURADO_VIEJO)).status).toBe(200);
 
     const todo = await conToken('put', `/admin/users/${id}/mesa`, adminToken).send({ pollingPlace: PUESTO, votingTable: '' });

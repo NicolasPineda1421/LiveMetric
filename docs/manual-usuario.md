@@ -497,22 +497,36 @@ Para crear otros administradores, auditores o jurados de mesa.
    números y símbolos (o una frase de 16 caracteres o más), que no sea una contraseña común ni tenga
    secuencias como 123456 o qwerty, ni el nombre de usuario. Si no cumple, el panel dice por qué.
 3. Elija el rol: **Administrador**, **Auditor (solo lectura)** o **Jurado de mesa**.
-4. Para un jurado, elija su **Puesto de votación** y su **Mesa** de las listas, que salen
-   del padrón (por eso hay que cargar el padrón antes de crear jurados). Con **Todas las
-   mesas del puesto**, el jurado puede autorizar a los votantes asistidos de cualquier mesa
-   de ese puesto; con una mesa, solo a los de esa mesa.
-5. Botón **Crear usuario**.
+4. Para un jurado, primero **Dónde vive el jurado**: su **Departamento**, su **Municipio** y,
+   si la tiene, su **Localidad** (de las listas del DANE, como la ubicación de un puesto).
+   Un jurado solo puede ser de un puesto **cerca de donde vive**: de su mismo municipio y,
+   si el puesto tiene localidad, de su misma localidad. En Bogotá, alguien de Kennedy solo
+   puede ser jurado de los puestos de Kennedy. Un puesto sin localidad queda cerca de todo
+   su municipio.
+5. Elija su **Puesto de votación** y su **Mesa**. La lista de puestos trae solo los que están
+   cerca de donde vive; si no hay ninguno, el panel lo dice. Los puestos y las mesas salen
+   del padrón, por eso hay que cargarlo antes de crear jurados. Con **Todas las mesas del
+   puesto**, el jurado puede autorizar a los votantes asistidos de cualquier mesa de ese
+   puesto; con una mesa, solo a los de esa mesa.
+6. Botón **Crear usuario**.
 
-El listado de abajo muestra el puesto y la mesa de cada jurado y si ya registró su
-autenticador. **Cambiar mesa** le asigna otro puesto o mesa (o todo el puesto), también
-elegidos del padrón. Si un jurado cambia o pierde el celular, **Restablecer autenticador**
-hace que lo registre de nuevo en su próximo ingreso.
+El listado de abajo muestra el puesto y la mesa de cada jurado, dónde vive (**Vive en**) y
+si ya registró su autenticador. Hay dos avisos posibles:
+- **Sin ubicación**: aparece en los jurados creados antes de que se pidiera dónde viven.
+  Siguen autorizando en su mesa.
+- **Lejos de su puesto**: aparece si después se corrigió la ubicación del puesto y el jurado
+  ya no queda cerca.
+
+**Cambiar mesa** abre debajo el mismo formulario, con dónde vive y su puesto: sirve para
+asignarle otro puesto o mesa (o todo el puesto), para corregir dónde vive, o para ponérselo
+a uno sin ubicación. El puesto tiene que quedar cerca. Si un jurado cambia o pierde el
+celular, **Restablecer autenticador** hace que lo registre de nuevo en su próximo ingreso.
 
 Al comparar la mesa del jurado con la del votante, el sistema no distingue mayúsculas,
 tildes ni espacios de más, y toma "1" y "Mesa 1" como la misma mesa.
 
-![Captura 14: Creación de un jurado de todo el Puesto Central, con el puesto y la mesa elegidos del padrón, y el listado de usuarios con «Cambiar mesa»](img/14-usuarios.png)
-*Captura 14. Creación de un jurado de todo el Puesto Central, con el puesto y la mesa elegidos del padrón, y el listado de usuarios con «Cambiar mesa».*
+![Captura 14: Creación de un jurado que vive en Chía: la lista de puestos trae solo los de Chía sin localidad; abajo, el listado con dónde vive cada jurado, uno sin ubicación y «Cambiar mesa»](img/14-usuarios.png)
+*Captura 14. Creación de un jurado que vive en Chía, sin localidad: la lista de puestos trae solo los de Chía que no tienen localidad, los que le quedan cerca. Abajo, el listado con dónde vive cada jurado; el creado antes de pedirse la ubicación aparece **Sin ubicación**.*
 
 ### 4.7 Resultados
 

@@ -943,3 +943,10 @@ fieldset.filtros-ubicacion { grid-template-columns: repeat(5, 1fr); }
 .mesa-form { display: flex; gap: 0.8rem; align-items: flex-end; flex-wrap: wrap; }
 .mesa-form .field-dark { margin-bottom: 0; min-width: 220px; }
 .mesa-form .acciones-padron { margin: 0; }
+
+/* Dónde vive un jurado (Usuarios): la ubicación sin zona, en cuatro
+   columnas, y el aviso de un jurado que quedó lejos de su puesto. */
+.ubicacion-campos.sin-zona { grid-template-columns: 0.8fr 1.3fr 1.3fr 1.3fr; }
+.vive-jurado { border: 0; padding: 0; margin: 0 0 0.6rem; min-width: 0; }
+.vive-jurado legend { font-size: 0.85rem; font-weight: 600; color: var(--color-text); margin-bottom: 0.5rem; padding: 0; }
+.aviso-lejos { margin-top: 0.25rem; font-size: 0.78rem; color: var(--color-warning); }

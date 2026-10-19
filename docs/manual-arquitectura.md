@@ -392,6 +392,7 @@ erDiagram
         string role "admin, auditor o jurado"
         string polling_place "solo jurado, cifrado"
         string voting_table "solo jurado, cifrada (vacía: todo el puesto)"
+        string ubicacion "solo jurado: dónde vive, cifrada"
         string totp_secret "cifrado"
     }
     VOTERS {

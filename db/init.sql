@@ -5,7 +5,9 @@
 -- El jurado autoriza el ingreso de los votantes asistidos de su mesa, o de
 -- todo su puesto si no tiene mesa (ver migración 006): por eso tiene un
 -- puesto asignado (cifrado igual que en el padrón) y un autenticador TOTP
--- propio, obligatorio, que registra en su primer ingreso.
+-- propio, obligatorio, que registra en su primer ingreso. Su puesto tiene
+-- que estar cerca de donde vive (migración 011): mismo municipio y, si el
+-- puesto tiene localidad, la misma.
 CREATE TABLE IF NOT EXISTS admins (
     id             SERIAL PRIMARY KEY,
     username       VARCHAR(50)  UNIQUE NOT NULL,
@@ -13,6 +15,7 @@ CREATE TABLE IF NOT EXISTS admins (
     role           VARCHAR(20)  NOT NULL DEFAULT 'admin',
     polling_place  TEXT,                           -- solo jurados: puesto (cifrado)
     voting_table   TEXT,                           -- solo jurados: mesa (cifrada); NULL = todo el puesto
+    ubicacion      TEXT,                           -- solo jurados: dónde vive, municipio y localidad (JSON cifrado)
     totp_secret    TEXT,                           -- secreto TOTP cifrado; NULL hasta registrarlo
     totp_last_step BIGINT,                         -- último paso de 30 s aceptado (un código no se reusa)
     created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),

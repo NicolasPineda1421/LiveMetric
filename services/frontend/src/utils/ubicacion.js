@@ -32,11 +32,21 @@ const deUnObjeto = (objeto, clave) => (objeto && Object.hasOwn(objeto, clave) ? 
 export const traeUbicacion = (datos) => [datos?.departamento, datos?.municipio, datos?.localidad, datos?.zona]
   .some((valor) => String(valor ?? '').trim() !== '');
 
-// "Tunja (Boyacá), Centro, zona urbana"
+// "Tunja (Boyacá), Centro, zona urbana" (sin zona: "Tunja (Boyacá), Centro")
 export function describirUbicacion(u) {
   if (!u) return '';
   const lugar = u.codigoMunicipio === BOGOTA ? u.municipio : `${u.municipio} (${u.departamento})`;
-  return [lugar, u.localidad, `zona ${u.zona}`].filter(Boolean).join(', ');
+  return [lugar, u.localidad, u.zona && `zona ${u.zona}`].filter(Boolean).join(', ');
+}
+
+// ¿Quien vive en "vive" ({ codigoMunicipio, localidad }) está cerca del
+// puesto ubicado en "puesto"? Mismo municipio y, si el puesto tiene
+// localidad, la misma. Un puesto sin ubicación no está cerca de nadie. Es
+// la regla con la que el servicio acepta a un jurado en un puesto
+// (cercaDelPuesto en services/auth/src/divipola.js).
+export function cercaDelPuesto(vive, puesto) {
+  if (!vive || !puesto || vive.codigoMunicipio !== puesto.codigoMunicipio) return false;
+  return !puesto.localidad || compacto(vive.localidad) === compacto(puesto.localidad);
 }
 
 // ¿La ubicación escrita es la que el puesto ya tiene? La localidad, solo si se escribió.

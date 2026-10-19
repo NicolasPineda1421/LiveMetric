@@ -5,10 +5,12 @@ import { ownValue } from '../utils/ownValue.js';
 import BuscadorPadron from '../components/BuscadorPadron.jsx';
 import CargaPadron from '../components/CargaPadron.jsx';
 import FiltrosUbicacion from '../components/FiltrosUbicacion.jsx';
-import UbicacionCampos, { CAMPOS_VACIOS, ubicacionDeLosCampos } from '../components/UbicacionCampos.jsx';
+import UbicacionCampos, { CAMPOS_VACIOS, camposDeUbicacion, ubicacionDeLosCampos } from '../components/UbicacionCampos.jsx';
 import { descargarTexto } from '../utils/descargar.js';
 import { pinesCsv } from '../utils/padronArchivo.js';
-import { clavePuesto, crearUbicador, cumpleUbicacion, describirUbicacion, SIN_FILTRO_DE_UBICACION, SIN_UBICACION } from '../utils/ubicacion.js';
+import {
+  cercaDelPuesto, clavePuesto, crearUbicador, cumpleUbicacion, describirUbicacion, SIN_FILTRO_DE_UBICACION, SIN_UBICACION,
+} from '../utils/ubicacion.js';
 import PuestosTab from './PuestosTab.jsx';
 import ReportsTab from './ReportsTab.jsx';
 
@@ -774,27 +776,84 @@ const ROLE_LABEL = { admin: 'administrador', auditor: 'auditor', jurado: 'jurado
 export const lugarJurado = (pollingPlace, votingTable) =>
   `${pollingPlace} — ${votingTable || 'todas las mesas'}`;
 
-// Puesto y mesa de un jurado, elegidos del padrón (así coinciden con los de
-// sus votantes). La mesa vacía es "todas las mesas del puesto".
-function LugarJuradoFields({ places, pollingPlace, votingTable, onChange }) {
-  const puesto = places.find((p) => p.pollingPlace === pollingPlace);
+// Dónde vive un jurado, de los campos de UbicacionCampos (sin zona), como
+// lo compara cercaDelPuesto: null mientras no tenga municipio.
+const viveDeLosCampos = (c) => (c?.municipio ? { codigoMunicipio: c.municipio, localidad: c.localidad.trim() || null } : null);
+
+// Los puestos del padrón cerca de donde vive el jurado: mismo municipio y,
+// si el puesto tiene localidad, la misma (la regla del servicio).
+const puestosCerca = (places, vive) => {
+  const donde = viveDeLosCampos(vive);
+  return donde ? places.filter((p) => cercaDelPuesto(donde, p.ubicacion)) : [];
+};
+
+// Dónde vive el jurado, y su puesto y su mesa, elegidos del padrón entre los
+// puestos cerca de ahí (así coinciden con los de sus votantes). La mesa
+// vacía es "todas las mesas del puesto". Al cambiar dónde vive, un puesto
+// que ya no queda cerca se deja de elegir.
+function LugarJuradoFields({ places, ubicador, vive, pollingPlace, votingTable, onChange, idBase }) {
+  const cercanos = puestosCerca(places, vive);
+  const puesto = cercanos.find((p) => p.pollingPlace === pollingPlace);
+  const sinDonde = !viveDeLosCampos(vive);
+  const cambiarVive = (nuevo) => {
+    const sigueCerca = puestosCerca(places, nuevo).some((p) => p.pollingPlace === pollingPlace);
+    onChange({ vive: nuevo, pollingPlace: sigueCerca ? pollingPlace : '', votingTable: sigueCerca ? votingTable : '' });
+  };
   return (
-    <div className="grid-2">
-      <div className="field-dark">
-        <label>Puesto de votación</label>
-        <select value={pollingPlace} onChange={(e) => onChange(e.target.value, '')} required>
-          <option value="">Elige un puesto del padrón…</option>
-          {places.map((p) => <option key={p.pollingPlace} value={p.pollingPlace}>{p.pollingPlace}</option>)}
-        </select>
+    <>
+      <fieldset className="vive-jurado">
+        <legend>Dónde vive el jurado</legend>
+        {ubicador
+          ? <UbicacionCampos ubicador={ubicador} valor={vive} onChange={cambiarVive} idBase={`${idBase}-vive`} conZona={false} />
+          : <div className="field-hint-dark">Cargando las listas del DANE…</div>}
+        <div className="field-hint-dark">
+          Solo puede ser jurado de un puesto cerca de ahí: de su municipio y, si el puesto tiene localidad, de su misma
+          localidad.
+        </div>
+      </fieldset>
+      <div className="grid-2">
+        <div className="field-dark">
+          <label htmlFor={`${idBase}-puesto`}>Puesto de votación</label>
+          <select
+            id={`${idBase}-puesto`}
+            value={pollingPlace}
+            onChange={(e) => onChange({ vive, pollingPlace: e.target.value, votingTable: '' })}
+            disabled={sinDonde || cercanos.length === 0}
+            required
+          >
+            <option value="">
+              {sinDonde ? 'Primero dónde vive el jurado' : cercanos.length ? 'Elige un puesto cerca…' : 'No hay puestos cerca'}
+            </option>
+            {cercanos.map((p) => <option key={p.pollingPlace} value={p.pollingPlace}>{p.pollingPlace}</option>)}
+          </select>
+        </div>
+        <div className="field-dark">
+          <label htmlFor={`${idBase}-mesa`}>Mesa</label>
+          <select id={`${idBase}-mesa`} value={votingTable} onChange={(e) => onChange({ vive, pollingPlace, votingTable: e.target.value })} disabled={!puesto}>
+            <option value="">Todas las mesas del puesto</option>
+            {(puesto?.votingTables || []).map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
       </div>
-      <div className="field-dark">
-        <label>Mesa</label>
-        <select value={votingTable} onChange={(e) => onChange(pollingPlace, e.target.value)} disabled={!puesto}>
-          <option value="">Todas las mesas del puesto</option>
-          {(puesto?.votingTables || []).map((m) => <option key={m} value={m}>{m}</option>)}
-        </select>
-      </div>
-    </div>
+      {!sinDonde && cercanos.length === 0 && (
+        <div className="aviso-puestos" role="status">
+          No hay puestos del padrón cerca de ahí: un jurado solo puede ser de un puesto de su municipio y, si el puesto
+          tiene localidad, de su misma localidad.
+        </div>
+      )}
+    </>
+  );
+}
+
+// Dónde vive un jurado en el listado: su ubicación, o el aviso si no tiene
+// (los de antes) o si su puesto quedó lejos (porque cambió la ubicación del puesto).
+function ViveJurado({ usuario }) {
+  if (!usuario.ubicacion) return <span className="sin-ubicacion">Sin ubicación: pónsela con «Cambiar mesa»</span>;
+  return (
+    <>
+      {describirUbicacion(usuario.ubicacion)}
+      {usuario.cerca === false && <div className="aviso-lejos">Lejos de su puesto: cámbiale la mesa</div>}
+    </>
   );
 }
 
@@ -802,11 +861,12 @@ function UsersTab({ session }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('admin');
-  const [pollingPlace, setPollingPlace] = useState('');
-  const [votingTable, setVotingTable] = useState('');
+  // Lugar del jurado nuevo: { vive (campos de ubicación), pollingPlace, votingTable }.
+  const [lugar, setLugar] = useState({ vive: CAMPOS_VACIOS, pollingPlace: '', votingTable: '' });
   const [places, setPlaces] = useState(null);
+  const [ubicador, setUbicador] = useState(null);
   const [users, setUsers] = useState([]);
-  // Jurado al que se le está cambiando la mesa: { id, pollingPlace, votingTable }.
+  // Jurado al que se le está cambiando la mesa: { id, username, vive, pollingPlace, votingTable }.
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -816,14 +876,19 @@ function UsersTab({ session }) {
     api.listPadronPlaces(session.token).then((d) => setPlaces(d.places)).catch(() => setPlaces([]));
   }
   useEffect(load, [session.token]);
+  useEffect(() => {
+    api.getDivipola(session.token).then((catalogo) => setUbicador(crearUbicador(catalogo))).catch((e) => setError(e.message));
+  }, [session.token]);
 
   const sinPadron = places !== null && places.length === 0;
+  const viveParaEnviar = (vive) => ubicacionDeLosCampos({ ...vive, zona: '' }, ubicador?.pais);
 
   async function submit(e) {
     e.preventDefault();
     setError(''); setSuccess('');
+    const { pollingPlace, votingTable } = lugar;
     try {
-      await api.createAdminUser(session.token, username, password, role, role === 'jurado' ? { pollingPlace, votingTable } : {});
+      await api.createAdminUser(session.token, username, password, role, role === 'jurado' ? { pollingPlace, votingTable, ...viveParaEnviar(lugar.vive) } : {});
       const donde = role === 'jurado' ? `, en ${lugarJurado(pollingPlace, votingTable)}` : '';
       setSuccess(`Usuario "${username}" (${ownValue(ROLE_LABEL, role)}${donde}) creado correctamente.`);
       setUsername(''); setPassword('');
@@ -833,10 +898,20 @@ function UsersTab({ session }) {
     }
   }
 
-  async function saveMesa() {
+  function editar(u) {
+    setError(''); setSuccess('');
+    const vive = u.ubicacion ? camposDeUbicacion({ ...u.ubicacion, zona: '' }) : CAMPOS_VACIOS;
+    // Si su puesto está en el padrón y cerca de donde vive, se parte de él (y de su mesa, si existe).
+    const puesto = puestosCerca(places || [], vive).find((p) => p.pollingPlace === u.polling_place);
+    const mesa = puesto?.votingTables.includes(u.voting_table) ? u.voting_table : '';
+    setEditing({ id: u.id, username: u.username, vive, pollingPlace: puesto ? u.polling_place : '', votingTable: mesa });
+  }
+
+  async function saveMesa(e) {
+    e.preventDefault();
     setError(''); setSuccess('');
     try {
-      const result = await api.changeJuradoMesa(session.token, editing.id, editing.pollingPlace, editing.votingTable);
+      const result = await api.changeJuradoMesa(session.token, editing.id, editing.pollingPlace, editing.votingTable, viveParaEnviar(editing.vive));
       setSuccess(`Jurado "${editing.username}" ahora en ${lugarJurado(result.pollingPlace, result.votingTable)}.`);
       setEditing(null);
       load();
@@ -863,8 +938,8 @@ function UsersTab({ session }) {
       <p className="section-desc">
         Crea cuentas de administrador, de auditor (solo lectura: puede ver resultados y reportes, nunca gestionar el
         sistema) o de jurado de mesa. El jurado autoriza el ingreso de los votantes asistidos de su mesa, o de todo su
-        puesto, con el código de su propio autenticador, que registra en su primer ingreso. Úsalo también para
-        reemplazar la credencial de arranque apenas configures el sistema.
+        puesto, con el código de su propio autenticador, que registra en su primer ingreso. Solo puede ser de un puesto
+        cerca de donde vive. Úsalo también para reemplazar la credencial de arranque apenas configures el sistema.
       </p>
 
       <div className="panel">
@@ -897,9 +972,12 @@ function UsersTab({ session }) {
             <>
               <LugarJuradoFields
                 places={places || []}
-                pollingPlace={pollingPlace}
-                votingTable={votingTable}
-                onChange={(p, m) => { setPollingPlace(p); setVotingTable(m); }}
+                ubicador={ubicador}
+                vive={lugar.vive}
+                pollingPlace={lugar.pollingPlace}
+                votingTable={lugar.votingTable}
+                onChange={setLugar}
+                idBase="jurado-nuevo"
               />
               <div className="field-hint-dark" style={{ marginTop: '-0.4rem', marginBottom: '0.9rem' }}>
                 Con «Todas las mesas del puesto», el jurado puede autorizar a los votantes asistidos de cualquier mesa
@@ -907,7 +985,7 @@ function UsersTab({ session }) {
               </div>
             </>
           ))}
-          <button className="btn btn-gold" disabled={role === 'jurado' && sinPadron}>Crear usuario</button>
+          <button className="btn btn-gold" disabled={role === 'jurado' && (sinPadron || !lugar.pollingPlace)}>Crear usuario</button>
         </form>
       </div>
 
@@ -915,52 +993,51 @@ function UsersTab({ session }) {
         <h3>Usuarios ({users.length})</h3>
         <div className="tabla-desplazable">
           <table className="table">
-            <thead><tr><th>Usuario</th><th>Rol</th><th>Puesto y mesa</th><th>Autenticador</th><th></th></tr></thead>
+            <thead><tr><th>Usuario</th><th>Rol</th><th>Puesto y mesa</th><th>Vive en</th><th>Autenticador</th><th></th></tr></thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.id}>
-                  <td>{u.username}</td>
-                  <td>{ownValue(ROLE_LABEL, u.role) || u.role}</td>
-                  <td>
-                    {u.role !== 'jurado' ? '—' : editing?.id === u.id ? (
-                      <div className="editar-mesa">
-                        <LugarJuradoFields
-                          places={places || []}
-                          pollingPlace={editing.pollingPlace}
-                          votingTable={editing.votingTable}
-                          onChange={(p, m) => setEditing({ ...editing, pollingPlace: p, votingTable: m })}
-                        />
+                <React.Fragment key={u.id}>
+                  <tr>
+                    <td>{u.username}</td>
+                    <td>{ownValue(ROLE_LABEL, u.role) || u.role}</td>
+                    <td>{u.role === 'jurado' ? lugarJurado(u.polling_place, u.voting_table) : '—'}</td>
+                    <td>{u.role === 'jurado' ? <ViveJurado usuario={u} /> : '—'}</td>
+                    <td>{u.role !== 'jurado' ? '—' : u.has_totp ? 'Registrado' : 'Pendiente (primer ingreso)'}</td>
+                    <td>
+                      {u.role === 'jurado' && (
                         <div className="acciones-padron">
-                          <button className="btn btn-gold" disabled={!editing.pollingPlace} onClick={saveMesa}>Guardar</button>
-                          <button className="btn btn-outline" onClick={() => setEditing(null)}>Cancelar</button>
+                          {editing?.id !== u.id && !sinPadron && (
+                            <button className="btn btn-outline" onClick={() => editar(u)}>Cambiar mesa</button>
+                          )}
+                          {u.has_totp && (
+                            <button className="btn btn-outline" onClick={() => resetTotp(u)}>Restablecer autenticador</button>
+                          )}
                         </div>
-                      </div>
-                    ) : lugarJurado(u.polling_place, u.voting_table)}
-                  </td>
-                  <td>{u.role !== 'jurado' ? '—' : u.has_totp ? 'Registrado' : 'Pendiente (primer ingreso)'}</td>
-                  <td>
-                    {u.role === 'jurado' && (
-                      <div className="acciones-padron">
-                        {editing?.id !== u.id && !sinPadron && (
-                          <button
-                            className="btn btn-outline"
-                            onClick={() => {
-                              // Si su puesto está en el padrón, se parte de él (y de su mesa, si existe).
-                              const puesto = (places || []).find((p) => p.pollingPlace === u.polling_place);
-                              const mesa = puesto?.votingTables.includes(u.voting_table) ? u.voting_table : '';
-                              setEditing({ id: u.id, username: u.username, pollingPlace: puesto ? u.polling_place : '', votingTable: mesa });
-                            }}
-                          >
-                            Cambiar mesa
-                          </button>
-                        )}
-                        {u.has_totp && (
-                          <button className="btn btn-outline" onClick={() => resetTotp(u)}>Restablecer autenticador</button>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                </tr>
+                      )}
+                    </td>
+                  </tr>
+                  {editing?.id === u.id && (
+                    <tr className="fila-edicion">
+                      <td colSpan={6}>
+                        <form onSubmit={saveMesa} aria-label={`Mesa de ${u.username}`}>
+                          <LugarJuradoFields
+                            places={places || []}
+                            ubicador={ubicador}
+                            vive={editing.vive}
+                            pollingPlace={editing.pollingPlace}
+                            votingTable={editing.votingTable}
+                            onChange={(cambios) => setEditing({ ...editing, ...cambios })}
+                            idBase={`jurado-${u.id}`}
+                          />
+                          <div className="acciones-padron">
+                            <button className="btn btn-gold" disabled={!editing.pollingPlace}>Guardar</button>
+                            <button type="button" className="btn btn-outline" onClick={() => setEditing(null)}>Cancelar</button>
+                          </div>
+                        </form>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>

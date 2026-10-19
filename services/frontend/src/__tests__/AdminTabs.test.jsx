@@ -165,12 +165,20 @@ describe('Usuarios', () => {
     expect(clave).toHaveValue('');
   });
 
+  const BOGOTA = { pais: 'Colombia', codigoMunicipio: '11001', departamento: 'Bogotá, D.C.', municipio: 'Bogotá, D.C.', zona: 'urbana' };
   const LUGARES = {
     places: [
-      { pollingPlace: 'Puesto Central', votingTables: ['Mesa 1', 'Mesa 2'] },
-      { pollingPlace: 'Puesto Norte', votingTables: ['Mesa 1'] },
+      { pollingPlace: 'Puesto Central', votingTables: ['Mesa 1', 'Mesa 2'], ubicacion: TUNJA },
+      { pollingPlace: 'Puesto Norte', votingTables: ['Mesa 1'], ubicacion: CHIA },
+      { pollingPlace: 'Colegio Kennedy', votingTables: ['Mesa 1'], ubicacion: { ...BOGOTA, localidad: 'Kennedy' } },
+      { pollingPlace: 'Colegio Usaquén', votingTables: ['Mesa 1'], ubicacion: { ...BOGOTA, localidad: 'Usaquén' } },
     ],
   };
+  // Lo que se manda de dónde vive un jurado: los códigos del DANE, sin zona.
+  const VIVE_TUNJA = { pais: 'Colombia', departamento: '15', municipio: '15001', localidad: '', zona: '' };
+  const puestosOfrecidos = () => within(campo('Puesto de votación')).getAllByRole('option').map((o) => o.textContent);
+
+  beforeEach(() => api.getDivipola.mockResolvedValue(CATALOGO));
 
   it('si el servicio rechaza la contraseña por débil, muestra el motivo y no limpia el formulario', async () => {
     api.createAdminUser.mockRejectedValue(new Error('La contraseña no es segura: es una contraseña común, o una palabra común con números o símbolos.'));
@@ -182,7 +190,7 @@ describe('Usuarios', () => {
     expect(campo('Usuario')).toHaveValue('auditora');
   });
 
-  it('un jurado se crea eligiendo del padrón su puesto y su mesa', async () => {
+  it('un jurado se crea diciendo dónde vive, y eligiendo un puesto cerca y su mesa', async () => {
     api.createAdminUser.mockResolvedValue({});
     api.listUsers.mockResolvedValue({ users: [] });
     api.listPadronPlaces.mockResolvedValue(LUGARES);
@@ -191,8 +199,13 @@ describe('Usuarios', () => {
     await usuario.type(campo('Usuario'), 'jurado.mesa1');
     await usuario.type(campo('Contraseña (mínimo 12 caracteres)'), 'una-clave-larga');
     await usuario.selectOptions(campo('Rol'), 'jurado');
-    // Sin puesto, la mesa no se puede elegir; con él, solo sus mesas.
+    // Sin dónde vive, no hay puesto que elegir; sin puesto, tampoco mesa.
+    expect(campo('Puesto de votación')).toBeDisabled();
     expect(campo('Mesa')).toBeDisabled();
+    expect(screen.queryByText('Zona', { selector: 'label' })).not.toBeInTheDocument();
+    await usuario.selectOptions(await screen.findByLabelText('Departamento'), 'Boyacá');
+    await usuario.selectOptions(campo('Municipio'), 'Tunja');
+    expect(puestosOfrecidos()).toEqual(['Elige un puesto cerca…', 'Puesto Central']);
     await usuario.selectOptions(campo('Puesto de votación'), 'Puesto Central');
     expect(within(campo('Mesa')).getAllByRole('option').map((o) => o.textContent)).toEqual(['Todas las mesas del puesto', 'Mesa 1', 'Mesa 2']);
     await usuario.selectOptions(campo('Mesa'), 'Mesa 1');
@@ -200,6 +213,7 @@ describe('Usuarios', () => {
     expect(api.createAdminUser).toHaveBeenCalledWith('jwt-admin', 'jurado.mesa1', 'una-clave-larga', 'jurado', {
       pollingPlace: 'Puesto Central',
       votingTable: 'Mesa 1',
+      ...VIVE_TUNJA,
     });
     expect(await screen.findByText('Usuario "jurado.mesa1" (jurado de mesa, en Puesto Central — Mesa 1) creado correctamente.')).toBeInTheDocument();
   });
@@ -212,10 +226,34 @@ describe('Usuarios', () => {
     await usuario.type(campo('Usuario'), 'jurado.norte');
     await usuario.type(campo('Contraseña (mínimo 12 caracteres)'), 'una-clave-larga');
     await usuario.selectOptions(campo('Rol'), 'jurado');
+    await usuario.selectOptions(await screen.findByLabelText('Departamento'), 'Cundinamarca');
+    await usuario.selectOptions(campo('Municipio'), 'Chía');
     await usuario.selectOptions(campo('Puesto de votación'), 'Puesto Norte');
     await usuario.click(screen.getByRole('button', { name: 'Crear usuario' }));
-    expect(api.createAdminUser).toHaveBeenCalledWith('jwt-admin', 'jurado.norte', 'una-clave-larga', 'jurado', { pollingPlace: 'Puesto Norte', votingTable: '' });
+    expect(api.createAdminUser).toHaveBeenCalledWith('jwt-admin', 'jurado.norte', 'una-clave-larga', 'jurado', {
+      pollingPlace: 'Puesto Norte', votingTable: '', pais: 'Colombia', departamento: '25', municipio: '25175', localidad: '', zona: '',
+    });
     expect(await screen.findByText(/en Puesto Norte — todas las mesas/)).toBeInTheDocument();
+  });
+
+  it('en un municipio con localidades, solo ofrece los puestos de la suya; sin ninguno cerca, lo dice', async () => {
+    api.listUsers.mockResolvedValue({ users: [] });
+    api.listPadronPlaces.mockResolvedValue(LUGARES);
+    const usuario = await abrir('Usuarios');
+    await usuario.selectOptions(campo('Rol'), 'jurado');
+    await usuario.selectOptions(await screen.findByLabelText('Departamento'), 'Bogotá, D.C.');
+    await usuario.selectOptions(campo('Municipio'), 'Bogotá, D.C.');
+    // Sin localidad, ninguno: los dos puestos de Bogotá tienen la suya.
+    expect(campo('Puesto de votación')).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('No hay puestos del padrón cerca de ahí');
+    await usuario.selectOptions(campo('Localidad (opcional)'), 'Kennedy');
+    expect(puestosOfrecidos()).toEqual(['Elige un puesto cerca…', 'Colegio Kennedy']);
+    await usuario.selectOptions(campo('Puesto de votación'), 'Colegio Kennedy');
+    // Si cambia dónde vive y el puesto ya no queda cerca, se deja de elegir.
+    await usuario.selectOptions(campo('Localidad (opcional)'), 'Usaquén');
+    expect(campo('Puesto de votación')).toHaveValue('');
+    expect(puestosOfrecidos()).toEqual(['Elige un puesto cerca…', 'Colegio Usaquén']);
+    expect(screen.getByRole('button', { name: 'Crear usuario' })).toBeDisabled();
   });
 
   it('sin padrón cargado, avisa que hay que cargarlo y no deja crear un jurado', async () => {
@@ -227,12 +265,13 @@ describe('Usuarios', () => {
     expect(screen.getByRole('button', { name: 'Crear usuario' })).toBeDisabled();
   });
 
-  it('lista los usuarios; a un jurado con autenticador se le puede restablecer, con confirmación', async () => {
+  it('lista los usuarios con dónde vive cada jurado; a uno con autenticador se le puede restablecer, con confirmación', async () => {
     api.listUsers.mockResolvedValue({
       users: [
         { id: 1, username: 'admin', role: 'admin', polling_place: null, voting_table: null, has_totp: false },
-        { id: 5, username: 'jurado.mesa1', role: 'jurado', polling_place: 'Puesto Central', voting_table: 'Mesa 1', has_totp: true },
-        { id: 6, username: 'jurado.puesto', role: 'jurado', polling_place: 'Puesto Central', voting_table: null, has_totp: false },
+        { id: 5, username: 'jurado.mesa1', role: 'jurado', polling_place: 'Puesto Central', voting_table: 'Mesa 1', has_totp: true, ubicacion: { ...TUNJA, zona: null }, cerca: true },
+        { id: 6, username: 'jurado.puesto', role: 'jurado', polling_place: 'Puesto Central', voting_table: null, has_totp: false, ubicacion: null, cerca: null },
+        { id: 8, username: 'jurado.lejos', role: 'jurado', polling_place: 'Puesto Central', voting_table: null, has_totp: false, ubicacion: { ...CHIA, zona: null }, cerca: false },
       ],
     });
     api.listPadronPlaces.mockResolvedValue(LUGARES);
@@ -240,10 +279,13 @@ describe('Usuarios', () => {
     const usuario = await abrir('Usuarios');
     const fila = (await screen.findByText('jurado.mesa1')).closest('tr');
     expect(fila).toHaveTextContent('Puesto Central — Mesa 1');
+    expect(fila).toHaveTextContent('Tunja (Boyacá)');
     expect(fila).toHaveTextContent('Registrado');
     const delPuesto = screen.getByText('jurado.puesto').closest('tr');
     expect(delPuesto).toHaveTextContent('Puesto Central — todas las mesas');
+    expect(delPuesto).toHaveTextContent('Sin ubicación: pónsela con «Cambiar mesa»');
     expect(delPuesto).toHaveTextContent('Pendiente (primer ingreso)');
+    expect(screen.getByText('jurado.lejos').closest('tr')).toHaveTextContent('Chía (Cundinamarca)Lejos de su puesto: cámbiale la mesa');
     expect(screen.getAllByRole('button', { name: 'Restablecer autenticador' })).toHaveLength(1);
 
     await usuario.click(within(fila).getByRole('button', { name: 'Restablecer autenticador' }));
@@ -251,21 +293,38 @@ describe('Usuarios', () => {
     expect(api.resetUserTotp).toHaveBeenCalledWith('jwt-admin', 5);
   });
 
-  it('cambiar la mesa de un jurado: parte de la suya y se elige del padrón', async () => {
+  it('cambiar la mesa de un jurado: parte de dónde vive y de su puesto, y manda las dos cosas', async () => {
     api.listUsers.mockResolvedValue({
-      users: [{ id: 7, username: 'nikoo', role: 'jurado', polling_place: 'Puesto Central', voting_table: '1', has_totp: true }],
+      users: [{ id: 7, username: 'nikoo', role: 'jurado', polling_place: 'Puesto Central', voting_table: '1', has_totp: true, ubicacion: { ...TUNJA, zona: null }, cerca: true }],
     });
     api.listPadronPlaces.mockResolvedValue(LUGARES);
     api.changeJuradoMesa.mockResolvedValue({ id: 7, pollingPlace: 'Puesto Central', votingTable: 'Mesa 1' });
     const usuario = await abrir('Usuarios');
-    const fila = (await screen.findByText('nikoo')).closest('tr');
-    await usuario.click(within(fila).getByRole('button', { name: 'Cambiar mesa' }));
+    await usuario.click(within((await screen.findByText('nikoo')).closest('tr')).getByRole('button', { name: 'Cambiar mesa' }));
+    const form = screen.getByRole('form', { name: 'Mesa de nikoo' });
+    expect(within(form).getByLabelText('Municipio')).toHaveValue('15001');
     // Su mesa "1" no figura así en el padrón: se propone el puesto y hay que elegir la mesa.
-    expect(within(fila).getByDisplayValue('Puesto Central')).toBeInTheDocument();
-    await usuario.selectOptions(within(fila).getAllByRole('combobox')[1], 'Mesa 1');
-    await usuario.click(within(fila).getByRole('button', { name: 'Guardar' }));
-    expect(api.changeJuradoMesa).toHaveBeenCalledWith('jwt-admin', 7, 'Puesto Central', 'Mesa 1');
+    expect(within(form).getByLabelText('Puesto de votación')).toHaveValue('Puesto Central');
+    await usuario.selectOptions(within(form).getByLabelText('Mesa'), 'Mesa 1');
+    await usuario.click(within(form).getByRole('button', { name: 'Guardar' }));
+    expect(api.changeJuradoMesa).toHaveBeenCalledWith('jwt-admin', 7, 'Puesto Central', 'Mesa 1', VIVE_TUNJA);
     expect(await screen.findByText('Jurado "nikoo" ahora en Puesto Central — Mesa 1.')).toBeInTheDocument();
+  });
+
+  it('a un jurado sin ubicación, «Cambiar mesa» le pide primero dónde vive', async () => {
+    api.listUsers.mockResolvedValue({
+      users: [{ id: 9, username: 'viejo', role: 'jurado', polling_place: 'Puesto Central', voting_table: 'Mesa 2', has_totp: true, ubicacion: null, cerca: null }],
+    });
+    api.listPadronPlaces.mockResolvedValue(LUGARES);
+    const usuario = await abrir('Usuarios');
+    await usuario.click(within((await screen.findByText('viejo')).closest('tr')).getByRole('button', { name: 'Cambiar mesa' }));
+    const form = screen.getByRole('form', { name: 'Mesa de viejo' });
+    expect(within(form).getByLabelText('Puesto de votación')).toBeDisabled();
+    expect(within(form).getByRole('button', { name: 'Guardar' })).toBeDisabled();
+    await usuario.selectOptions(within(form).getByLabelText('Departamento'), 'Boyacá');
+    await usuario.selectOptions(within(form).getByLabelText('Municipio'), 'Tunja');
+    await usuario.selectOptions(within(form).getByLabelText('Puesto de votación'), 'Puesto Central');
+    expect(within(form).getByRole('button', { name: 'Guardar' })).toBeEnabled();
   });
 });
 

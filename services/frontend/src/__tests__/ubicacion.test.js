@@ -1,7 +1,7 @@
 // Ubicación de un puesto en el navegador (utils/ubicacion.js): las mismas
 // reglas que el servicio (services/auth/src/__tests__/divipola.test.js).
 import {
-  clavePuesto, crearUbicador, cumpleUbicacion, describirUbicacion, mismaUbicacion, opcionesDeUbicacion, ubicacionParaEnviar,
+  cercaDelPuesto, clavePuesto, crearUbicador, cumpleUbicacion, describirUbicacion, mismaUbicacion, opcionesDeUbicacion, ubicacionParaEnviar,
 } from '../utils/ubicacion.js';
 import { CATALOGO, CHIA, TUNJA } from './catalogoDePrueba.js';
 
@@ -39,6 +39,17 @@ it('compara, describe y prepara para mandar; identifica el puesto como el servic
   expect(ubicacionParaEnviar(centro)).toEqual({ pais: 'Colombia', departamento: '15', municipio: '15001', localidad: 'Centro', zona: 'urbana' });
   expect(clavePuesto('  Colegio   ANDINO ')).toBe(clavePuesto('colegio andino'));
   expect(clavePuesto('Sede A/B')).not.toBe(clavePuesto('Sede AB'));
+});
+
+it('un jurado está cerca de un puesto de su municipio y, si el puesto tiene localidad, de la misma', () => {
+  const kennedy = { codigoMunicipio: '11001', localidad: 'Kennedy' };
+  const bogota = { codigoMunicipio: '11001', municipio: 'Bogotá, D.C.', departamento: 'Bogotá, D.C.' };
+  expect(cercaDelPuesto(kennedy, { ...bogota, localidad: 'kennedy ' })).toBe(true);
+  expect(cercaDelPuesto(kennedy, { ...bogota, localidad: 'Usaquén' })).toBe(false);
+  expect(cercaDelPuesto({ codigoMunicipio: '15001', localidad: null }, TUNJA)).toBe(true);
+  expect(cercaDelPuesto({ codigoMunicipio: '25175', localidad: null }, { ...CHIA, localidad: 'Vereda Fagua' })).toBe(false);
+  expect(cercaDelPuesto(kennedy, null)).toBe(false);
+  expect(describirUbicacion({ ...bogota, localidad: 'Kennedy', zona: null })).toBe('Bogotá, D.C., Kennedy');
 });
 
 describe('Filtrar por la ubicación del puesto', () => {

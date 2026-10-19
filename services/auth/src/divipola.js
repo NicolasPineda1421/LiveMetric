@@ -112,8 +112,9 @@ const traeUbicacion = (datosFila) => [datosFila?.departamento, datosFila?.munici
   .some((valor) => String(valor ?? '').trim() !== '');
 
 // De lo que se escribió a la ubicación oficial, o lo que hay que corregir.
-// { ubicacion } o { motivos: [...] }.
-function resolverUbicacion(datosFila) {
+// { ubicacion } o { motivos: [...] }. Con { conZona: false } (dónde vive un
+// jurado) la zona no se pide y queda null.
+function resolverUbicacion(datosFila, { conZona = true } = {}) {
   const motivos = [];
   const pais = String(datosFila.pais ?? '').trim();
   if (pais && !deUnObjeto(PAIS_DE, compacto(pais))) motivos.push(`por ahora los puestos son de ${PAIS}, no de «${pais}»`);
@@ -127,8 +128,8 @@ function resolverUbicacion(datosFila) {
   if (!municipioTexto) motivos.push('falta el municipio');
   else if (departamento && !municipio) motivos.push(`no hay un municipio «${municipioTexto}» en ${departamento.nombre}`);
   const zona = deUnObjeto(ZONA_DE, compacto(zonaTexto));
-  if (!zonaTexto) motivos.push('falta la zona (urbana o rural)');
-  else if (!zona) motivos.push('en zona escribe urbana o rural');
+  if (conZona && !zonaTexto) motivos.push('falta la zona (urbana o rural)');
+  else if (conZona && !zona) motivos.push('en zona escribe urbana o rural');
   const { localidad, error } = leerLocalidad(datosFila.localidad, municipio);
   if (error) motivos.push(error);
   if (motivos.length > 0) return { motivos };
@@ -139,7 +140,7 @@ function resolverUbicacion(datosFila) {
       departamento: nombreDelDepartamento(municipio.departamento),
       municipio: municipio.nombre,
       localidad,
-      zona,
+      zona: conZona ? zona : null,
     },
   };
 }
@@ -150,13 +151,24 @@ const mismaUbicacion = (actual, nueva) => actual.codigoMunicipio === nueva.codig
   && actual.zona === nueva.zona
   && (nueva.localidad === null || compacto(actual.localidad) === compacto(nueva.localidad));
 
-// "Tunja (Boyacá), Centro, zona urbana"
+// "Tunja (Boyacá), Centro, zona urbana" (sin zona: "Tunja (Boyacá), Centro")
 function describirUbicacion(u) {
   const lugar = u.codigoMunicipio === BOGOTA ? u.municipio : `${u.municipio} (${u.departamento})`;
-  return [lugar, u.localidad, `zona ${u.zona}`].filter(Boolean).join(', ');
+  return [lugar, u.localidad, u.zona && `zona ${u.zona}`].filter(Boolean).join(', ');
+}
+
+// ¿Quien vive en "vive" está cerca del puesto ubicado en "puesto"? Mismo
+// municipio y, si el puesto tiene localidad, la misma: en Bogotá una de sus
+// 20, en los demás municipios la comuna o la vereda, sin importar
+// mayúsculas, tildes ni espacios. Un puesto sin localidad queda cerca de
+// todo su municipio. Un puesto sin ubicación no está cerca de nadie: no se
+// sabe dónde queda. (El panel aplica la misma regla: utils/ubicacion.js.)
+function cercaDelPuesto(vive, puesto) {
+  if (!vive || !puesto || vive.codigoMunicipio !== puesto.codigoMunicipio) return false;
+  return !puesto.localidad || compacto(vive.localidad) === compacto(puesto.localidad);
 }
 
 module.exports = {
   PAIS, ZONAS, DEPARTAMENTOS, MUNICIPIOS, LOCALIDADES, compacto, buscarDepartamento, buscarMunicipio, leerLocalidad,
-  traeUbicacion, resolverUbicacion, mismaUbicacion, describirUbicacion, catalogoParaElPanel,
+  traeUbicacion, resolverUbicacion, mismaUbicacion, describirUbicacion, cercaDelPuesto, catalogoParaElPanel,
 };

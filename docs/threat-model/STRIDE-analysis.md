@@ -64,6 +64,10 @@ auth-service ──escribe y consulta eventos──▶ [Audit log] (append-only)
 Almacenes de datos (todos en el mismo PostgreSQL local de la instalación,
 separados aquí por responsabilidad):
 
+- **Cuentas del panel (admins)**: usuario, contraseña en bcrypt y rol
+  (administrador, auditor o jurado). Del jurado, su puesto, su mesa y dónde
+  vive (municipio y localidad, para que solo sea de un puesto cerca), cifrados
+  como el padrón, y el secreto de su autenticador, cifrado.
 - **Padrón (voters)**: `cedula`, `polling_place`, `voting_table` cifrados
   (AES-256-GCM); `full_name` en texto plano; `access_code_hash` (bcrypt del
   PIN) y `access_code_expires_at` (su vencimiento); `totp_secret` (el
