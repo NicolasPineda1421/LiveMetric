@@ -131,7 +131,7 @@ El SBOM (*Software Bill of Materials*) es el inventario de todo lo que lleva cad
   ```bash
   docker buildx imagetools inspect nicolaspineda1421/livemetric-auth:1.7.0 --format '{{ json .SBOM }}'
   ```
-- **En cada publicación**, en formato CycloneDX: el de la imagen y el de las dependencias de cada servicio. Están en los *Artifacts* de la corrida de [`release.yml`](https://github.com/NicolasPineda1421/LiveMetric/actions/workflows/release.yml), como `sbom-<servicio>-vX.Y.Z`. Los de la v1.6.0 están en [esta corrida](https://github.com/NicolasPineda1421/LiveMetric/actions/runs/38641814630).
+- **En cada publicación**, en formato CycloneDX: el de la imagen y el de las dependencias de cada servicio. Están en los *Artifacts* de la corrida de [`release.yml`](https://github.com/NicolasPineda1421/LiveMetric/actions/workflows/release.yml), como `sbom-<servicio>-vX.Y.Z`. Los de la v1.7.0 están en [esta corrida](https://github.com/NicolasPineda1421/LiveMetric/actions/runs/39292997786).
 - **En cada push**, en los *Artifacts* de la corrida de [`devsecops.yml`](https://github.com/NicolasPineda1421/LiveMetric/actions/workflows/devsecops.yml), como `sbom-<servicio>`.
 - **En la PC**, `./scripts/pipeline-local.sh` los deja en la subcarpeta `sbom` de su carpeta de resultados (el cuadro final dice dónde).
 
