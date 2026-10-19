@@ -8,6 +8,8 @@
 
 **Sistema de elecciones y votación en tiempo real**, construido con microservicios y un ciclo DevSecOps completo.
 
+🎬 **[Ver el video de demostración](https://drive.google.com/file/d/1HpOkFSogfZDGLIgd6HAGYGtBFj954uci/view?usp=drive_link)** (Google Drive)
+
 ## Descripción y propósito
 
 LiveMetric permite a una organización programar elecciones con una ventana de tiempo, que cada votante habilitado vote **una sola vez** con su cédula y un PIN, y obtener al cierre un **acta certificada** que nadie puede alterar sin que se note.
@@ -38,6 +40,22 @@ LiveMetric permite a una organización programar elecciones con una ventana de t
 | CI/CD y seguridad | GitHub Actions, Gitleaks, Semgrep, ESLint (`eslint-plugin-security`), npm audit, Trivy (también el SBOM, en CycloneDX), Checkov, OWASP ZAP |
 | Pruebas | Jest, Supertest, React Testing Library |
 | Modelado de amenazas | OWASP Threat Dragon, STRIDE |
+
+## Qué hace cada microservicio
+
+El navegador solo habla con el frontend, en el puerto 3000: nginx sirve la aplicación y reenvía cada llamada del API (`/auth`, `/voting`, `/analytics` y `/scrutiny`) al servicio que corresponde. Los servicios guardan todo en PostgreSQL, que está en una red interna, sin salida a Internet ni puerto en la PC.
+
+| Componente | Qué hace | Imagen |
+|---|---|---|
+| **Frontend** | La aplicación web (React): el panel del administrador, del auditor y del jurado, y la papeleta del votante. nginx la sirve sin root, con una Content-Security-Policy estricta, y reenvía el API a los microservicios. Exporta a PDF los tableros de reportes | `livemetric-frontend` |
+| **Auth** (microservicio A) | Quién entra y con qué rol. Hace el ingreso de los votantes (cédula, PIN y código del autenticador) y del personal (administrador, auditor y jurado), y emite un JWT con el rol de cada uno. Administra:<br>• el padrón, cifrado: alta uno por uno o desde un CSV o Excel, y PIN que vencen;<br>• los puestos de votación, con su ubicación del DANE;<br>• las cuentas del panel;<br>• el voto asistido.<br>Lleva el registro de auditoría, que no se puede modificar | `livemetric-auth` |
+| **Voting** (microservicio B) | Las elecciones y el voto. Administra las plantillas (genéricas, o presidenciales con candidatos) y las elecciones con su horario. Recibe los votos: uno por persona, porque la base no admite un segundo, y solo dentro del horario | `livemetric-voting` |
+| **Analytics** (microservicio C) | Lo que se publica. Mientras la elección está abierta, solo cuántas personas votaron; al cierre, el acta certificada. Arma los reportes: participación por puesto, mesa, municipio, departamento o zona, y estadística avanzada. Cada vez que se consulta un resultado, comprueba que el acta no fue alterada | `livemetric-analytics` |
+| **Scrutiny** (microservicio D) | El escrutinio, separado de todo lo demás. Al cerrar la elección, recuenta los votos, consolida por mesa y determina el ganador. Después encadena el acta con hashes SHA-256 y la firma con Ed25519: es el único que tiene la clave para firmar. Genera el acta en PDF | `livemetric-scrutiny` |
+| **Scheduler** (worker) | Un proceso sin puerto que, cada minuto, abre y cierra las elecciones según su horario y le pide a Scrutiny, con un token interno, que certifique las que cerraron | `livemetric-scheduler` |
+| **PostgreSQL** | Los datos. Las actas y la auditoría tienen triggers que impiden cambiarlas o borrarlas | `postgres:16-alpine`; `livemetric-db` en el modo Docker Hub |
+
+Los detalles, los diagramas y las decisiones de diseño están en el [Manual de arquitectura](docs/manual-arquitectura.md).
 
 ## Inicio rápido
 
@@ -104,6 +122,20 @@ docker pull nicolaspineda1421/livemetric-auth:1.6.0
 ```
 
 Para publicar una versión nueva basta con crear el tag: `git tag -a v1.6.0 -m "..." && git push origin v1.6.0`.
+
+### SBOM
+
+El SBOM (*Software Bill of Materials*) es el inventario de todo lo que lleva cada imagen: los paquetes de Alpine y las librerías de Node.js, con su versión. Lo genera Trivy. No se guarda en el repositorio, sino junto a cada imagen y en cada corrida del pipeline:
+
+- **Adjunto a cada imagen en Docker Hub**, en formato SPDX. Se lee con:
+  ```bash
+  docker buildx imagetools inspect nicolaspineda1421/livemetric-auth:1.6.0 --format '{{ json .SBOM }}'
+  ```
+- **En cada publicación**, en formato CycloneDX: el de la imagen y el de las dependencias de cada servicio. Están en los *Artifacts* de la corrida de [`release.yml`](https://github.com/NicolasPineda1421/LiveMetric/actions/workflows/release.yml), como `sbom-<servicio>-vX.Y.Z`. Los de la v1.6.0 están en [esta corrida](https://github.com/NicolasPineda1421/LiveMetric/actions/runs/38641814630).
+- **En cada push**, en los *Artifacts* de la corrida de [`devsecops.yml`](https://github.com/NicolasPineda1421/LiveMetric/actions/workflows/devsecops.yml), como `sbom-<servicio>`.
+- **En la PC**, `./scripts/pipeline-local.sh` los deja en la subcarpeta `sbom` de su carpeta de resultados (el cuadro final dice dónde).
+
+GitHub guarda los artefactos 90 días; el SBOM adjunto en Docker Hub se queda con la imagen. Más detalle en [Pipeline DevSecOps](docs/pipeline-devsecops.md).
 
 ## Estructura del repositorio
 
