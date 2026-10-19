@@ -354,6 +354,7 @@ describe('Puesto y mesa del jurado', () => {
     expect(res.body.places).toContainEqual({
       pollingPlace: PUESTO,
       votingTables: ['Mesa 1', 'Mesa 2'],
+      mesas: [{ nombre: 'Mesa 1', votantes: 3 }, { nombre: 'Mesa 2', votantes: 1 }],
       voters: 4,
       ubicacion: expect.objectContaining({ municipio: 'Tunja', departamento: 'Boyacá', codigoMunicipio: '15001', zona: 'urbana' }),
     });

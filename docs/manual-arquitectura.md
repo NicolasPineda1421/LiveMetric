@@ -118,7 +118,7 @@ graph TB
     end
 
     subgraph Datos["Persistencia — red db-net (interna)"]
-        DB[("PostgreSQL<br/>elections · votes · voters<br/>puestos_votacion<br/>scrutiny_ledger · audit_log")]
+        DB[("PostgreSQL<br/>elections · votes · voters<br/>puestos_votacion · mesas_votacion<br/>scrutiny_ledger · audit_log")]
     end
 
     FE -->|"POST /login/admin<br/>POST /login/voter"| AUTH
@@ -325,7 +325,7 @@ graph LR
 Los dos DFD son el modelo de amenazas de OWASP Threat Dragon
 ([`threat-model/livemetric.threatdragon.json`](threat-model/livemetric.threatdragon.json)),
 exportados desde la propia herramienta: los mismos diagramas sobre los que se
-analizaron las 22 amenazas STRIDE de
+analizaron las 23 amenazas STRIDE de
 [`threat-model/STRIDE-analysis.md`](threat-model/STRIDE-analysis.md). Las líneas
 punteadas son fronteras de confianza, y el flujo en rojo, el que tiene una amenaza
 abierta (el repudio del voto, aceptado por diseño para preservar el anonimato).
@@ -374,7 +374,9 @@ erDiagram
     ADMINS ||--o{ ELECTIONS : crea
     ADMINS ||--o{ VOTERS : registra
     ADMINS ||--o{ PUESTOS_VOTACION : registra
+    ADMINS ||--o{ MESAS_VOTACION : crea
     PUESTOS_VOTACION ||..o{ VOTERS : "ubica, por nombre"
+    PUESTOS_VOTACION ||..o{ MESAS_VOTACION : "tiene, por nombre"
     ELECTION_TEMPLATES ||--o{ TEMPLATE_OPTIONS : contiene
     ELECTION_TEMPLATES ||--o{ ELECTIONS : instancia
     ELECTIONS ||--o{ ELECTION_OPTIONS : contiene
@@ -414,6 +416,12 @@ erDiagram
         string municipio
         string localidad "opcional"
         string zona "urbana o rural"
+    }
+    MESAS_VOTACION {
+        int id PK
+        string puesto_clave "clave del puesto"
+        string nombre
+        string clave "mesa normalizada, única en su puesto"
     }
     ELECTION_TEMPLATES {
         int id PK
@@ -477,5 +485,7 @@ erDiagram
 ```
 
 *(`PUESTOS_VOTACION` se relaciona con `VOTERS` por el nombre normalizado del puesto, sin llave foránea: en `VOTERS` el puesto va cifrado, y la tabla de puestos no lo está, porque dice dónde queda un puesto, no quién vota en él.)*
+
+*(`MESAS_VOTACION` guarda las mesas creadas desde la pestaña **Puestos**, antes de que tengan votantes; las que ya tienen votantes están en `VOTERS`, cifradas. El panel muestra las dos juntas, reconocidas por la mesa normalizada (`"1"` y `"Mesa 1"` son la misma). Se relaciona con su puesto por la clave del puesto, sin llave foránea, porque un puesto del padrón puede no tener ubicación todavía.)*
 
 *(`AUDIT_LOG` no tiene llave foránea hacia otras tablas — es intencional: el log de auditoría no debe depender referencialmente de los registros que audita, para que siga existiendo aunque el recurso auditado cambie o se elimine.)*

@@ -935,3 +935,11 @@ fieldset.filtros-ubicacion { grid-template-columns: repeat(5, 1fr); }
 .ilus-reloj-resto { fill: var(--color-accent); opacity: 0.6; }
 .ilus-linea { stroke: var(--color-border); }
 .ilus-base { fill: var(--color-panel); stroke: var(--color-border-strong); }
+
+/* Mesas de un puesto (pestaña Puestos): su tabla, y los formularios de
+   crear y renombrar, con el campo y el botón en la misma línea. */
+.mesas-puesto { padding: 0.2rem 0 0.4rem; }
+.tabla-mesas { margin-bottom: 0.8rem; max-width: 640px; }
+.mesa-form { display: flex; gap: 0.8rem; align-items: flex-end; flex-wrap: wrap; }
+.mesa-form .field-dark { margin-bottom: 0; min-width: 220px; }
+.mesa-form .acciones-padron { margin: 0; }

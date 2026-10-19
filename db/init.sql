@@ -87,6 +87,23 @@ CREATE TABLE IF NOT EXISTS puestos_votacion (
     CONSTRAINT puestos_codigo_municipio_check CHECK (codigo_municipio ~ '^[0-9]{5}$')
 );
 
+-- Mesas creadas desde la pestaña "Puestos" (migración 010), para asignarles
+-- votantes y jurados antes de que tengan alguno. Las del padrón (las de cada
+-- votante, cifradas) se muestran junto a estas, reconocidas por "clave": la
+-- mesa sin mayúsculas, tildes ni el prefijo "Mesa". "puesto_clave" es la
+-- clave del puesto. Sin cifrar: dice qué mesas tiene un puesto, no quién
+-- vota en ellas.
+CREATE TABLE IF NOT EXISTS mesas_votacion (
+    id            SERIAL PRIMARY KEY,
+    puesto_clave  VARCHAR(150) NOT NULL,
+    nombre        VARCHAR(50)  NOT NULL,
+    clave         VARCHAR(50)  NOT NULL,
+    created_by    INTEGER REFERENCES admins(id) ON DELETE SET NULL,
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT mesas_puesto_clave_unica UNIQUE (puesto_clave, clave)
+);
+
 -- ---------------------------------------------------------------------------
 -- Plantillas: separan "la pregunta" de "cuándo se vota". Pueden ser
 -- "generic" (una pregunta con opciones de texto libre, como antes) o

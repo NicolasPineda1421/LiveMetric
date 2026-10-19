@@ -1673,6 +1673,19 @@
                   "new": false,
                   "number": 22,
                   "score": ""
+                },
+                {
+                  "id": "4083878c-be61-569c-af3e-4ef14b73776c",
+                  "title": "Renombrar una mesa con una votación en curso",
+                  "status": "Mitigated",
+                  "severity": "Medium",
+                  "type": "Tampering",
+                  "description": "Si una mesa cambia de nombre mientras se vota, los votos ya emitidos guardan el nombre anterior y los siguientes el nuevo: el acta consolidaría una sola mesa como si fueran dos.",
+                  "mitigation": "PUT /admin/mesas responde 409 mientras haya una elección activa (services/auth/src/mesas.js). Fuera de una votación, el renombre cambia la mesa de los votantes y de los jurados en una sola transacción y queda en la auditoría (MESA_RENOMBRADA, con el nombre anterior y el nuevo). Los votos y las actas anteriores conservan el nombre de entonces.",
+                  "modelType": "STRIDE",
+                  "new": false,
+                  "number": 23,
+                  "score": ""
                 }
               ],
               "protocol": "HTTP",

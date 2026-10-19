@@ -77,6 +77,14 @@ export const api = {
   savePuestoUbicacion: (token, pollingPlace, ubicacion) =>
     request('auth', '/admin/puestos/ubicacion', { method: 'PUT', token, body: { pollingPlace, ...ubicacion } }),
   deletePuesto: (token, puestoId) => request('auth', `/admin/puestos/${puestoId}`, { method: 'DELETE', token }),
+  // Mesas de un puesto: crear una sin votantes, renombrarla (también en sus
+  // votantes y sus jurados) y eliminarla si no tiene ninguno.
+  createMesa: (token, pollingPlace, votingTable) =>
+    request('auth', '/admin/mesas', { method: 'POST', token, body: { pollingPlace, votingTable } }),
+  renameMesa: (token, pollingPlace, votingTable, nombre) =>
+    request('auth', '/admin/mesas', { method: 'PUT', token, body: { pollingPlace, votingTable, nombre } }),
+  deleteMesa: (token, pollingPlace, votingTable) =>
+    request('auth', '/admin/mesas', { method: 'DELETE', token, body: { pollingPlace, votingTable } }),
   // Departamentos y municipios del DANE (Divipola), con las otras formas de escribirlos.
   getDivipola: (token) => request('auth', '/admin/divipola', { token }),
   // votingTable vacío: el jurado queda de todo el puesto.

@@ -74,6 +74,10 @@ separados aquí por responsabilidad):
   no quién vota en él. Solo el administrador la escribe, y cada cambio queda
   en la auditoría con la ubicación anterior y la nueva
   (`PUESTO_UBICACION_GUARDADA`).
+- **Mesas (mesas_votacion)**: las mesas creadas desde la pestaña Puestos antes
+  de tener votantes, sin cifrar (dicen qué mesas tiene un puesto, no quién vota
+  en ellas). Solo el administrador las crea, renombra o elimina, y cada cambio
+  queda en la auditoría (`MESA_CREADA`, `MESA_RENOMBRADA`, `MESA_ELIMINADA`).
 - **Elecciones y votos**: `elections`, `election_options`, `votes`
   (`voter_id_hash`, nunca la cédula).
 - **Acta de escrutinio**: `scrutiny_ledger`, append-only, hash SHA-256
@@ -106,6 +110,7 @@ separados aquí por responsabilidad):
 | 20 | Flujo Administrador → auth-service (carga del padrón desde un archivo) | Information Disclosure | Un nombre del archivo del padrón trae una fórmula (`=HYPERLINK(…)`, `=WEBSERVICE(…)`) que, al abrir en Excel la lista de PIN descargada, manda su contenido afuera o ejecuta algo en la PC del administrador (inyección de CSV) | Mitigado | Las listas que arma el panel (la de PIN y la plantilla, `services/frontend/src/utils/padronArchivo.js`) anteponen un apóstrofo a toda celda que empieza con `=`, `+`, `-`, `@` o un tabulador: Excel la muestra como texto. El archivo se lee en el navegador, y al servicio solo llegan los campos ya validados, con las mismas reglas que el formulario. |
 | 21 | Lista de PIN descargada | Information Disclosure | La lista de PIN que descarga el administrador después de una carga masiva queda en su PC (en Descargas, en una carpeta compartida, en un correo) y otro la usa | Mitigado (parcial) | El PIN solo no abre la sesión: hace falta además el código del autenticador del votante o la autorización del jurado de su mesa (16 a 18), y vence 24 horas después de generarse. El panel avisa que el archivo es una credencial y que se borre después de entregar los PIN. Residual: guardarlo y borrarlo depende del administrador. |
 | 22 | Flujo Administrador → auth-service (carga del padrón) | Denial of Service | Mandar cuerpos grandes a las rutas que agregan votantes para agotar la memoria o la CPU del servicio de autenticación | Mitigado | Todas las rutas leen a lo sumo 10 kB, salvo `POST /admin/voters` y `/admin/voters/bulk`, que aceptan 256 kB (hasta 200 votantes) y lo leen después de comprobar la sesión de administrador (`services/auth/src/app.js`), con el límite de 20 operaciones por minuto. Cada pedido genera a lo sumo 200 PIN con bcrypt. |
+| 23 | Flujo Administrador → auth-service (mesas de votación) | Tampering | Renombrar una mesa con una votación en curso: los votos ya emitidos guardan el nombre anterior y los siguientes el nuevo, y el acta consolidaría una sola mesa como si fueran dos | Mitigado | `PUT /admin/mesas` responde `409` mientras haya una elección activa (`services/auth/src/mesas.js`). Fuera de una votación, el renombre cambia la mesa de los votantes y de los jurados en una sola transacción y queda en la auditoría (`MESA_RENOMBRADA`, con el nombre anterior y el nuevo). Los votos y las actas anteriores conservan el nombre de entonces. |
 
 ## Alcance y limitaciones de este modelo
 

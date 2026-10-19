@@ -50,14 +50,20 @@ const ubicacionDeFila = (fila) => ({
 });
 
 // Los puestos del padrón (votantes activos), cada uno con sus mesas tal
-// como están escritos en él, cuántos votantes tiene y su ubicación (null si
+// como están escritas en él, cuántos votantes tiene y su ubicación (null si
 // todavía no la tiene). Si el mismo puesto o mesa aparece escrito de dos
-// formas, queda una sola. Con { todos: true } están también los puestos con
-// ubicación que ya no tienen votantes.
+// formas, queda una sola. Las mesas creadas en "Puestos" (mesas_votacion,
+// migración 010) se suman a las de su puesto, aunque todavía no tengan
+// votantes. Con { todos: true } están también los puestos con ubicación que
+// ya no tienen votantes.
+//
+// Cada puesto trae sus mesas dos veces: "votingTables", solo los nombres
+// (para elegir una), y "mesas", con cuántos votantes tiene cada una.
 async function lugaresDelPadron(pool, { todos = false } = {}) {
-  const [padron, ubicaciones] = await Promise.all([
+  const [padron, ubicaciones, registradas] = await Promise.all([
     pool.query('SELECT polling_place, voting_table, count(*)::int AS votantes FROM voters WHERE is_active GROUP BY polling_place, voting_table'),
     pool.query('SELECT * FROM puestos_votacion'),
+    pool.query('SELECT puesto_clave, nombre, clave FROM mesas_votacion'),
   ]);
   const ubicacionDe = new Map(ubicaciones.rows.map((fila) => [fila.clave, fila]));
   const puestos = new Map();
@@ -68,21 +74,46 @@ async function lugaresDelPadron(pool, { todos = false } = {}) {
     if (!puestos.has(clave)) puestos.set(clave, { pollingPlace: puesto, mesas: new Map(), votantes: 0 });
     const actual = puestos.get(clave);
     actual.votantes += fila.votantes;
-    if (!actual.mesas.has(normalizarMesa(mesa))) actual.mesas.set(normalizarMesa(mesa), mesa);
+    const claveMesa = normalizarMesa(mesa);
+    if (!actual.mesas.has(claveMesa)) actual.mesas.set(claveMesa, { nombre: mesa, votantes: 0 });
+    actual.mesas.get(claveMesa).votantes += fila.votantes;
   }
   if (todos) {
     for (const fila of ubicaciones.rows) {
       if (!puestos.has(fila.clave)) puestos.set(fila.clave, { pollingPlace: fila.nombre, mesas: new Map(), votantes: 0 });
     }
   }
+  // Una mesa creada a mano en un puesto que ya no figura (sin votantes ni
+  // ubicación) no se muestra: vuelve a aparecer si el puesto vuelve.
+  for (const fila of registradas.rows) {
+    const puesto = puestos.get(fila.puesto_clave);
+    if (puesto && !puesto.mesas.has(fila.clave)) puesto.mesas.set(fila.clave, { nombre: fila.nombre, votantes: 0 });
+  }
   return [...puestos.entries()]
-    .map(([clave, p]) => ({
-      pollingPlace: p.pollingPlace,
-      votingTables: [...p.mesas.values()].sort(enOrden),
-      voters: p.votantes,
-      ubicacion: ubicacionDe.has(clave) ? ubicacionDeFila(ubicacionDe.get(clave)) : null,
-    }))
+    .map(([clave, p]) => {
+      const mesas = [...p.mesas.values()].sort((a, b) => enOrden(a.nombre, b.nombre));
+      return {
+        pollingPlace: p.pollingPlace,
+        votingTables: mesas.map((m) => m.nombre),
+        mesas,
+        voters: p.votantes,
+        ubicacion: ubicacionDe.has(clave) ? ubicacionDeFila(ubicacionDe.get(clave)) : null,
+      };
+    })
     .sort((a, b) => enOrden(a.pollingPlace, b.pollingPlace));
+}
+
+// Cuántos jurados tiene cada mesa de cada puesto ("puesto|mesa", ambos
+// normalizados), y cuántos son de todo un puesto ("puesto|*").
+async function juradosPorLugar(pool) {
+  const { rows } = await pool.query("SELECT polling_place, voting_table FROM admins WHERE role = 'jurado'");
+  const cuenta = new Map();
+  for (const fila of rows) {
+    const puesto = normalizarPuesto(decryptField(fila.polling_place));
+    const llave = `${puesto}|${fila.voting_table ? normalizarMesa(decryptField(fila.voting_table)) : '*'}`;
+    cuenta.set(llave, (cuenta.get(llave) || 0) + 1);
+  }
+  return cuenta;
 }
 
 // El puesto (y la mesa, si se pidió una) tal como figuran en el padrón, o el
@@ -117,5 +148,6 @@ function lugarCanonico(lugares, pollingPlace, votingTable) {
 }
 
 module.exports = {
-  normalizarPuesto, normalizarMesa, mismoPuesto, mismaMesa, juradoCubre, lugaresDelPadron, ubicarEnPadron, lugarCanonico, ubicacionDeFila,
+  normalizarPuesto, normalizarMesa, mismoPuesto, mismaMesa, juradoCubre, lugaresDelPadron, juradosPorLugar, ubicarEnPadron, lugarCanonico,
+  ubicacionDeFila,
 };

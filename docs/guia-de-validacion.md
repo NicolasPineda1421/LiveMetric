@@ -64,6 +64,15 @@ Lo automatizan `divipola.test.js` y `puestos.test.js` (auth) y `ubicacion.test.j
 6. **Quitar un puesto** — `DELETE /admin/puestos/:id` de un puesto con votantes responde `409`; sin votantes, `204`, y queda `PUESTO_ELIMINADO` en **Auditoría**.
 7. **Filtrar por ubicación** — `GET /admin/voters` acepta `pais`, `departamento` (código de 2 dígitos), `municipio` (código de 5), `localidad` y `zona` (`urbana` o `rural`); `pais=sin_ubicacion` deja los de puestos sin ubicación, y un valor mal formado (`departamento=Antioquia`, `zona=mixta`) responde `400`. Cada votante viene con la `ubicacion` de su puesto, y `porDepartamento` dice cuántos de los filtrados votan en cada departamento. En **Padrón**, las listas de **Ubicación del puesto** traen solo los lugares con puestos, cada una dentro de la anterior, y **Votan en** filtra por departamento con un clic; en **Puestos**, los mismos filtros se aplican a la tabla.
 
+## Mesas de votación: crear, renombrar y eliminar
+
+Lo automatizan `mesas.test.js` (auth) y `PuestosTab.test.jsx` (frontend).
+
+1. **Crear una mesa** — En **Puestos**, el botón **Mesas** de un puesto muestra sus mesas con cuántos votantes y jurados tiene cada una. **Crear mesa** con "Mesa 7" la agrega sin votantes (`POST /admin/mesas`, `201`, y `MESA_CREADA` en **Auditoría**). Ya se puede elegir en **Usuarios** para un jurado, y un votante nuevo escrito "7" queda en "Mesa 7". Crear "7" otra vez responde `409`: "1" y "Mesa 1" son la misma mesa. En un puesto que no existe, `404`.
+2. **Renombrar** — **Renombrar** "Mesa 1" a "Mesa A" la cambia en sus votantes y en sus jurados (`PUT /admin/mesas`): la respuesta dice cuántos de cada uno, y queda `MESA_RENOMBRADA` con el nombre anterior y el nuevo. Con el nombre de otra mesa del mismo puesto responde `409` (las juntaría).
+3. **No con una votación en curso** — Con una elección `active`, renombrar responde `409` "Hay una votación en curso…": cada voto guarda la mesa con la que se emitió, y el acta quedaría partida entre los dos nombres. Al cerrarla, se puede.
+4. **Eliminar** — **Eliminar** aparece solo en las mesas sin votantes ni jurados (`DELETE /admin/mesas`, `204`, `MESA_ELIMINADA`). Por la API, una con votantes o con un jurado responde `409` y dice qué tiene. Al quitar un puesto se van también sus mesas creadas.
+
 ## Detener una elección, plantilla presidencial, mesas y acta
 
 1. **Detener una elección antes de tiempo** — En "Elecciones", crea una con ventana larga (ej. 1 hora) y pulsa "Detener" mientras está `scheduled` o `active`. Debe quedar `closed` de inmediato, con `stopped_manually: true`. En menos de un minuto (`SCHEDULER_CRON`), `scheduler-worker` la certifica igual que a una cerrada por tiempo — revisa `docker compose logs -f scheduler-worker` para confirmarlo, y luego "Resultados" debe mostrar `certified: true`.

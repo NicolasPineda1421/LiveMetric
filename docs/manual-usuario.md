@@ -441,7 +441,8 @@ los que no la tienen), y el resumen dice cuántos puestos y votantes quedan ("se
 puestos, con 943 votantes").
 
 Un puesto se registra al agregar a su primer votante (con el formulario o desde un
-archivo), así que aquí no se crean puestos: se completa o se corrige su ubicación.
+archivo), así que aquí no se crean puestos: se completa o se corrige su ubicación, y se
+manejan sus mesas.
 
 - **Poner ubicación**: para un puesto que todavía no la tiene. Pasa con los puestos que
   ya estaban en el padrón antes de que existiera la ubicación: aparecen primero, con
@@ -450,7 +451,8 @@ archivo), así que aquí no se crean puestos: se completa o se corrige su ubicac
 - **Cambiar ubicación**: corrige la de un puesto que ya la tiene. No cambia a sus
   votantes ni sus votos: solo dice dónde queda.
 - **Quitar**: solo para un puesto que ya no tiene votantes (por ejemplo, porque se
-  eliminaron todos), después de confirmar.
+  eliminaron todos), después de confirmar. Se quitan también sus mesas.
+- **Mesas**: abre, debajo del puesto, sus mesas (ver más abajo).
 
 La ubicación se elige de las listas oficiales del DANE (Divipola): el **Departamento**, y
 después el **Municipio** de ese departamento (hay municipios con el mismo nombre en
@@ -461,6 +463,30 @@ vereda). La **Zona** es *Urbana* o *Rural*. Cada cambio queda en **Auditoría**
 
 ![Captura 36: La pestaña Puestos: los filtros por ubicación, cada puesto con su departamento, municipio, localidad, zona, mesas y votantes; un puesto sin ubicación primero, con el aviso arriba, y el formulario para ponérsela](img/36-puestos.png)
 *Captura 36. La pestaña Puestos: arriba, los filtros por país, departamento, municipio, localidad y zona; cada puesto con su departamento, municipio, localidad, zona, mesas y votantes. El que todavía no tiene ubicación aparece primero, con el aviso arriba, y debajo el formulario para ponérsela.*
+
+#### Mesas de un puesto
+
+El botón **Mesas** de cada puesto abre la lista de sus mesas, con cuántos **votantes** y
+cuántos **jurados** tiene cada una. Una mesa existe cuando algún votante la tiene, o
+cuando se crea aquí. Para el sistema, "1", "Mesa 1" y "mesa 1" son la misma mesa.
+
+- **Crear mesa**: se escribe el nombre en **Mesa nueva** (por ejemplo, "Mesa 5") y queda
+  en el puesto sin votantes. Desde ese momento se puede elegir para un jurado en
+  **Usuarios**, y un votante que se agregue con "5" queda en "Mesa 5". No se puede crear
+  una que ya existe, escrita de cualquier forma.
+- **Renombrar**: cambia el nombre de la mesa en todos sus votantes y en sus jurados, y el
+  aviso dice en cuántos de cada uno ("se cambió en 28 votantes y 1 jurado"). Sirve para
+  corregir una mesa mal escrita en el padrón. No se puede mientras haya una votación en
+  curso, porque cada voto guarda la mesa con la que se emitió. Tampoco se le puede poner
+  el nombre de otra mesa del mismo puesto: las dos quedarían en una. Los votos y las
+  actas anteriores conservan el nombre de entonces.
+- **Eliminar**: aparece solo en las mesas sin votantes ni jurados, y pide confirmación.
+
+Cada operación queda en **Auditoría** (`MESA_CREADA`, `MESA_RENOMBRADA` con el nombre
+anterior y el nuevo, y `MESA_ELIMINADA`).
+
+![Captura 40: Las mesas del Colegio de Boyacá: cada una con sus votantes y jurados, la Mesa 5 recién creada sin votantes y con el botón Eliminar, y el formulario para crear otra](img/40-puestos-mesas.png)
+*Captura 40. Las mesas del Colegio de Boyacá, con el filtro por departamento: cada mesa con sus votantes y sus jurados. La Mesa 5 se acaba de crear (el aviso de arriba lo confirma): no tiene votantes, así que es la única con **Eliminar**. Debajo, el formulario para crear otra.*
 
 ### 4.6 Usuarios
 
@@ -812,6 +838,7 @@ los 30 segundos).
 | 37 | `37-reportes-participacion.png` | Participación por puesto, mesa, municipio y zona en los reportes |
 | 38 | `38-guia-autenticador-microsoft.png` | Guía paso a paso del autenticador: Microsoft Authenticator |
 | 39 | `39-guia-autenticador-google.png` | Guía paso a paso del autenticador: Google Authenticator |
+| 40 | `40-puestos-mesas.png` | Las mesas de un puesto: crear, renombrar y eliminar |
 
 Las capturas 05 y 26 juntas muestran el control de acceso por rol: conviene usarlas también
 en el informe y en el video.

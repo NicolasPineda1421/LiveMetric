@@ -15,8 +15,10 @@ const totp = require('./totp');
 const { evaluarContrasena, mensajeContrasenaDebil, MINIMO_CONTRASENA, MAXIMO_CONTRASENA } = require('./politicaContrasena');
 const { leerHorasDeVigencia, vencimientoDelPin, VIGENCIA_MAXIMA_HORAS } = require('./vigenciaPin');
 const {
-  juradoCubre, lugaresDelPadron, ubicarEnPadron, lugarCanonico, normalizarPuesto, mismoPuesto, mismaMesa, ubicacionDeFila,
+  juradoCubre, lugaresDelPadron, juradosPorLugar, ubicarEnPadron, lugarCanonico, normalizarPuesto, normalizarMesa, mismoPuesto, mismaMesa,
+  ubicacionDeFila,
 } = require('./lugares');
+const { buscarMesa, hayVotacionEnCurso, renombrarMesa } = require('./mesas');
 const { catalogoParaElPanel, traeUbicacion, resolverUbicacion, describirUbicacion } = require('./divipola');
 const { ubicarPuestosDelPedido, guardarUbicaciones, cumpleUbicacion, contarPorDepartamento } = require('./puestos');
 
@@ -799,11 +801,18 @@ app.get('/admin/divipola', requireAdmin, adminReadLimiter, (_req, res) => {
   return res.status(200).json(catalogoParaElPanel());
 });
 
-// Todos los puestos: los del padrón (con sus mesas y cuántos votantes
-// tienen) y los que tienen ubicación pero ya no tienen votantes.
+// Todos los puestos: los del padrón y los que tienen ubicación pero ya no
+// tienen votantes, cada uno con sus mesas (cuántos votantes y jurados tiene
+// cada una) y cuántos jurados son de todo el puesto.
 app.get('/admin/puestos', requireAdmin, adminReadLimiter, async (_req, res) => {
   try {
-    return res.status(200).json({ puestos: await lugaresDelPadron(pool, { todos: true }) });
+    const [puestos, jurados] = await Promise.all([lugaresDelPadron(pool, { todos: true }), juradosPorLugar(pool)]);
+    for (const puesto of puestos) {
+      const clave = normalizarPuesto(puesto.pollingPlace);
+      puesto.juradosDelPuesto = jurados.get(`${clave}|*`) || 0;
+      puesto.mesas = puesto.mesas.map((m) => ({ ...m, jurados: jurados.get(`${clave}|${normalizarMesa(m.nombre)}`) || 0 }));
+    }
+    return res.status(200).json({ puestos });
   } catch (err) {
     console.error('Error en GET /admin/puestos:', err.message);
     return res.status(500).json({ error: 'Error interno del servidor' });
@@ -871,6 +880,8 @@ app.delete(
         return res.status(409).json({ error: `El puesto «${puesto.pollingPlace}» tiene ${puesto.voters} votante${puesto.voters === 1 ? '' : 's'}: no se puede quitar.` });
       }
       await pool.query('DELETE FROM puestos_votacion WHERE id = $1', [req.params.id]);
+      // Con él se van las mesas creadas a mano que no llegaron a tener votantes.
+      await pool.query('DELETE FROM mesas_votacion WHERE puesto_clave = $1', [normalizarPuesto(puesto.pollingPlace)]);
       await recordAuditEvent({
         eventType: 'PUESTO_ELIMINADO',
         actorType: 'admin',
@@ -885,6 +896,119 @@ app.delete(
     }
   }
 );
+
+/* ============================================================
+ * MESAS DE VOTACIÓN (migración 010)
+ * ============================================================
+ *
+ * Crear, renombrar y eliminar mesas desde la pestaña "Puestos". Las reglas
+ * están en mesas.js: una mesa se renombra en sus votantes y sus jurados, no
+ * con una votación en curso, y se elimina solo si no tiene ninguno de los dos.
+ */
+const reglasDeMesa = [
+  body('pollingPlace').isString().trim().isLength({ min: 2, max: 150 }),
+  body('votingTable').isString().trim().isLength({ min: 1, max: 50 }),
+];
+// El nombre de una mesa, sin espacios de más. "Mesa" sola no es una mesa.
+const nombreDeMesa = (texto) => String(texto).replace(/\s+/g, ' ').trim();
+const ERROR_DE_MESA = 'Indica el puesto y la mesa: de 1 a 50 caracteres, por ejemplo «Mesa 3» o «3»';
+
+// Crea una mesa en un puesto que ya existe, para asignarle votantes y jurados.
+app.post('/admin/mesas', requireAdmin, adminOpsLimiter, reglasDeMesa, async (req, res) => {
+  const nombre = nombreDeMesa(req.body.votingTable ?? '');
+  if (!validationResult(req).isEmpty() || !normalizarMesa(nombre)) return res.status(400).json({ error: ERROR_DE_MESA });
+  try {
+    const { puesto, mesa } = buscarMesa(await lugaresDelPadron(pool, { todos: true }), req.body.pollingPlace, nombre);
+    if (!puesto) return res.status(404).json({ error: 'Ese puesto no existe: un puesto se registra al agregar a su primer votante en «Padrón».' });
+    if (mesa) return res.status(409).json({ error: `El puesto «${puesto.pollingPlace}» ya tiene la mesa «${mesa.nombre}».` });
+    await pool.query(
+      'INSERT INTO mesas_votacion (puesto_clave, nombre, clave, created_by) VALUES ($1, $2, $3, $4)',
+      [normalizarPuesto(puesto.pollingPlace), nombre, normalizarMesa(nombre), req.user.sub]
+    );
+    await recordAuditEvent({
+      eventType: 'MESA_CREADA', actorType: 'admin', actorRef: req.user.username, req,
+      metadata: { pollingPlace: puesto.pollingPlace, votingTable: nombre },
+    });
+    return res.status(201).json({ pollingPlace: puesto.pollingPlace, votingTable: nombre });
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'Esa mesa ya existe en ese puesto.' });
+    console.error('Error en POST /admin/mesas:', err.message);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// Renombra una mesa: la de sus votantes y la de sus jurados.
+app.put(
+  '/admin/mesas',
+  requireAdmin,
+  adminOpsLimiter,
+  [...reglasDeMesa, body('nombre').isString().trim().isLength({ min: 1, max: 50 })],
+  async (req, res) => {
+    const nombre = nombreDeMesa(req.body.nombre ?? '');
+    if (!validationResult(req).isEmpty() || !normalizarMesa(nombre)) {
+      return res.status(400).json({ error: 'Indica la mesa y su nombre nuevo: de 1 a 50 caracteres, por ejemplo «Mesa 3» o «3»' });
+    }
+    try {
+      const { puesto, mesa } = buscarMesa(await lugaresDelPadron(pool, { todos: true }), req.body.pollingPlace, req.body.votingTable);
+      if (!mesa) return res.status(404).json({ error: 'Esa mesa no está en ese puesto.' });
+      if (mesa.nombre === nombre) return res.status(400).json({ error: 'Escribe un nombre distinto del que tiene.' });
+      const otra = puesto.mesas.find((m) => m !== mesa && mismaMesa(m.nombre, nombre));
+      if (otra) {
+        return res.status(409).json({
+          error: `El puesto «${puesto.pollingPlace}» ya tiene la mesa «${otra.nombre}»: con ese nombre, las dos mesas quedarían en una.`,
+        });
+      }
+      if (await hayVotacionEnCurso(pool)) {
+        return res.status(409).json({
+          error: 'Hay una votación en curso: renombra la mesa cuando termine. Cada voto guarda la mesa con la que se emitió, '
+            + 'y el acta quedaría partida entre los dos nombres.',
+        });
+      }
+      const cambios = await renombrarMesa(pool, { pollingPlace: puesto.pollingPlace, votingTable: mesa.nombre, nombre });
+      await recordAuditEvent({
+        eventType: 'MESA_RENOMBRADA', actorType: 'admin', actorRef: req.user.username, req,
+        metadata: { pollingPlace: puesto.pollingPlace, antes: mesa.nombre, ahora: nombre, ...cambios },
+      });
+      return res.status(200).json({ pollingPlace: puesto.pollingPlace, votingTable: nombre, ...cambios });
+    } catch (err) {
+      if (err.code === '23505') return res.status(409).json({ error: 'Ya hay una mesa con ese nombre en ese puesto.' });
+      console.error('Error en PUT /admin/mesas:', err.message);
+      return res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  }
+);
+
+// Elimina una mesa que no tiene votantes ni jurados.
+app.delete('/admin/mesas', requireAdmin, adminOpsLimiter, reglasDeMesa, async (req, res) => {
+  if (!validationResult(req).isEmpty()) return res.status(400).json({ error: ERROR_DE_MESA });
+  try {
+    const [lugares, jurados] = await Promise.all([lugaresDelPadron(pool, { todos: true }), juradosPorLugar(pool)]);
+    const { puesto, mesa } = buscarMesa(lugares, req.body.pollingPlace, req.body.votingTable);
+    if (!mesa) return res.status(404).json({ error: 'Esa mesa no está en ese puesto.' });
+    if (mesa.votantes > 0) {
+      return res.status(409).json({
+        error: `La mesa «${mesa.nombre}» tiene ${mesa.votantes} votante${mesa.votantes === 1 ? '' : 's'}: no se puede eliminar. `
+          + 'Si el nombre está mal, renómbrala.',
+      });
+    }
+    const juradosDeLaMesa = jurados.get(`${normalizarPuesto(puesto.pollingPlace)}|${normalizarMesa(mesa.nombre)}`) || 0;
+    if (juradosDeLaMesa > 0) {
+      return res.status(409).json({
+        error: `La mesa «${mesa.nombre}» tiene ${juradosDeLaMesa} jurado${juradosDeLaMesa === 1 ? '' : 's'}: `
+          + 'cámbiale la mesa en «Usuarios» antes de eliminarla.',
+      });
+    }
+    await pool.query('DELETE FROM mesas_votacion WHERE puesto_clave = $1 AND clave = $2', [normalizarPuesto(puesto.pollingPlace), normalizarMesa(mesa.nombre)]);
+    await recordAuditEvent({
+      eventType: 'MESA_ELIMINADA', actorType: 'admin', actorRef: req.user.username, req,
+      metadata: { pollingPlace: puesto.pollingPlace, votingTable: mesa.nombre },
+    });
+    return res.status(204).send();
+  } catch (err) {
+    console.error('Error en DELETE /admin/mesas:', err.message);
+    return res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
 
 // Cambia el puesto y la mesa de un jurado (sin mesa: todo el puesto).
 app.put(

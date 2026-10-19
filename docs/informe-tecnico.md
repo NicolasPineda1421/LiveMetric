@@ -290,6 +290,7 @@ erDiagram
     ADMINS ||--o{ ELECTION_TEMPLATES : crea
     ADMINS ||--o{ VOTERS : registra
     PUESTOS_VOTACION ||..o{ VOTERS : "ubica, por nombre"
+    PUESTOS_VOTACION ||..o{ MESAS_VOTACION : "tiene, por nombre"
     ELECTION_TEMPLATES ||--o{ TEMPLATE_OPTIONS : contiene
     ELECTION_TEMPLATES ||--o{ ELECTIONS : instancia
     ELECTIONS ||--o{ ELECTION_OPTIONS : contiene
@@ -319,6 +320,10 @@ erDiagram
         string municipio
         string localidad "opcional"
         string zona "urbana o rural" }
+    MESAS_VOTACION { int id PK
+        string puesto_clave
+        string nombre
+        string clave "única en su puesto" }
     ELECTIONS { int id PK
         string title
         string status
@@ -340,7 +345,7 @@ erDiagram
         jsonb metadata }
 ```
 
-*Figura 7. Modelo de datos (resumen). `votes` nunca guarda la cédula, solo su hash con un salt que solo conoce Auth. `puestos_votacion` se une al padrón por el nombre normalizado del puesto, que en `voters` va cifrado.*
+*Figura 7. Modelo de datos (resumen). `votes` nunca guarda la cédula, solo su hash con un salt que solo conoce Auth. `puestos_votacion` se une al padrón por el nombre normalizado del puesto, que en `voters` va cifrado, y `mesas_votacion` (las mesas creadas antes de tener votantes) a su puesto por esa misma clave.*
 
 ### 2.7 Contenerización
 
@@ -469,6 +474,7 @@ Las líneas punteadas de los diagramas son **fronteras de confianza**: la red do
 | 7 | Voting (`/vote`) | Votar fuera del horario o después de un cierre manual | Mitigado | Cada voto valida `status = 'active'` y la ventana de tiempo |
 | 9 | Acta (`scrutiny_ledger`) | Cambiar un acta certificada | Mitigado | Tabla *append-only* (un trigger rechaza `UPDATE` y `DELETE`) y cadena de hashes |
 | 15 | Acta (`scrutiny_ledger`) | Saltarse el trigger y **recalcular toda la cadena** | Mitigado | La firma no se puede rehacer sin la clave privada: el indicador de veracidad muestra el acta como **alterada** |
+| 23 | Administrador → Auth (mesas) | Renombrar una mesa con una votación en curso, para que el acta la cuente como dos | Mitigado | El renombre responde `409` mientras haya una elección activa; fuera de una votación, cambia la mesa en una sola transacción y queda en la auditoría |
 | **R** | **Repudio** | | | |
 | 3 | Votante → Voting (voto) | El votante niega haber votado, o niega por quién votó | **Aceptado** | Por diseño: el sistema registra que el voto ocurrió (`voter_id_hash`), pero no lo liga a la identidad real. Es el costo del secreto del voto |
 | 10 | Audit log | Borrar o cambiar un evento para ocultar un incidente | Mitigado | Tabla *append-only*, igual que las actas |
@@ -486,7 +492,7 @@ Las líneas punteadas de los diagramas son **fronteras de confianza**: la red do
 | 11 | Admin/Auditor → Analytics | Un auditor crea, edita o borra un tablero | Mitigado | `requireRole('admin')` en cada endpoint de escritura |
 | 14 | Frontend → PostgreSQL | Desde el frontend comprometido, conectarse a la base | Mitigado | La base está en `db-net` (interna), donde el frontend no está conectado |
 
-*Tabla 5. Las 22 amenazas del modelo, agrupadas por categoría STRIDE (la 15 aparece en dos categorías).*
+*Tabla 5. Las 23 amenazas del modelo, agrupadas por categoría STRIDE (la 15 aparece en dos categorías).*
 
 ### 3.4 Contramedidas implementadas
 
@@ -850,6 +856,7 @@ Un hallazgo no siempre sale de una herramienta automática: algunos aparecieron 
 | La imagen de instalación (`nicolaspineda1421/livemetric`) corre como root | Semgrep | Media | Aceptado | Escribe el compose y el `.env` en la carpeta del usuario, que en Linux es de otro dueño, y le deja los archivos a ese dueño. No es un servicio: escribe y termina. Excepción `nosemgrep` con el motivo en el `Dockerfile` |
 | Falso positivo alto de Semgrep (`node_secret`) en una prueba nueva: toma el nombre de la variable `JWT_SECRET` por un secreto escrito en el código | Semgrep | Alta | Aceptado (falso positivo) | El valor lo genera la prueba al azar; excepción `nosemgrep` con el motivo al lado |
 | Cada corrida de las pruebas dejaba su base de Postgres desechable en un volumen anónimo (188 en una PC del equipo, 8,4 GB), y `migraciones` dejaba uno vacío cada vez que se recreaba | Revisión del equipo | Baja (disco) | Resuelto | El teardown de Jest borra el contenedor con `-v`, y `migraciones` monta un `tmpfs` donde la imagen de Postgres declara su volumen |
+| Las mesas existían solo en el padrón: no se podía preparar una mesa antes de cargar a sus votantes, y una mesa mal escrita solo se corregía eliminando y volviendo a cargar a cada votante | Revisión funcional del equipo | Baja (operación) | Resuelto | Pestaña **Puestos → Mesas**: crear una mesa sin votantes (`mesas_votacion`, migración 010), renombrarla en sus votantes y sus jurados en una sola transacción (no con una votación en curso, amenaza 23) y eliminar solo las que no tienen votantes ni jurados. Todo queda en la auditoría |
 
 *Tabla 10. Hallazgos con su severidad, estado y justificación.*
 
