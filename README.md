@@ -10,6 +10,8 @@
 
 🎬 **[Ver el video de demostración](https://drive.google.com/file/d/1HpOkFSogfZDGLIgd6HAGYGtBFj954uci/view?usp=drive_link)** (Google Drive)
 
+**Grupo 2** · Trabajo final de *Seguridad en Entornos Cloud y DevOps*, Especialización en Ciberseguridad (Corporación Universitaria Minuto de Dios). Integrantes: William Andres Mosquera Vela, Juan Nicolas Pineda Alvarado, Johnny Albeiro Mallama Mejia y Juan Esteban Contreras Gonzalez.
+
 ## Descripción y propósito
 
 LiveMetric permite a una organización programar elecciones con una ventana de tiempo, que cada votante habilitado vote **una sola vez** con su cédula y un PIN, y obtener al cierre un **acta certificada** que nadie puede alterar sin que se note.
