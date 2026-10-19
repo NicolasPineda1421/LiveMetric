@@ -104,7 +104,7 @@ La primera vez tarda varios minutos (construye y analiza las imágenes). Al term
 
 ## Imágenes en Docker Hub
 
-Las imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspineda1421) con cada versión de git (`vX.Y.Z`): las 6 del sistema, la base con su esquema (desde la v1.5.0) y la de instalación, [`nicolaspineda1421/livemetric`](https://hub.docker.com/r/nicolaspineda1421/livemetric) (desde la v1.6.0). Esta última es la puerta de entrada: deja en una carpeta el compose y el `.env`, y su página en Docker Hub ([`docker-hub/README.md`](docker-hub/README.md)) dice qué correr. Cada una se etiqueta con la versión exacta (`1.6.0`), la línea menor (`1.6`) y `latest`; desde la v1.3.3, también con el mismo nombre del tag de git (`v1.6.0`). Antes de subirse, las 8 se escanean con Trivy, y el sistema se levanta con ellas desde la imagen de instalación: si una tiene CVE críticas o altas, o el sistema no arranca, no se publica ninguna (ver [`release.yml`](.github/workflows/release.yml)). `latest` es siempre la versión más nueva: republicar una vieja no lo mueve, y al terminar el workflow comprueba en Docker Hub que `latest` y la versión son la misma imagen en las 8. Cada imagen publicada lleva su SBOM adjunto (`docker buildx imagetools inspect <imagen>:<versión> --format '{{ json .SBOM }}'`). Son las que usan el [compose de Docker Hub](docker-hub/README.md) y el [despliegue con Docker Swarm](orquestacion/README.md).
+Las imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspineda1421) con cada versión de git (`vX.Y.Z`): las 6 del sistema, la base con su esquema (desde la v1.5.0) y la de instalación, [`nicolaspineda1421/livemetric`](https://hub.docker.com/r/nicolaspineda1421/livemetric) (desde la v1.6.0). Esta última es la puerta de entrada: deja en una carpeta el compose y el `.env`, y su página en Docker Hub ([`docker-hub/README.md`](docker-hub/README.md)) dice qué correr. Cada una se etiqueta con la versión exacta (`1.7.0`), la línea menor (`1.7`) y `latest`; desde la v1.3.3, también con el mismo nombre del tag de git (`v1.7.0`). Antes de subirse, las 8 se escanean con Trivy, y el sistema se levanta con ellas desde la imagen de instalación: si una tiene CVE críticas o altas, o el sistema no arranca, no se publica ninguna (ver [`release.yml`](.github/workflows/release.yml)). `latest` es siempre la versión más nueva: republicar una vieja no lo mueve, y al terminar el workflow comprueba en Docker Hub que `latest` y la versión son la misma imagen en las 8. Cada imagen publicada lleva su SBOM adjunto (`docker buildx imagetools inspect <imagen>:<versión> --format '{{ json .SBOM }}'`). Son las que usan el [compose de Docker Hub](docker-hub/README.md) y el [despliegue con Docker Swarm](orquestacion/README.md).
 
 | Servicio | Imagen |
 |---|---|
@@ -118,10 +118,10 @@ Las imágenes se publican en [Docker Hub](https://hub.docker.com/u/nicolaspineda
 | Base de datos (PostgreSQL 16 con el esquema) | [`nicolaspineda1421/livemetric-db`](https://hub.docker.com/r/nicolaspineda1421/livemetric-db) |
 
 ```bash
-docker pull nicolaspineda1421/livemetric-auth:1.6.0
+docker pull nicolaspineda1421/livemetric-auth:1.7.0
 ```
 
-Para publicar una versión nueva basta con crear el tag: `git tag -a v1.6.0 -m "..." && git push origin v1.6.0`.
+Para publicar una versión nueva basta con crear el tag: `git tag -a v1.7.0 -m "..." && git push origin v1.7.0`.
 
 ### SBOM
 
@@ -129,7 +129,7 @@ El SBOM (*Software Bill of Materials*) es el inventario de todo lo que lleva cad
 
 - **Adjunto a cada imagen en Docker Hub**, en formato SPDX. Se lee con:
   ```bash
-  docker buildx imagetools inspect nicolaspineda1421/livemetric-auth:1.6.0 --format '{{ json .SBOM }}'
+  docker buildx imagetools inspect nicolaspineda1421/livemetric-auth:1.7.0 --format '{{ json .SBOM }}'
   ```
 - **En cada publicación**, en formato CycloneDX: el de la imagen y el de las dependencias de cada servicio. Están en los *Artifacts* de la corrida de [`release.yml`](https://github.com/NicolasPineda1421/LiveMetric/actions/workflows/release.yml), como `sbom-<servicio>-vX.Y.Z`. Los de la v1.6.0 están en [esta corrida](https://github.com/NicolasPineda1421/LiveMetric/actions/runs/38641814630).
 - **En cada push**, en los *Artifacts* de la corrida de [`devsecops.yml`](https://github.com/NicolasPineda1421/LiveMetric/actions/workflows/devsecops.yml), como `sbom-<servicio>`.

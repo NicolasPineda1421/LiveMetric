@@ -36,7 +36,7 @@ const ENCABEZADO = `# LiveMetric - Configuración de esta instalación (compose 
 const OPCIONALES = `
 # --- Opcionales: quita el "#" para cambiarlas ---
 # Versión de las imágenes (por defecto, la última publicada: latest).
-# LIVEMETRIC_VERSION=1.6.0
+# LIVEMETRIC_VERSION=1.7.0
 # Puerto de la aplicación en esta PC (por defecto, 3000).
 # LIVEMETRIC_PUERTO=3000
 # Horas que dura cada PIN de votante desde que se genera (de 1 a 2160).

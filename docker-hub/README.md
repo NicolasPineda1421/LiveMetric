@@ -9,7 +9,7 @@
 # Etiquetas disponibles y sus `Dockerfile`
 
 <!-- etiquetas:inicio -->
-- [`1.6.0`, `v1.6.0`, `1.6`, `latest`](https://github.com/NicolasPineda1421/LiveMetric/blob/v1.6.0/docker-hub/Dockerfile)
+- [`1.7.0`, `v1.7.0`, `1.7`, `latest`](https://github.com/NicolasPineda1421/LiveMetric/blob/v1.7.0/docker-hub/Dockerfile)
 <!-- etiquetas:fin -->
 
 Las versiones anteriores siguen publicadas (pestaña **Tags**). `latest` es siempre la más nueva.
@@ -107,7 +107,7 @@ En el `.env`, quitando el `#` de la línea:
 
 | Variable | Para qué | Por defecto |
 |---|---|---|
-| `LIVEMETRIC_VERSION` | Fijar una versión (por ejemplo `1.6.0`) en vez de la última | `latest` |
+| `LIVEMETRIC_VERSION` | Fijar una versión (por ejemplo `1.7.0`) en vez de la última | `latest` |
 | `LIVEMETRIC_PUERTO` | El puerto de la aplicación en esta PC | `3000` |
 | `PIN_VIGENCIA_HORAS` | Cuántas horas dura cada PIN de votante desde que se genera (de 1 a 2160) | `24` |
 
